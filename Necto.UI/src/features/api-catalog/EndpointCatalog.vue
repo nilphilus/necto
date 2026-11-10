@@ -1,31 +1,56 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
   groups: { type: Array, required: true },
   activeGroup: { type: String, required: true },
   activeOperation: { type: String, required: true },
 })
-defineEmits(['select-group', 'select-operation'])
+const emit = defineEmits(['select-group', 'select-operation'])
 
 const filter = ref('')
 const showPaths = ref(false)
-const visibleGroups = computed(() => {
-  const query = filter.value.trim().toLowerCase()
-  return props.groups.map(group => ({
-    ...group,
-    operations: group.operations.filter(operation =>
-      `${group.name} ${operation.method} ${operation.path} ${operation.name} ${operation.id ?? ''}`
-        .toLowerCase().includes(query),
-    ),
-  })).filter(group => group.operations.length)
-})
+const expanded = ref(new Set())
+const collapsedMatches = ref(new Set())
+const query = computed(() => filter.value.trim().toLowerCase())
+const visibleGroups = computed(() => props.groups.map((group, index) => ({
+  ...group,
+  id: `catalog-group-${index}`,
+  operations: group.operations.filter(operation =>
+    `${group.name} ${operation.method} ${operation.path} ${operation.name} ${operation.id ?? ''}`
+      .toLowerCase().includes(query.value),
+  ),
+})).filter(group => group.operations.length))
+
+watch(() => props.activeGroup, name => { if (name) expanded.value.add(name) }, { immediate: true })
+watch(query, () => collapsedMatches.value.clear())
+
+function isExpanded(name) {
+  return query.value ? !collapsedMatches.value.has(name) : expanded.value.has(name)
+}
+
+function toggleGroup(name) {
+  const open = isExpanded(name)
+  if (query.value) {
+    if (open) collapsedMatches.value.add(name)
+    else collapsedMatches.value.delete(name)
+  } else if (open) {
+    expanded.value.delete(name)
+  } else {
+    expanded.value.add(name)
+  }
+}
+
+function selectGroup(name) {
+  if (!isExpanded(name)) toggleGroup(name)
+  emit('select-group', name)
+}
 </script>
 
 <template>
   <nav class="catalog" aria-label="API endpoints">
-    <label for="operation-filter">Find an endpoint</label>
-    <input id="operation-filter" v-model="filter" type="search" placeholder="Method, path, or name">
+    <h2 class="catalog-title">Endpoints</h2>
+    <input v-model="filter" type="search" aria-label="Find an endpoint" placeholder="Find an endpoint">
     <label class="mode">
       <input v-model="showPaths" type="checkbox" role="switch">
       Show paths instead of names
@@ -36,12 +61,23 @@ const visibleGroups = computed(() => {
     </p>
 
     <section v-for="group in visibleGroups" :key="group.name" class="catalog-group">
-      <h2>
-        <button type="button" class="group-label" @click="$emit('select-group', group.name)">
-          {{ group.name }}
+      <h3>
+        <button
+          type="button"
+          class="group-toggle"
+          :aria-label="`${isExpanded(group.name) ? 'Collapse' : 'Expand'} ${group.name}`"
+          :aria-expanded="isExpanded(group.name)"
+          :aria-controls="group.id"
+          @click="toggleGroup(group.name)"
+        >
+          <span class="chevron" aria-hidden="true"></span>
         </button>
-      </h2>
-      <ul>
+        <button type="button" class="group-label" :class="{ selected: activeGroup === group.name }" @click="selectGroup(group.name)">
+          <span>{{ group.name }}</span>
+          <small>{{ group.operations.length }}</small>
+        </button>
+      </h3>
+      <ul v-show="isExpanded(group.name)" :id="group.id">
         <li v-for="operation in group.operations" :key="operation.key">
           <button
             type="button"
@@ -52,7 +88,6 @@ const visibleGroups = computed(() => {
             <span class="method" :data-method="operation.method">{{ operation.method }}</span>
             <code v-if="showPaths">{{ operation.path }}</code>
             <strong v-else>{{ operation.name }}</strong>
-            <small v-if="operation.description">{{ operation.description }}</small>
           </button>
         </li>
       </ul>
@@ -62,37 +97,38 @@ const visibleGroups = computed(() => {
 
 <style scoped>
 .catalog {
-  align-self: start;
-  position: sticky;
-  top: 1.5rem;
-  max-height: calc(100dvh - 3rem);
+  min-width: 0;
   overflow: auto;
   padding: 1rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: .9rem;
+  border-right: 1px solid var(--line);
 }
-.catalog > label:first-child { display: block; font-weight: 650; margin-bottom: .35rem; }
+.catalog-title { margin: 0 0 .75rem; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
 .catalog input[type="search"] { width: 100%; }
-.mode { display: flex; align-items: center; gap: .45rem; margin: .65rem 0 1.35rem; font-size: .85rem; }
-.catalog-group + .catalog-group { margin-top: 1.15rem; }
-.catalog-group h2 { margin: 0 0 .25rem; font-size: .85rem; }
-.group-label { padding: .2rem .45rem; color: var(--muted); font-weight: 750; }
-.catalog ul { list-style: none; padding: 0; margin: 0; }
+.mode { display: flex; align-items: center; gap: .45rem; margin: .65rem 0 1rem; font-size: .8rem; }
+.catalog-group + .catalog-group { margin-top: .25rem; }
+.catalog-group h3 { display: flex; align-items: stretch; margin: 0; font-size: .875rem; }
+.group-toggle { display: grid; flex: 0 0 1.75rem; place-items: center; padding: 0; }
+.group-label { display: flex; flex: 1; align-items: center; gap: .65rem; min-width: 0; padding: .5rem; font-weight: 700; text-align: left; overflow-wrap: anywhere; }
+.group-label.selected { color: var(--accent); }
+.group-label small { margin-left: auto; color: var(--muted); font-weight: 500; }
+.chevron { width: .375rem; height: .375rem; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); }
+[aria-expanded="true"] .chevron { transform: rotate(45deg); }
+.catalog ul { list-style: none; padding: 0 0 0 .75rem; margin: .125rem 0 .5rem; }
 .catalog-operation {
-  display: flex;
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr);
   align-items: center;
-  gap: .4rem;
-  flex-wrap: wrap;
+  gap: .5rem;
   width: 100%;
-  padding: .5rem .45rem;
+  padding: .4375rem .5rem;
   text-align: left;
-  font-size: .875rem;
+  font-size: .8rem;
   overflow-wrap: anywhere;
 }
-.catalog-operation small { flex-basis: 100%; color: var(--muted); }
-.catalog-operation[aria-current] { background: var(--accent-soft); }
+.catalog-operation .method { justify-self: start; font-size: .625rem; }
+.catalog-operation strong { font-weight: 550; }
+.catalog-operation[aria-current] { background: var(--accent-soft); box-shadow: inset 2px 0 var(--accent); }
 @media (max-width: 760px) {
-  .catalog { position: static; max-height: 20rem; }
+  .catalog { max-height: 18rem; border-right: 0; border-bottom: 1px solid var(--line); }
 }
 </style>

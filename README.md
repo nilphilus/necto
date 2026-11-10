@@ -6,11 +6,17 @@ Call `app.UseNectoUI()` alongside `app.MapOpenApi()` to serve the Vue UI at
 `/necto/`. See the [Necto UI guide](Necto.UI/README.md) for configuration and
 frontend development.
 
+Both samples expose Necto UI and Scalar in Development. Each UI reads the same
+OpenAPI document at `/openapi/v1.json` on its sample API.
+
+| Run from the repository root | Necto UI | Scalar UI |
+| --- | --- | --- |
+| `dotnet run --project SampleApi` | [Necto](http://localhost:5000/necto/) | [Scalar](http://localhost:5000/scalar/) |
+| `dotnet run --project SampleApi.FastEndpoints` | [Necto](http://localhost:5001/necto/) | [Scalar](http://localhost:5001/scalar/) |
+
 ## FastEndpoints sample
 
-Run `dotnet run --project SampleApi.FastEndpoints` to open the sample API on
-`http://localhost:5001`. In Development, Necto UI is available at `/necto/` and
-the OpenAPI document at `/openapi/v1.json`. The API has four groups: Customers,
+The API has four groups: Customers,
 Assets, Invoices, and Weather. In Necto UI, run `GET /customers` and use a
 returned customer ID to filter `GET /assets`. From an asset you can find its
 invoices or view the simulated forecast for its installation location. The

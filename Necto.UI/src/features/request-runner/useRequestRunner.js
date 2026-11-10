@@ -9,7 +9,6 @@ export function useRequestRunner(configuration) {
       sessions.set(operation.key, {
         fields: {},
         body: initialBody(operation),
-        panel: 'request',
         result: null,
         pending: false,
         error: '',
@@ -24,8 +23,10 @@ export function useRequestRunner(configuration) {
     session.error = ''
     session.pending = true
     try {
-      session.result = await sendRequest(buildRequest(operation, configuration.value, session))
-      session.panel = 'response'
+      const request = buildRequest(operation, configuration.value, session)
+      const started = performance.now()
+      const result = await sendRequest(request)
+      session.result = { ...result, elapsed: Math.round(performance.now() - started) }
     } catch (cause) {
       session.error = cause.message
     } finally {
