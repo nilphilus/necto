@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <Description>An OpenAPI UI that reuses values across requests.</Description>
+    <RepositoryUrl>https://github.com/nilphilus/necto</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <None Include="../Necto.UI/README.md" Pack="true" PackagePath="/" />
+    <ProjectReference Include="..\Necto.Generator\Necto.Generator.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <None Include="..\Necto.Generator\bin\$(Configuration)\netstandard2.0\Necto.Generator.dll"
+          Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+
+  <Target Name="EmbedNectoUI" BeforeTargets="AssignTargetPaths" Condition="'$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <NectoUIProject>$(MSBuildProjectDirectory)/../Necto.UI</NectoUIProject>
+      <NectoUIOutput>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'necto-ui'))</NectoUIOutput>
+    </PropertyGroup>
+    <Exec WorkingDirectory="$(NectoUIProject)" Command="pnpm install --frozen-lockfile --prod=false" />
+    <Exec WorkingDirectory="$(NectoUIProject)" Command="pnpm run build --outDir &quot;$(NectoUIOutput)&quot; --emptyOutDir" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(NectoUIOutput)/index.html" LogicalName="Necto.UI/index.html" />
+      <NectoUIAsset Include="$(NectoUIOutput)/assets/*" />
+      <EmbeddedResource Include="@(NectoUIAsset)"
+                        LogicalName="Necto.UI/assets/%(NectoUIAsset.Filename)%(NectoUIAsset.Extension)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

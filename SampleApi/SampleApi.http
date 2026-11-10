@@ -1,0 +1,41 @@
+@SampleApi_HostAddress = http://localhost:5087
+
+GET {{SampleApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
+
+GET {{SampleApi_HostAddress}}/openapi/v1.json
+Accept: application/json
+
+###
+
+GET {{SampleApi_HostAddress}}/necto/endpoint-mappings
+Accept: application/json
+
+###
+
+GET {{SampleApi_HostAddress}}/invoices
+Accept: application/json
+
+###
+
+GET {{SampleApi_HostAddress}}/invoices/42/lines
+Accept: application/json
+
+###
+
+GET {{SampleApi_HostAddress}}/invoices/by-legacy-number?number=781
+Accept: application/json
+
+###
+
+GET {{SampleApi_HostAddress}}/customers
+Accept: application/json
+
+###
+
+POST {{SampleApi_HostAddress}}/customers/search
+Content-Type: application/json
+
+{"selectedCustomer":{"value":7}}
