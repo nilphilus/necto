@@ -6,6 +6,19 @@ Call `app.UseNectoUI()` alongside `app.MapOpenApi()` to serve the Vue UI at
 `/necto/`. See the [Necto UI guide](Necto.UI/README.md) for configuration and
 frontend development.
 
+## FastEndpoints sample
+
+Run `dotnet run --project SampleApi.FastEndpoints` to open the sample API on
+`http://localhost:5001`. In Development, Necto UI is available at `/necto/` and
+the OpenAPI document at `/openapi/v1.json`. The API has four groups: Customers,
+Assets, Invoices, and Weather. In Necto UI, run `GET /customers` and use a
+returned customer ID to filter `GET /assets`. From an asset you can find its
+invoices or view the simulated forecast for its installation location. The
+sample provides these links through explicit endpoint mappings.
+
+The [HTTP examples](SampleApi.FastEndpoints/SampleApi.FastEndpoints.http)
+show the same flow with sample IDs.
+
 ## Endpoint mappings
 
 Necto generates suggestions for reusing response values in other API requests. The

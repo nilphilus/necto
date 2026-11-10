@@ -1,0 +1,70 @@
+@SampleApi_HostAddress = http://localhost:5001
+
+GET {{SampleApi_HostAddress}}/customers
+Accept: application/json
+
+### Use a customer ID from the list
+
+GET {{SampleApi_HostAddress}}/customers/7
+Accept: application/json
+
+### Search for the same customer using a JSON body
+
+POST {{SampleApi_HostAddress}}/customers/search
+Content-Type: application/json
+
+{"customerId":7}
+
+### Unknown customer (404)
+
+POST {{SampleApi_HostAddress}}/customers/search
+Content-Type: application/json
+
+{"customerId":99}
+
+### Invalid customer ID (400)
+
+POST {{SampleApi_HostAddress}}/customers/search
+Content-Type: application/json
+
+{"customerId":0}
+
+### Find the customer's assets
+
+GET {{SampleApi_HostAddress}}/assets?customerId=7
+Accept: application/json
+
+### Get an asset and its installation location
+
+GET {{SampleApi_HostAddress}}/assets/101
+Accept: application/json
+
+### Find invoices for the customer and asset
+
+GET {{SampleApi_HostAddress}}/invoices?customerId=7&assetId=101
+Accept: application/json
+
+### Get an invoice and its customer and asset IDs
+
+GET {{SampleApi_HostAddress}}/invoices/501
+Accept: application/json
+
+### List locations that have simulated forecasts
+
+GET {{SampleApi_HostAddress}}/weather/locations
+Accept: application/json
+
+### Use the location ID from the asset
+
+GET {{SampleApi_HostAddress}}/weather/locations/1/forecast
+Accept: application/json
+
+### OpenAPI document
+
+GET {{SampleApi_HostAddress}}/openapi/v1.json
+Accept: application/json
+
+### Necto UI mappings
+
+GET {{SampleApi_HostAddress}}/necto/endpoint-mappings
+Accept: application/json
