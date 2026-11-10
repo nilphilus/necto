@@ -56,8 +56,22 @@ export function useRelatedEndpoints(configuration, operations, sessions) {
   })
 
   function targetsFor(operation) {
-    const targets = links.value.filter(link => link.from.key === operation.key).map(link => link.to)
-    return [...new Set(targets)]
+    const byTarget = new Map()
+    for (const link of links.value) {
+      if (link.from.key !== operation.key) continue
+      const matches = byTarget.get(link.to) ?? new Map()
+      for (const value of link.values) {
+        const key = JSON.stringify([link.location, link.name, value])
+        matches.set(key, { location: link.location, name: link.name, value })
+      }
+      byTarget.set(link.to, matches)
+    }
+    return [...byTarget].map(([operation, matches]) => {
+      const candidates = [...matches.values()]
+      const first = candidates[0]
+      const sameField = candidates.every(candidate => candidate.location === first.location && candidate.name === first.name)
+      return { operation, candidates: sameField ? candidates : [] }
+    })
   }
 
   function choicesFor(operation, location, name) {
