@@ -51,7 +51,8 @@ public static class NectoUIApplicationExtensions
         {
             var configuration = new Dictionary<string, string>
             {
-                ["openApiUrl"] = context.Request.PathBase.Add(openApi).ToUriComponent()
+                ["openApiUrl"] = context.Request.PathBase.Add(openApi).ToUriComponent(),
+                ["apiBaseUrl"] = context.Request.PathBase.ToUriComponent() + "/"
             };
             if (endpointMappingsPath is not null)
                 configuration["endpointMappingsUrl"] = context.Request.PathBase.Add(endpointMappingsPath).ToUriComponent();

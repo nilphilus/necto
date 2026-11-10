@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc;
 using Necto;
 
@@ -36,25 +37,50 @@ app.MapGet("/weatherforecast", () =>
         .ToArray();
     return forecast;
 })
-.WithName("GetWeatherForecast");
+.WithName("GetWeatherForecast")
+.WithTags("Weather")
+.WithSummary("Weather forecast")
+.WithDescription("Get a five-day forecast with daily temperatures.");
 
 app.MapGet("/invoices", () => new[] { new Invoice(42, 210.00m, 781) })
-    .WithName("Invoices");
+    .WithName("Invoices")
+    .WithTags("Invoices")
+    .WithSummary("Invoices")
+    .WithDescription("List invoices with their totals and reference numbers.");
 
 app.MapGet("/invoices/{invoiceId:int}/lines", (int invoiceId) =>
         new[] { new InvoiceLine(invoiceId, "Consulting") })
-    .WithName("InvoiceLines");
+    .WithName("InvoiceLines")
+    .WithTags("Invoices")
+    .WithSummary("Invoice lines")
+    .WithDescription("List the line items for a given invoice ID.");
 
 app.MapGet("/invoices/by-legacy-number", ([EndpointValue("LegacyInvoice")] int number) =>
         new Invoice(42, 210.00m, number))
-    .WithName("InvoiceByLegacyNumber");
+    .WithName("InvoiceByLegacyNumber")
+    .WithTags("Invoices")
+    .WithSummary("Invoice by legacy number")
+    .WithDescription("Find an invoice using its number in the legacy system.");
 
 app.MapGet("/customers", () => TypedResults.Ok(new[] { new Customer(new CustomerId(7), "Contoso") }))
-    .WithName("Customers");
+    .WithName("Customers")
+    .WithTags("Customers")
+    .WithSummary("Customers")
+    .WithDescription("List customers with their IDs and names.");
 
 app.MapPost("/customers/search", ([FromBody] CustomerSearch search) =>
         new Customer(search.SelectedCustomer, "Contoso"))
-    .WithName("FindCustomer");
+    .WithName("FindCustomer")
+    .WithTags("Customers")
+    .WithSummary("Find customer")
+    .WithDescription("Find a customer by the ID supplied in the JSON body.")
+    .AddOpenApiOperationTransformer((operation, _, _) =>
+    {
+        if (operation.RequestBody?.Content?.TryGetValue("application/json", out var json) == true)
+            json.Example = JsonNode.Parse("""{"selectedCustomer":{"value":7}}""");
+
+        return Task.CompletedTask;
+    });
 
 app.Run();
 
