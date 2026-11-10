@@ -1,136 +1,99 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
+import { useCatalog } from './features/api-catalog/catalog.js'
+import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
+import EndpointGroup from './features/api-catalog/EndpointGroup.vue'
+import OperationRunner from './features/request-runner/OperationRunner.vue'
+import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
+import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
+import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
+import RelatedTargets from './features/related-endpoints/RelatedTargets.vue'
 
-const spec = ref(null)
-const endpointMappings = ref([])
-const error = ref('')
-const mappingError = ref('')
-const filter = ref('')
-const methods = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace', 'query']
+const { spec, configuration, error, operations, groups } = useCatalog()
+const { sessions, sessionFor, run } = useRequestRunner(configuration)
+const { error: mappingError, targetsFor, choicesFor } = useRelatedEndpoints(configuration, operations, sessions)
 
-const operations = computed(() =>
-  Object.entries(spec.value?.paths ?? {}).flatMap(([path, item]) =>
-    methods.filter(method => item?.[method]).map(method => ({
-      path,
-      method: method.toUpperCase(),
-      id: item[method].operationId,
-      parameters: [...(item[method].parameters ?? []), ...(item.parameters ?? [])],
-      summary: item[method].summary ?? item[method].operationId ?? '',
-      description: item[method].description,
-    })),
-  ),
-)
+const selectedGroup = ref('')
+const selectedOperation = ref('')
+const groupView = ref(null)
+const activeGroup = computed(() => groups.value.find(group => group.name === selectedGroup.value) ?? groups.value[0])
 
-const suggestions = computed(() => {
-  const byId = new Map(operations.value.map(operation => [operation.id, operation]))
-  const byTarget = new Map()
-
-  for (const mapping of endpointMappings.value) {
-    const source = byId.get(mapping.source.operationId)
-    const target = byId.get(mapping.target.operationId)
-    if (!source || !target) continue
-
-    let location = mapping.target.location
-    if (location === 'parameter') {
-      location = target.parameters.find(parameter =>
-        parameter.name === mapping.target.name && ['path', 'query'].includes(parameter.in),
-      )?.in
-      if (!location) continue
-    }
-
-    const entries = byTarget.get(target.id) ?? []
-    entries.push({ ...mapping, location })
-    byTarget.set(target.id, entries)
-  }
-  return byTarget
-})
-
-const matchingOperations = computed(() => {
-  const query = filter.value.trim().toLowerCase()
-  return operations.value.filter(({ method, path, summary }) =>
-    `${method} ${path} ${summary}`.toLowerCase().includes(query),
-  )
-})
-
-async function fetchJson(url) {
-  const response = await fetch(url, { headers: { Accept: 'application/json' } })
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`)
-  }
-  return response.json()
+async function focusHeading(id) {
+  await nextTick()
+  const heading = document.getElementById(id())
+  heading?.scrollIntoView({ block: 'start' })
+  heading?.focus({ preventScroll: true })
 }
 
-onMounted(async () => {
-  let endpointMappingsUrl
-  try {
-    const configuration = await fetchJson('./configuration')
-    const { openApiUrl } = configuration
-    endpointMappingsUrl = configuration.endpointMappingsUrl
-    const openApi = await fetchJson(openApiUrl)
-    if (!openApi?.openapi) {
-      throw new Error('Expected an OpenAPI document')
-    }
-    spec.value = openApi
-  } catch (cause) {
-    error.value = `Could not load the API documentation. ${cause.message}`
-    return
-  }
+function selectGroup(name) {
+  selectedGroup.value = name
+  selectedOperation.value = ''
+  return focusHeading(() => 'group-title')
+}
 
-  if (endpointMappingsUrl) {
-    try {
-      const mappings = await fetchJson(endpointMappingsUrl)
-      if (!Array.isArray(mappings)) throw new Error('Expected a list of endpoint mappings')
-      endpointMappings.value = mappings
-    } catch (cause) {
-      mappingError.value = `Could not load suggested values. ${cause.message}`
-    }
+function selectOperation(operation, group) {
+  selectedGroup.value = group ?? (operation.tags.includes(activeGroup.value?.name) ? activeGroup.value.name : operation.tags[0])
+  selectedOperation.value = operation.key
+  return focusHeading(() => groupView.value?.anchorFor(operation))
+}
+
+function navigateToRequest(operation) {
+  sessionFor(operation).panel = 'request'
+  return selectOperation(operation)
+}
+
+function choose(operation, location, choice) {
+  const session = sessionFor(operation)
+  try {
+    applyChoice(session, location, choice)
+    session.error = ''
+  } catch (cause) {
+    session.error = cause.message
   }
-})
+}
 </script>
 
 <template>
-  <main>
-    <header>
-      <p class="brand">Necto UI</p>
+  <main class="app">
+    <header class="hero">
+      <div class="eyebrow">
+        <span>Necto UI</span>
+        <small v-if="spec?.info?.version">Version {{ spec.info.version }}</small>
+      </div>
       <h1>{{ spec?.info?.title ?? 'API documentation' }}</h1>
-      <p v-if="spec?.info?.version">Version {{ spec.info.version }}</p>
-      <p v-if="spec?.info?.description">{{ spec.info.description }}</p>
+      <p v-if="spec?.info?.description" class="muted">{{ spec.info.description }}</p>
     </header>
 
-    <p v-if="error" role="alert">{{ error }}</p>
+    <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-else-if="!spec" role="status">Loading API documentation…</p>
-    <section v-else aria-labelledby="operations-heading">
-      <h2 id="operations-heading">Operations</h2>
-      <p v-if="mappingError" role="status">{{ mappingError }}</p>
-      <label for="operation-filter">Filter operations</label>
-      <input id="operation-filter" v-model="filter" type="search" placeholder="Method, path, or name">
-      <p v-if="!matchingOperations.length" role="status">
-        {{ operations.length ? 'No matching operations.' : 'No operations in this document.' }}
-      </p>
-      <ul v-else>
-        <li v-for="operation in matchingOperations" :key="operation.method + ' ' + operation.path">
-          <div class="operation">
-            <strong>{{ operation.method }}</strong>
-            <code>{{ operation.path }}</code>
-          </div>
-          <p v-if="operation.summary">{{ operation.summary }}</p>
-          <p v-if="operation.description">{{ operation.description }}</p>
-          <details v-if="suggestions.has(operation.id)">
-            <summary>Suggested values</summary>
-            <ul>
-              <li v-for="(mapping, index) in suggestions.get(operation.id)" :key="index">
-                <code>{{ mapping.source.operationId }}{{ mapping.source.eachItem ? '[*]' : '' }}{{ mapping.source.property === null ? '' : '.' + mapping.source.property }}</code>
-                →
-                <code>{{ mapping.location }} {{ mapping.target.name }}</code>
-                <small v-if="mapping.suggestedIdentifierType">
-                  · Consider a dedicated <code>{{ mapping.suggestedIdentifierType }}</code> type
-                </small>
-              </li>
-            </ul>
-          </details>
-        </li>
-      </ul>
-    </section>
+    <template v-else>
+      <p v-if="mappingError" class="muted" role="status">{{ mappingError }}</p>
+      <div class="layout">
+        <EndpointCatalog
+          :groups="groups"
+          :active-group="activeGroup?.name ?? ''"
+          :active-operation="selectedOperation"
+          @select-group="selectGroup"
+          @select-operation="selectOperation"
+        />
+
+        <EndpointGroup v-if="activeGroup" ref="groupView" :key="activeGroup.name" :group="activeGroup">
+          <template #default="{ operation }">
+            <OperationRunner :operation="operation" :session="sessionFor(operation)" :run="run">
+              <template #choices="{ location, parameterName }">
+                <RelatedChoices
+                  :choices="choicesFor(operation, location, parameterName)"
+                  @choose="choose(operation, location, $event)"
+                />
+              </template>
+              <template #related>
+                <RelatedTargets :targets="targetsFor(operation)" @navigate="navigateToRequest" />
+              </template>
+            </OperationRunner>
+          </template>
+        </EndpointGroup>
+      </div>
+    </template>
   </main>
 </template>
 
@@ -138,67 +101,52 @@ onMounted(async () => {
 :root {
   color-scheme: light;
   font-family: system-ui, sans-serif;
-  color: #19263d;
-  background: #f5f7fb;
+  color: #172639;
+  --surface: #fff;
+  --canvas: #f5f7fb;
+  --line: #d1dae6;
+  --muted: #506177;
+  --accent: #174c77;
+  --accent-soft: #e3effa;
+  background: var(--canvas);
 }
-
-main {
-  width: min(46rem, calc(100% - 2rem));
-  margin: 3rem auto;
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; }
+.app { width: min(92rem, 100%); padding: clamp(1rem, 3vw, 2.5rem); margin: 0 auto; }
+.hero { padding-bottom: 1.4rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--line); }
+.hero h1 { margin: .4rem 0 0; font-size: clamp(1.85rem, 4vw, 2.65rem); }
+.hero p { margin: .35rem 0 0; }
+.eyebrow { display: flex; align-items: center; gap: .6rem; color: var(--accent); font-weight: 750; }
+.eyebrow small { padding: .2rem .45rem; border-radius: .4rem; background: var(--accent-soft); font-weight: 600; }
+.layout { display: grid; grid-template-columns: minmax(14rem, 19rem) minmax(0, 1fr); gap: clamp(1rem, 3vw, 2rem); }
+.muted { color: var(--muted); }
+.error { color: #8f2225; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { border: 0; border-radius: .45rem; background: transparent; cursor: pointer; }
+button:hover { background: var(--accent-soft); }
+button:disabled { cursor: default; opacity: .65; }
+:focus-visible { outline: 2px solid #216baa; outline-offset: 2px; }
+input:not([type="checkbox"]), select, textarea {
+  padding: .5rem .6rem;
+  background: var(--surface);
+  border: 1px solid #8292a6;
+  border-radius: .4rem;
 }
-
-header {
-  border-bottom: 1px solid #cbd5e1;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
+.primary { padding: .5rem .85rem; background: var(--accent); color: #fff; font-weight: 650; }
+.primary:hover { background: #123e61; }
+.secondary { padding: .35rem .55rem; border: 1px solid var(--line); background: var(--surface); }
+.method {
+  display: inline-block;
+  padding: .18rem .35rem;
+  border-radius: .35rem;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: .72rem;
+  font-weight: 800;
 }
-
-.brand {
-  color: #185b85;
-  font-weight: 700;
-}
-
-input {
-  box-sizing: border-box;
-  display: block;
-  width: 100%;
-  margin: .5rem 0 1rem;
-  padding: .7rem;
-  border: 1px solid #64748b;
-  border-radius: .5rem;
-  font: inherit;
-}
-
-ul {
-  padding: 0;
-  list-style: none;
-}
-
-li {
-  background: #fff;
-  border: 1px solid #cbd5e1;
-  border-radius: .5rem;
-  margin-bottom: .5rem;
-  padding: .8rem 1rem;
-}
-
-li p {
-  margin: .5rem 0 0;
-}
-
-.operation {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: .75rem;
-  overflow-wrap: anywhere;
-}
-
-.operation strong {
-  background: #dbeafe;
-  color: #154070;
-  padding: .25rem .5rem;
-  border-radius: .25rem;
-  font-size: .8rem;
+.method[data-method="POST"] { background: #d5f4e5; color: #125f41; }
+.method[data-method="DELETE"] { background: #ffe3e2; color: #8f2225; }
+@media (max-width: 760px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
 }
 </style>
