@@ -21,12 +21,12 @@ export function useRequestRunner(configuration) {
     return sessions.get(operation.key)
   }
 
-  async function run(operation, session) {
+  async function run(operation, session, values) {
     if (session.pending) return
     session.error = ''
     session.pending = true
     try {
-      const request = buildRequest(operation, configuration.value, session)
+      const request = buildRequest(operation, configuration.value, session, values)
       const started = performance.now()
       const result = await sendRequest(request)
       session.result = { ...result, elapsed: Math.round(performance.now() - started) }

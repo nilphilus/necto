@@ -1,11 +1,12 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { fieldKey, jsonContent, supportedParameters } from './request.js'
+import { contextKey, fieldKey, jsonContent, supportedParameters } from './request.js'
 
 const props = defineProps({
   operation: { type: Object, required: true },
   session: { type: Object, required: true },
   run: { type: Function, required: true },
+  values: { type: Map, required: true },
 })
 
 const parameters = computed(() => supportedParameters(props.operation))
@@ -65,6 +66,13 @@ function parameterHint(parameter) {
               <small>{{ parameter.in }}<template v-if="parameter.required || parameter.in === 'path'"> · required</template></small>
             </span>
             <input
+              v-if="values.has(contextKey(parameter))"
+              :value="values.get(contextKey(parameter))"
+              readonly
+              spellcheck="false"
+            >
+            <input
+              v-else
               v-model="session.fields[fieldKey(parameter)]"
               :required="parameter.required || parameter.in === 'path'"
               :placeholder="parameterHint(parameter)"
@@ -72,7 +80,8 @@ function parameterHint(parameter) {
             >
           </label>
           <p v-if="parameter.description" class="muted">{{ parameter.description }}</p>
-          <slot name="choices" :location="parameter.in" :parameter-name="parameter.name" />
+          <p v-if="values.has(contextKey(parameter))" class="muted">Set by the environment or call-flow.</p>
+          <slot v-else name="choices" :location="parameter.in" :parameter-name="parameter.name" />
         </div>
 
         <div v-if="content" class="field">
