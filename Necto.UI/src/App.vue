@@ -5,14 +5,15 @@ import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
 import OperationRunner from './features/request-runner/OperationRunner.vue'
 import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
 import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
+import ValueInput from './features/related-endpoints/ValueInput.vue'
 import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
 import RelatedTargets from './features/related-endpoints/RelatedTargets.vue'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
-import { contextKey, resolveRequestValues, supportedParameters } from './features/request-runner/request.js'
+import { buildRequest, fieldKey, contextKey, resolveRequestValues } from './features/request-runner/request.js'
 
 const { spec, configuration, error, operations, groups } = useCatalog()
 const { sessions, sessionFor, createSession, run } = useRequestRunner(configuration)
-const { error: mappingError, targetsFor, choicesFor } = useRelatedEndpoints(configuration, operations)
+const { error: mappingError, targetsFor, choicesFor, selectablePaths } = useRelatedEndpoints(configuration, operations)
 
 const selectedChain = ref([])
 const presets = ref(new Map())
@@ -155,10 +156,15 @@ const relatedResults = computed(() => {
 
 const relatedTargets = computed(() => {
   if (!current.value) return []
-  return targetsFor(current.value.operation, current.value.session.result).map(target => {
+  const { operation, session } = current.value
+  const selected = session.result?.selectedPath
+    ? targetsFor(operation, session.result) : []
+  const result = session.result ? { ...session.result, selectedPath: undefined } : null
+  return targetsFor(operation, result).map(target => {
     const values = valuesFor(target.operation)
     return {
       ...target,
+      selectedCandidates: selected.find(entry => entry.operation.key === target.operation.key)?.candidates ?? [],
       candidates: target.candidates.filter(choice =>
         choice.location === 'body' || !values.has(contextKey({ in: choice.location, name: choice.name })),
       ),
@@ -184,22 +190,22 @@ function selectOperation(operation, group) {
   return showChain([{ operation, group, session: sessionFor(operation) }])
 }
 
-function canSendRelated(operation, choice) {
-  if (!['GET', 'HEAD'].includes(operation.method) || operation.requestBody ||
-      !['string', 'number', 'boolean'].includes(typeof choice.value) || choice.value === '') return false
-  const parameters = supportedParameters(operation)
-  const target = parameters.find(parameter => parameter.in === choice.location && parameter.name === choice.name)
-  const values = valuesFor(operation)
-  if (!target || values.has(contextKey(target))) return false
-  return parameters.every(parameter => parameter === target ||
-    (!parameter.required && parameter.in !== 'path') ||
-    Boolean(values.get(contextKey(parameter))))
+function canSendRelated(operation, choices) {
+  if (!['GET', 'HEAD'].includes(operation.method) || operation.requestBody) return false
+  try {
+    const session = createSession(operation)
+    for (const choice of choices) applyChoice(session, choice.location, choice)
+    buildRequest(operation, configuration.value, session, valuesFor(operation))
+    return true
+  } catch {
+    return false
+  }
 }
 
-async function follow(operation, choice, send) {
-  if (send && (!choice || !canSendRelated(operation, choice))) return
+async function follow(operation, choices, send) {
+  if (send && !canSendRelated(operation, choices)) return
   const session = createSession(operation)
-  if (choice) choose(session, choice.location, choice)
+  for (const choice of choices) choose(session, choice.location, choice)
   const group = operation.tags.includes(current.value.group) ? current.value.group : operation.tags[0]
   await showChain([...chain.value, { operation, group, session }])
   if (send) await runInContext(operation, session)
@@ -312,9 +318,14 @@ function choose(session, location, choice) {
               <summary>Call-flow overrides<span v-if="flowOverrides.size"> ({{ flowOverrides.size }})</span></summary>
               <ValuesEditor :values="flowOverrides" label="Values for this call-flow" @save="flowOverrides = $event" />
             </details>
-            <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues">
+            <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)">
+              <template #parameter-input="{ parameter, hint }">
+                <ValueInput v-model="current.session.fields[fieldKey(parameter)]"
+                  :choices="choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
+                  :required="parameter.required || parameter.in === 'path'" :placeholder="hint" />
+              </template>
               <template #choices="{ location, parameterName }">
-                <RelatedChoices
+                <RelatedChoices v-if="location === 'body'"
                   :choices="choicesFor(current.operation, location, parameterName, relatedResults)"
                   @choose="choose(current.session, location, $event)"
                 />

@@ -16,7 +16,12 @@ public sealed record EndpointMapping(
 /// <param name="OperationId">The OpenAPI operation ID.</param>
 /// <param name="EachItem">Whether the response is an array and the selector applies to each item.</param>
 /// <param name="Property">The JSON property name, or null for the entire response or array item.</param>
-public sealed record ResponseValue(string OperationId, bool EachItem, string? Property);
+public sealed record ResponseValue(string OperationId, bool EachItem, string? Property)
+{
+    /// <summary>Path to the containing object. Null segments select array items.
+    /// When omitted, EachItem selects the legacy root object or root array items.</summary>
+    public string?[]? ObjectPath { get; init; }
+}
 
 /// <param name="OperationId">The OpenAPI operation ID.</param>
 /// <param name="Location">Path, query, header, body, or parameter when OpenAPI determines the location.</param>
