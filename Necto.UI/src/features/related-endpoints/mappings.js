@@ -1,12 +1,28 @@
 import { computed, ref, watch } from 'vue'
 
-function readValues(response, { eachItem, property }) {
-  if (response === undefined || (eachItem && !Array.isArray(response))) return []
-  const values = eachItem ? response : [response]
-  if (property === null) return values
-  return values.flatMap(value =>
-    value && Object.hasOwn(value, property) ? [value[property]] : [],
-  )
+export function sourcePath(source) {
+  return source.objectPath ?? (source.eachItem ? [null] : [])
+}
+
+export function matchesPath(template, path) {
+  return template.length === path.length && template.every((part, index) =>
+    part === null ? Number.isInteger(path[index]) : part === path[index])
+}
+
+export function readValues(response, source, selectedPath) {
+  let nodes = [{ value: response, path: [] }]
+  for (const part of sourcePath(source)) {
+    nodes = nodes.flatMap(({ value, path }) => part === null
+      ? (Array.isArray(value) ? value.map((value, index) => ({ value, path: [...path, index] })) : [])
+      : (value && Object.hasOwn(value, part) ? [{ value: value[part], path: [...path, part] }] : []))
+  }
+  if (selectedPath !== undefined && selectedPath !== null) {
+    nodes = nodes.filter(({ path }) => path.length >= selectedPath.length &&
+      selectedPath.every((part, index) => path[index] === part))
+  }
+  return nodes.flatMap(({ value }) => source.property === null
+    ? (value === undefined ? [] : [value])
+    : (value && Object.hasOwn(value, source.property) ? [value[source.property]] : []))
 }
 
 export function useRelatedEndpoints(configuration, operations) {
@@ -54,7 +70,7 @@ export function useRelatedEndpoints(configuration, operations) {
 
   function mappedValues(link, result) {
     if (!result?.ok) return []
-    return readValues(result.json, link.source).filter(value => link.location === 'body' || value !== null)
+    return readValues(result.json, link.source, result.selectedPath).filter(value => link.location === 'body' || value !== null)
   }
 
   function targetsFor(operation, result) {
@@ -70,12 +86,7 @@ export function useRelatedEndpoints(configuration, operations) {
       }
       byTarget.set(link.to, matches)
     }
-    return [...byTarget].map(([operation, matches]) => {
-      const candidates = [...matches.values()]
-      const first = candidates[0]
-      const sameField = candidates.every(candidate => candidate.location === first.location && candidate.name === first.name)
-      return { operation, candidates: sameField ? candidates : [] }
-    })
+    return [...byTarget].map(([operation, matches]) => ({ operation, candidates: [...matches.values()] }))
   }
 
   function choicesFor(operation, location, name, results) {
@@ -93,7 +104,11 @@ export function useRelatedEndpoints(configuration, operations) {
     return [...choices.values()]
   }
 
-  return { error, targetsFor, choicesFor }
+  function selectablePaths(operation) {
+    return links.value.filter(link => link.from.key === operation.key).map(link => sourcePath(link.source))
+  }
+
+  return { error, targetsFor, choicesFor, selectablePaths }
 }
 
 export function applyChoice(session, location, choice) {

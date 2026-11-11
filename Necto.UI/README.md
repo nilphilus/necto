@@ -4,7 +4,21 @@ Necto UI is a Vue application for browsing and running the operations in an Open
 
 Browse collapsible groups by tag and switch the sidebar between operation names and paths. Selecting an endpoint in the sidebar opens its request and response page and starts a separate chain. Send with the button or with Ctrl+Enter (⌘+Enter on macOS) while focused in the operation's workspace. Drafts and responses from direct sidebar visits stay available when you revisit those endpoints.
 
-When endpoint mappings are configured, **Continue from this response** shows related operations and values. You can send a GET or HEAD directly using a mapped parameter when the active presets or call-flow supplies any other required parameters. Each related request gets its own step in the breadcrumb trail. Select an earlier step to restore its request and response and continue along another branch.
+When endpoint mappings are configured, **Continue from this response** shows related operations and values. Each related request has editable fields with dropdown suggestions from the response. Type to filter the suggestions, choose a value, or enter a value that is not listed. Use **Send** for GET/HEAD requests with complete valid inputs, or **Edit** to open the request form. Request parameter inputs offer the same suggestions. Each related request gets its own step in the breadcrumb trail. Select an earlier step to restore its request and response and continue along another branch.
+
+## Response preview
+
+JSON responses open in **Preview**, with colors for keys, strings, numbers,
+booleans and null. **Raw** shows the original response text. Other response
+formats remain plain text.
+
+Objects with generated mappings to available requests have a **Select** button.
+For example, run **Invoice lines**, select the second item, and choose **Edit**
+on **Invoice line**: its `lineId` is filled from that item. Selection fills the matching related-request fields and narrows dropdown
+suggestions in request parameter inputs. The filled values remain editable.
+This also works with nested objects and arrays. **Clear selection** restores all values. Selection belongs
+to the response and stays when revisiting a breadcrumb; sending again replaces
+it. Preview and colors work even without endpoint mappings.
 
 ## Request presets
 

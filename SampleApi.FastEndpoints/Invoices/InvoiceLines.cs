@@ -11,14 +11,20 @@ public sealed record InvoiceLinePricing(int LineId, int Quantity, decimal UnitPr
 
 internal sealed record InvoiceLineSample(int LineId, int InvoiceId, string Description, int Quantity, int DetailId, decimal UnitPrice)
 {
-    internal static IReadOnlyList<InvoiceLineSample> All { get; } =
-    [
+    internal static IReadOnlyList<InvoiceLineSample> All { get; } = new InvoiceLineSample[]
+    {
         new(17, 501, "Cooling unit", 1, 117, 3600m),
         new(18, 501, "Installation", 2, 118, 300m),
         new(19, 502, "Annual service", 1, 119, 380m),
         new(20, 503, "Array inspection", 3, 120, 250m),
         new(21, 601, "Sensor calibration", 2, 121, 120m)
-    ];
+    }.Concat(Enumerable.Range(22, 10)
+        .Select(id => new InvoiceLineSample(id, 501, $"Service item {id}", 1, id + 100, 50m)))
+        .Concat(Invoice.Samples.Where(invoice => invoice.Id is >= 504 and <= 507 or >= 602)
+            .SelectMany(invoice => Enumerable.Range(1, 6)
+                .Select(index => new InvoiceLineSample(invoice.Id * 100 + index, invoice.Id,
+                    $"Invoice {invoice.Id} service {index}", 1, invoice.Id * 1000 + index, 50m))))
+        .ToArray();
 }
 
 public sealed class InvoiceLines : Endpoint<GetInvoiceRequest, InvoiceLineSummary[]>
