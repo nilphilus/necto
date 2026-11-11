@@ -23,6 +23,9 @@ internal static class SampleEndpointMappings
         Link<GetAsset, ListInvoices>("id", "query", "assetId"),
         Link<GetAsset, GetWeatherForecast>("locationId", "path", "locationId"),
         Link<ListInvoices, GetInvoice>("id", "path", "invoiceId", eachItem: true),
+        Link<ListInvoices, InvoiceLines>("id", "path", "invoiceId", eachItem: true),
+        Link<InvoiceLines, InvoiceLine>("lineId", "path", "lineId", eachItem: true),
+        Link<InvoiceLine, InvoiceLineDetails>("detailId", "path", "detailId"),
         Link<GetInvoice, GetCustomer>("customerId", "path", "customerId"),
         Link<GetInvoice, GetAsset>("assetId", "path", "assetId"),
         Link<ListWeatherLocations, GetWeatherForecast>("id", "path", "locationId", eachItem: true)

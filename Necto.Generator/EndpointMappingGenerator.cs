@@ -66,8 +66,23 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
     private static IEnumerable<Field> ReadResponse(IMethodSymbol handler)
     {
         var type = Unwrap(handler.ReturnType, "System.Threading.Tasks.Task<TResult>", "System.Threading.Tasks.ValueTask<TResult>");
-        type = Unwrap(type, "Microsoft.AspNetCore.Http.HttpResults.Ok<TValue>",
-            "Microsoft.AspNetCore.Http.HttpResults.Created<TValue>");
+        if (type is INamedTypeSymbol results && results.ContainingNamespace.ToDisplayString() == "Microsoft.AspNetCore.Http.HttpResults"
+            && results.Name == "Results" && results.IsGenericType)
+        {
+            return results.TypeArguments
+                .Where(result => !SymbolEqualityComparer.Default.Equals(result, UnwrapSuccess(result)))
+                .SelectMany(ReadResponseFields)
+                .Distinct();
+        }
+        return ReadResponseFields(type);
+    }
+
+    private static ITypeSymbol UnwrapSuccess(ITypeSymbol type) =>
+        Unwrap(type, "Microsoft.AspNetCore.Http.HttpResults.Ok<TValue>", "Microsoft.AspNetCore.Http.HttpResults.Created<TValue>");
+
+    private static IEnumerable<Field> ReadResponseFields(ITypeSymbol type)
+    {
+        type = UnwrapSuccess(type);
 
         var itemType = type is IArrayTypeSymbol { Rank: 1 } array ? array.ElementType : EnumerableItem(type);
         type = NonNullable(itemType ?? type);

@@ -2,7 +2,6 @@
 import { computed, nextTick, ref } from 'vue'
 import { useCatalog } from './features/api-catalog/catalog.js'
 import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
-import EndpointGroup from './features/api-catalog/EndpointGroup.vue'
 import OperationRunner from './features/request-runner/OperationRunner.vue'
 import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
 import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
@@ -10,66 +9,66 @@ import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
 import RelatedTargets from './features/related-endpoints/RelatedTargets.vue'
 
 const { spec, configuration, error, operations, groups } = useCatalog()
-const { sessions, sessionFor, run } = useRequestRunner(configuration)
-const { error: mappingError, targetsFor, choicesFor } = useRelatedEndpoints(configuration, operations, sessions)
+const { sessions, sessionFor, createSession, run } = useRequestRunner(configuration)
+const { error: mappingError, targetsFor, choicesFor } = useRelatedEndpoints(configuration, operations)
 
-const selectedGroup = ref('')
-const selectedOperation = ref('')
-const groupView = ref(null)
+const selectedChain = ref([])
+const endpointHeading = ref(null)
 const workArea = ref(null)
-const origins = ref(new Map())
-const activeGroup = computed(() => groups.value.find(group => group.name === selectedGroup.value) ?? groups.value[0])
-const activeOperation = computed(() =>
-  activeGroup.value?.operations.find(operation => operation.key === selectedOperation.value)
-    ?? activeGroup.value?.operations[0],
-)
+const chain = computed(() => {
+  if (selectedChain.value.length) return selectedChain.value
+  const group = groups.value[0]
+  const operation = group?.operations[0]
+  return operation ? [{ operation, group: group.name, session: sessionFor(operation) }] : []
+})
+const current = computed(() => chain.value.at(-1))
+const relatedResults = computed(() => {
+  const results = new Map()
+  for (const [key, session] of sessions) {
+    if (session.result) results.set(key, [session.result])
+  }
+  for (const { operation, session } of chain.value.slice(0, -1)) {
+    if (session.result) {
+      results.set(operation.key, [session.result, ...(results.get(operation.key) ?? [])])
+    }
+  }
+  return results
+})
 
-async function focusHeading(id, block = 'start') {
-  await nextTick()
-  const heading = document.getElementById(id())
-  heading?.scrollIntoView({ block })
-  heading?.focus({ preventScroll: true })
-}
-
-async function selectGroup(name) {
-  selectedGroup.value = name
-  selectedOperation.value = ''
+async function showChain(steps) {
+  selectedChain.value = steps
   await nextTick()
   if (workArea.value) workArea.value.scrollTop = 0
-  return focusHeading(() => 'group-title', 'nearest')
+  endpointHeading.value?.scrollIntoView({ block: 'nearest' })
+  endpointHeading.value?.focus({ preventScroll: true })
+}
+
+function selectGroup(name) {
+  const operation = groups.value.find(group => group.name === name)?.operations[0]
+  if (operation) selectOperation(operation, name)
 }
 
 function selectOperation(operation, group) {
-  selectedGroup.value = group ?? (operation.tags.includes(activeGroup.value?.name) ? activeGroup.value.name : operation.tags[0])
-  selectedOperation.value = operation.key
-  return focusHeading(() => groupView.value?.anchorFor(operation))
+  return showChain([{ operation, group, session: sessionFor(operation) }])
 }
 
 function canSendRelated(operation, choice) {
   return ['GET', 'HEAD'].includes(operation.method) &&
     !operation.requestBody && operation.parameters.length === 1 &&
     choice.location !== 'body' &&
-    ['string', 'number', 'boolean'].includes(typeof choice.value) && choice.value !== '' &&
-    !sessions.get(operation.key)?.pending
+    ['string', 'number', 'boolean'].includes(typeof choice.value) && choice.value !== ''
 }
 
-async function follow(source, operation, choice, send) {
-  if (send && !canSendRelated(operation, choice)) return
-  if (source.key !== operation.key) {
-    origins.value.set(operation.key, { operation: source, group: activeGroup.value.name })
-  }
-  if (choice) choose(operation, choice.location, choice)
-  await selectOperation(operation)
-  if (send) await run(operation)
+async function follow(operation, choice, send) {
+  if (send && (!choice || !canSendRelated(operation, choice))) return
+  const session = createSession(operation)
+  if (choice) choose(session, choice.location, choice)
+  const group = operation.tags.includes(current.value.group) ? current.value.group : operation.tags[0]
+  await showChain([...chain.value, { operation, group, session }])
+  if (send) await run(operation, session)
 }
 
-function backToSource(operation) {
-  const source = origins.value.get(operation.key)
-  return selectOperation(source.operation, source.group)
-}
-
-function choose(operation, location, choice) {
-  const session = sessionFor(operation)
+function choose(session, location, choice) {
   try {
     applyChoice(session, location, choice)
     session.error = ''
@@ -100,49 +99,52 @@ function choose(operation, location, choice) {
     <div v-else class="layout">
       <EndpointCatalog
         :groups="groups"
-        :active-group="activeGroup?.name ?? ''"
-        :active-operation="activeOperation?.key ?? ''"
+        :active-group="current?.group ?? ''"
+        :active-operation="current?.operation.key ?? ''"
         @select-group="selectGroup"
         @select-operation="selectOperation"
       />
 
       <div ref="workArea" class="work-area">
         <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
-        <EndpointGroup
-          v-if="activeGroup"
-          ref="groupView"
-          :key="activeGroup.name"
-          :group="activeGroup"
-          :active-operation="activeOperation.key"
-          @select-operation="selectOperation($event, activeGroup.name)"
-        >
-          <template #default="{ operation }">
-            <button
-              v-if="origins.has(operation.key)"
-              class="origin"
-              type="button"
-              @click="backToSource(operation)"
-            >
-              <span aria-hidden="true">←</span>
-              Back to {{ origins.get(operation.key).operation.name }} response
-            </button>
-            <OperationRunner :operation="operation" :session="sessionFor(operation)" :run="run">
-              <template #choices="{ location, parameterName }">
-                <RelatedChoices
-                  :choices="choicesFor(operation, location, parameterName)"
-                  @choose="choose(operation, location, $event)"
-                />
-              </template>
-              <template #related>
-                <RelatedTargets
-                  :targets="targetsFor(operation)"
-                  :can-send="canSendRelated"
-                  @follow="(target, choice, send) => follow(operation, target, choice, send)"
-                />
-              </template>
-            </OperationRunner>
-          </template>
-        </EndpointGroup>
+        <article v-if="current" aria-labelledby="endpoint-title">
+          <nav v-if="chain.length > 1" class="breadcrumbs" aria-label="Request chain">
+            <ol>
+              <li v-for="(step, index) in chain" :key="index">
+                <span v-if="index" class="separator" aria-hidden="true">›</span>
+                <span v-if="index === chain.length - 1" aria-current="step">
+                  {{ step.operation.method }} {{ step.operation.name }}
+                </span>
+                <button v-else type="button" @click="showChain(chain.slice(0, index + 1))">
+                  {{ step.operation.method }} {{ step.operation.name }}
+                </button>
+              </li>
+            </ol>
+          </nav>
+          <header class="endpoint-header">
+            <h2 id="endpoint-title" ref="endpointHeading" tabindex="-1">{{ current.operation.name }}</h2>
+            <div class="endpoint-route">
+              <span class="method" :data-method="current.operation.method">{{ current.operation.method }}</span>
+              <code>{{ current.operation.path }}</code>
+            </div>
+            <p v-if="current.operation.description" class="muted">{{ current.operation.description }}</p>
+          </header>
+          <OperationRunner :operation="current.operation" :session="current.session" :run="run">
+            <template #choices="{ location, parameterName }">
+              <RelatedChoices
+                :choices="choicesFor(current.operation, location, parameterName, relatedResults)"
+                @choose="choose(current.session, location, $event)"
+              />
+            </template>
+            <template #related>
+              <RelatedTargets
+                :targets="targetsFor(current.operation, current.session.result)"
+                :can-send="canSendRelated"
+                @follow="follow"
+              />
+            </template>
+          </OperationRunner>
+        </article>
         <p v-else class="mapping-notice muted">No endpoints in this document.</p>
       </div>
     </div>
@@ -188,7 +190,15 @@ body { margin: 0; background: #eef2ee; }
 .work-area { overflow: auto; min-width: 0; padding: 1.5rem; background: var(--canvas); scroll-padding-block: 1rem; }
 .app-message { margin: 1rem; }
 .mapping-notice { margin: 0 0 1rem; }
-.origin { display: block; margin: 0 1rem .75rem; padding: .35rem .5rem; color: var(--accent); font-size: .84rem; font-weight: 650; text-align: left; }
+.breadcrumbs ol { display: flex; flex-wrap: wrap; gap: .25rem; list-style: none; padding: 0; margin: 0 0 .85rem; }
+.breadcrumbs li { display: flex; align-items: baseline; gap: .25rem; min-width: 0; font-size: .82rem; overflow-wrap: anywhere; }
+.breadcrumbs button { padding: .3rem .45rem; color: var(--accent); text-align: left; overflow-wrap: anywhere; }
+.breadcrumbs [aria-current] { padding: .3rem .45rem; font-weight: 650; }
+.separator { color: var(--muted); }
+.endpoint-header { margin-bottom: 1rem; overflow-wrap: anywhere; }
+.endpoint-header h2 { margin: 0 0 .5rem; font-size: 1.75rem; letter-spacing: -.035em; }
+.endpoint-route { display: flex; align-items: baseline; gap: .5rem; color: var(--muted); font-size: .85rem; }
+.endpoint-header p { margin: .5rem 0 0; font-size: .875rem; }
 .muted { color: var(--muted); }
 .error { color: #8f2225; }
 button, input, select, textarea { font: inherit; color: inherit; }

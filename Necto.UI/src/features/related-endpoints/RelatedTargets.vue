@@ -17,7 +17,7 @@ const rows = computed(() => props.targets.map(({ operation, candidates }) => ({
 
 <template>
   <section v-if="targets.length" class="related-targets" aria-label="Continue from this response">
-    <h5>Continue from this response</h5>
+    <h4>Continue from this response</h4>
     <ul>
       <li v-for="target in rows" :key="target.operation.key">
         <div class="destination">
@@ -59,7 +59,7 @@ const rows = computed(() => props.targets.map(({ operation, candidates }) => ({
 
 <style scoped>
 .related-targets { padding: .75rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); }
-h5 { margin: 0 0 .45rem; color: var(--muted); font-size: .72rem; letter-spacing: .05em; text-transform: uppercase; }
+h4 { margin: 0 0 .45rem; color: var(--muted); font-size: .72rem; letter-spacing: .05em; text-transform: uppercase; }
 ul { list-style: none; padding: 0; margin: 0; }
 li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .45rem .75rem; padding: .5rem 0; }
 li + li { border-top: 1px solid var(--line); }

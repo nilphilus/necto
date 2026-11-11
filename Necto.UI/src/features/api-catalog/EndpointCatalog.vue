@@ -82,7 +82,7 @@ function selectGroup(name) {
           <button
             type="button"
             class="catalog-operation"
-            :aria-current="activeGroup === group.name && activeOperation === operation.key ? 'location' : undefined"
+            :aria-current="activeGroup === group.name && activeOperation === operation.key ? 'page' : undefined"
             @click="$emit('select-operation', operation, group.name)"
           >
             <span class="method" :data-method="operation.method">{{ operation.method }}</span>
