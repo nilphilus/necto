@@ -29,3 +29,17 @@ test('whole typed identifiers and false values remain usable in request bodies',
   assert.deepEqual(JSON.parse(session.body), { selectedCustomer: { value: 7 } })
   assert.deepEqual(readValues({ enabled: false }, { property: 'enabled' }, []), [false])
 })
+
+test('bounded suggestions and late-page selections do not enumerate the response', () => {
+  let reads = 0
+  const array = new Proxy(new Array(200000), { get(target, key) {
+    if (/^\d+$/.test(String(key))) { reads++; return { lineId: Number(key) } }
+    return Reflect.get(target, key)
+  } })
+  const source = { eachItem: true, property: 'lineId' }
+  assert.equal(readValues(array, source, undefined, 200).length, 200)
+  assert.equal(reads, 200)
+  reads = 0
+  assert.deepEqual(readValues(array, source, [199999], 200), [199999])
+  assert.equal(reads, 1)
+})

@@ -31,6 +31,14 @@ in the related **Invoice lines** field, or select an invoice in Preview to fill
 it automatically. Invoice 42 has 12 lines; the FastEndpoints equivalent is
 invoice 501.
 
+## Large payload experiment
+
+The `feat/paginated-large-response-preview` branch adds local Preview pagination.
+Run SampleApi and use `GET /invoices/large-payload?count=100000&noteSize=1024`
+for a single response above 100 MB. Preview pages contain 25 entries and retain
+absolute indices for selecting objects; changing pages does not call the API.
+See the [UI guide](Necto.UI/README.md#large-responses) for limits and measurements.
+
 ## Endpoint mappings
 
 Necto generates suggestions for reusing response values in other API requests. The
