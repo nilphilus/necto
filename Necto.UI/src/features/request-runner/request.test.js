@@ -60,3 +60,23 @@ test('query aliases use the OpenAPI spelling and respect call-flow precedence', 
   const distinct = resolveRequestValues(assets, environment, overrides, new Map([['query:CUSTOMERID', '99']]))
   assert.deepEqual([...distinct], [['query:customerId', '7'], ['query:CustomerId', '12']])
 })
+
+test('active presets combine independent fields and the latest preset wins a shared field', () => {
+  const assets = {
+    ...invoice,
+    path: '/assets',
+    parameters: [
+      { in: 'query', name: 'customerId' },
+      { in: 'query', name: 'assetId' },
+    ],
+  }
+  const cantoso = new Map([['query:customerId', '7']])
+  const assetType = new Map([['query:assetId', '42']])
+  const otherCustomer = new Map([['query:CustomerId', '12']])
+
+  const values = resolveRequestValues(assets, cantoso, assetType, otherCustomer)
+  const request = buildRequest(assets, configuration, { fields: {} }, values)
+  assert.equal(request.url.searchParams.get('customerId'), '12')
+  assert.equal(request.url.searchParams.get('assetId'), '42')
+  assert.equal(resolveRequestValues(assets, cantoso, assetType).get('query:customerId'), '7')
+})
