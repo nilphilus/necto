@@ -1,48 +1,35 @@
 # Landing page copy
 
-- [English copy](en.md): intended language for the public landing page.
+- [English landing page](en.md): intended public-facing product copy.
 - [Polish preview](pl.md): equivalent copy for discussion and review.
+- [Technical guide](technical.md): implementation, integration, and performance details.
 
-Baseline: `main` at `066532f`. The `landing-page` branch starts from that commit.
-These documents prepare the page content; they do not deploy a website.
-The copy includes the functionality implemented in PR #1 and PR #2, as requested
-for the landing page. Their implementation is not merged into this copy branch.
+The branch starts from main at `066532f`. At the author's request, the content
+also describes functionality implemented in PR #1 and PR #2. Those implementation
+branches are not merged into this copy branch. These documents prepare page
+content and do not deploy a website.
 
 ## Editorial direction
 
-Position Necto as an OpenAPI UI for following API workflows through reusable
-response values. Lead with the developer task and the copying/context problem;
-explain the source generator after showing the workflow.
+Use the repository description verbatim: **OpenAPI UI with a backbone.**
+Retain it in both language versions as the product tagline.
 
-The generator supports Minimal API registrations with constant `.WithName(...)`
-operation IDs in the same fluent chain. With PR #1, response selectors also
-describe nested objects and array items through objectPath metadata. FastEndpoints
-is demonstrated through explicit mappings, not automatic endpoint discovery
-by the generator. Suggestions are compile-time matches, not inferred business
-relationships or a guarantee that an API call will succeed.
+Lead with the outcome: follow an API workflow, carry useful values forward,
+and choose the next request with less manual copying. Use the invoice flow
+to make that benefit concrete. Describe Preview, local pagination, presets,
+and ASP.NET Core hosting in terms of the work they help users do.
 
-## Feature scope
+Keep generator rules, CLR types, pagination thresholds, setup code, and measured
+performance details in the linked technical guide. The landing page uses a
+short, factual 117 MB / 100,000-record proof point with a link to its context.
+Do not claim unlimited payloads, zero main-thread pauses, or automatic discovery
+of business relationships. The copy intentionally omits unfinished workflow
+settings.
 
-PR #1 provides selectable, syntax-colored JSON Preview, nested response paths,
-and editable related-request inputs with native suggestions. PR #2 adds local
-Preview pagination, a background parser, bounded suggestions, and large-payload
-examples. Both are included in the Polish and English copy.
+## Publication notes
 
-Distinguish UI pagination from API pagination. Preserve the qualification around
-the 117 MB / 100,000-record Chromium result: this is a development-environment
-measurement, not a claim of instant rendering on every device or unlimited
-payload sizes. The full response still occupies browser memory. Dropdown
-suggestions are bounded to 200 values per mapping; manually entered values and
-selections from any Preview page remain usable.
-
-## Before publication
-
-- Replace repository-relative documentation links with the final site's routes.
-- Confirm the repository is public before enabling its GitHub call to action.
-- Confirm the license and distribution details before adding an open-source
-  license badge, package-install command, or a link to a published NuGet package.
-- Choose a recording matching the code being advertised. The existing Preview
-  recording demonstrates the selection flow in PR #1.
-
-The motivation is written as the concrete problem Necto addresses. It does not
-attribute an invented origin story or quotation to the author.
+Replace repository-relative links with final site routes when implementing the
+page. Confirm the license and package distribution details before adding badges
+or install commands. Use the existing response-selection recording alongside
+the matching feature. The GitHub call to action targets the repository's real
+URL and is intended for its public launch.
