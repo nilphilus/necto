@@ -21,8 +21,8 @@ Necto pokazuje te powiązania w interfejsie API. Po skonfigurowaniu mapowań end
 ## Od odpowiedzi do kolejnego requestu
 
 1. **Wyślij request.** Wybierz operację z dokumentu OpenAPI i uzupełnij jej parametry lub body JSON.
-2. **Zobacz, gdzie możesz użyć danych.** Na podstawie mapowań Necto pokazuje powiązane operacje i wartości w sekcji **Continue from this response**.
-3. **Przekaż wartość dalej.** Otwórz powiązany request z uzupełnionym polem. Requesty GET i HEAD spełniające warunki można wysłać bezpośrednio, gdy dostępne są wymagane dane.
+2. **Zaznacz obiekt w Preview.** Przeglądaj JSON z kolorowaniem składni i wybierz fakturę lub jej pozycję. Na podstawie mapowań Necto uzupełni odpowiednie pola powiązanych requestów.
+3. **Wybierz, zmień lub wpisz wartość.** Powiązane requesty mają edytowalne pola z rozwijanymi podpowiedziami. Możesz zachować zaznaczoną wartość, wyszukać inną lub wpisać własną. Requesty GET i HEAD spełniające warunki można wysłać bezpośrednio, gdy dostępne są wymagane dane.
 4. **Prześledź kolejne kroki.** Każdy powiązany request tworzy nowy krok. Nawigacja okruszkowa pozwala wrócić do wcześniejszej odpowiedzi i wybrać inną ścieżkę.
 
 Przykład: pobierz listę faktur, użyj ID faktury do pobrania jej pozycji, a potem ID pozycji do otwarcia jej szczegółów.
@@ -33,9 +33,21 @@ OpenAPI opisuje operacje. Necto dodaje podpowiedzi, jak można przekazywać mię
 
 Roslyn Source Generator analizuje obsługiwane rejestracje ASP.NET Core Minimal API podczas kompilacji. Dopasowuje pola odpowiedzi do danych wejściowych requestów na podstawie dedykowanych typów identyfikatorów, nazw identyfikatorów lub jawnych kluczy `[EndpointValue("...")]`. Dopasowanie wymaga zgodnych typów CLR.
 
+Generator opisuje również ścieżki przez zagnieżdżone obiekty i tablice odpowiedzi, uwzględniając nazwy pól JSON. Dzięki temu UI rozpoznaje obiekty, które można zaznaczyć, i odczytuje właściwe pole wybranego elementu.
+
 Aplikacja udostępnia wygenerowane mapowania obok dokumentu OpenAPI. Necto UI sprawdza je względem dostępnych operacji, zanim pokaże podpowiedzi. Można też dostarczyć jawne mapowania — tak działa przykład z FastEndpoints.
 
 To sugestie wykorzystania wartości, a nie deklaracja, że po jednym endpoincie zawsze musi nastąpić drugi. Ty decydujesz, który request wysłać.
+
+## Duże odpowiedzi też można przeglądać — strona po stronie
+
+Duża odpowiedź nadal powinna nadawać się do przeglądania. Necto pokazuje tablice i obiekty JSON po 25 elementów na stronę. Możesz przechodzić między stronami lub od razu wpisać numer strony. Zagnieżdżone kontenery od drugiego poziomu są początkowo zwinięte i po rozwinięciu mają własne stronicowanie.
+
+To paginacja podglądu. Nie wymaga obsługi paginacji przez API, nie zmienia odpowiedzi i nie wysyła kolejnego requestu. Zaznaczenie obiektu na dalszej stronie nadal uzupełnia powiązany request wartością z tego konkretnego elementu.
+
+Duży JSON jest parsowany w Web Workerze. Długie stringi i tekst w Raw również są stronicowane, a **Download response** zapisuje całą oryginalną treść niezależnie od wyświetlanej strony.
+
+W jednym teście Chromium w środowisku deweloperskim odpowiedź o wielkości około **117 MB, zawierająca 100 000 rekordów**, otworzyła się w Preview po około **2,2 sekundy**. Podgląd miał **886 elementów DOM** zarówno na pierwszej, jak i ostatniej stronie. To wynik konkretnego pomiaru, nie obietnica dla każdego urządzenia: pełna odpowiedź nadal zajmuje pamięć, a przekazanie sparsowanych danych może na krótko zablokować główny wątek.
 
 ## Zachowaj kontekst. Zmieniaj requesty.
 
@@ -47,7 +59,9 @@ Presety i nadpisania uzupełniają pasujące pola, gdy przechodzisz do kolejnych
 
 - **Przeglądanie OpenAPI.** Wyszukiwanie endpointów, grupowanie według tagów oraz przełączanie nazw operacji i ścieżek.
 - **Wysyłanie requestów.** Parametry path, query i header, body JSON oraz podgląd statusu, czasu wykonania i treści odpowiedzi.
-- **Ponowne użycie danych.** Przenoszenie pasujących wartości do parametrów i pól body, również dla dedykowanych typów identyfikatorów.
+- **Przeglądanie i zaznaczanie JSON-a.** Kolorowanie składni i wybór obiektów powiązanych z requestami, również w zagnieżdżonych tablicach.
+- **Ponowne użycie danych.** Uzupełnianie pól z zaznaczenia, wybór podpowiedzi lub wpisanie własnej wartości.
+- **Stronicowanie dużych payloadów.** Przechodzenie po stronach Preview, przeglądanie fragmentów Raw i pobieranie pełnej odpowiedzi.
 - **Nawigacja po łańcuchu requestów.** Powrót do wcześniejszych kroków i sprawdzenie innego wariantu przepływu.
 - **Łączenie kontekstu.** Zestawianie nazwanych presetów i nadpisywanie wartości dla konkretnego przepływu.
 - **UI razem z API.** Skompilowany frontend jest osadzony w pakiecie .NET i serwowany przez aplikację ASP.NET Core.
