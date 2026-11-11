@@ -16,6 +16,21 @@ public sealed class EndpointMappingsTests : IClassFixture<WebApplicationFactory<
     }
 
     [Fact]
+    public async Task LargePayloadIsOneCompleteResponseWithReusableIdentifiers()
+    {
+        var payload = await client.GetFromJsonAsync<JsonArray>("/invoices/large-payload?count=26&noteSize=128");
+        Assert.Equal(26, payload!.Count);
+        Assert.Equal(100025, payload[25]!["lineId"]!.GetValue<int>());
+        Assert.Equal(128, payload[25]!["notes"]!.GetValue<string>().Length);
+        var detail = await client.GetFromJsonAsync<JsonObject>("/invoices/large-lines/100025");
+        Assert.Equal(100025, detail!["lineId"]!.GetValue<int>());
+        var mappings = await client.GetFromJsonAsync<EndpointMapping[]>("/necto/endpoint-mappings");
+        Assert.Contains(mappings!, mapping => mapping.Source.OperationId == "LargeInvoiceLines"
+            && mapping.Source.EachItem && mapping.Source.Property == "lineId"
+            && mapping.Target.OperationId == "LargeInvoiceLine");
+    }
+
+    [Fact]
     public async Task DescribesSelectableObjectsInNestedResponseArrays()
     {
         var mappings = await client.GetFromJsonAsync<EndpointMapping[]>("/necto/endpoint-mappings");

@@ -64,6 +64,27 @@ app.MapGet("/weatherforecast", () =>
 .WithSummary("Weather forecast")
 .WithDescription("Get a five-day forecast with daily temperatures.");
 
+app.MapGet("/invoices/large-payload", (int count = 10000, int noteSize = 512) =>
+    {
+        count = Math.Clamp(count, 1, 200000);
+        noteSize = Math.Clamp(noteSize, 0, 1024);
+        var notes = new string('x', noteSize);
+        return Enumerable.Range(100000, count)
+            .Select(id => new LargeInvoiceLine(id, 42, $"Bulk service {id}", notes,
+                new InvoiceLineMetadata("PLN", ["service", "bulk", "preview"]))).ToArray();
+    })
+    .WithName("LargeInvoiceLines")
+    .WithTags("Invoices")
+    .WithSummary("Large invoice payload")
+    .WithDescription("One response, no API paging. Up to 200,000 items; noteSize controls characters per item. Try count=100000 and noteSize=1024 for a payload above 100 MB.");
+
+app.MapGet("/invoices/large-lines/{lineId:int}", (int lineId) =>
+        new LargeInvoiceLine(lineId, 42, $"Bulk service {lineId}", "Detail response",
+            new InvoiceLineMetadata("PLN", ["service", "bulk", "preview"])))
+    .WithName("LargeInvoiceLine")
+    .WithTags("Invoices")
+    .WithSummary("Large invoice line");
+
 app.MapGet("/invoices/preview", () => new InvoicePreview(
         invoiceLines.Where(line => line.InvoiceId == 42)
             .Select(line => new InvoiceLine(line.LineId, line.InvoiceId, line.Description)).ToArray()))
@@ -141,6 +162,8 @@ record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
 
 record Invoice(int Id, decimal Total, [property: EndpointValue("LegacyInvoice")] int LegacyNumber);
 record InvoiceLineSample(int LineId, int InvoiceId, string Description, int Quantity, int DetailId, decimal UnitPrice, string Currency);
+record InvoiceLineMetadata(string Currency, string[] Labels);
+record LargeInvoiceLine(int LineId, int InvoiceId, string Description, string Notes, InvoiceLineMetadata Metadata);
 record InvoicePreview([property: System.Text.Json.Serialization.JsonPropertyName("invoice-lines")] InvoiceLine[] Lines);
 record InvoiceLine(int LineId, int InvoiceId, string Description);
 record InvoiceLineItem(int LineId, string Description, int Quantity, int DetailId);
