@@ -1,99 +1,55 @@
 # Necto
 
-## Kolejny request zaczyna się od tej odpowiedzi.
+## OpenAPI UI with a backbone.
 
-Interfejs OpenAPI dla ASP.NET Core, który łączy wartości z odpowiedzi z requestami, które mogą ich użyć.
+### Nadaj swojemu API kierunek.
 
-Przeglądaj endpointy, wyślij request i przejdź dalej z danymi otrzymanymi w odpowiedzi. Necto pomaga prześledzić przepływ przez API dzięki zapisywanym zestawom parametrów i podpowiedziom wynikającym z kodu C#.
+Zamień odpowiedź w kolejny request. Necto łączy endpointy w ścieżki, które możesz odkrywać — z danymi pod ręką i kolejnym krokiem w zasięgu kliknięcia.
 
-**Zobacz kod** → [GitHub](https://github.com/nilphilus/necto)
+**[Wypróbuj Necto](../../README.md)** · **[Zobacz projekt na GitHubie](https://github.com/nilphilus/necto)**
 
-**Uruchom przykłady** → [Pierwsze kroki](../../README.md)
+[Zajrzyj pod maskę →](technical.md)
 
-## Endpointy są ze sobą powiązane. Ich przeglądanie też powinno być.
+## Podążaj za danymi. Odkryj kolejny krok.
 
-Od klienta przechodzisz do urządzenia. Od urządzenia — do faktury. Od faktury — do jej pozycji.
+Masz już klienta. Teraz potrzebujesz jego faktur. Potem ich pozycji. Następnie szczegółów.
 
-Sprawdzenie takiego przepływu często wymaga skopiowania ID, znalezienia kolejnego endpointu, wklejenia wartości i ponownego uzupełnienia tego samego kontekstu klienta lub tenanta. Relacje istnieją już w API, ale to Ty przenosisz je między requestami.
+Necto pomaga przejść tę drogę. Zaznacz obiekt w odpowiedzi, wybierz powiązany request, a odpowiednia wartość będzie już na swoim miejscu. Skup się na tym, co chcesz sprawdzić.
 
-Necto pokazuje te powiązania w interfejsie API. Po skonfigurowaniu mapowań endpointów podpowiada, gdzie można wykorzystać otrzymane wartości, i pozwala przenieść je do kolejnego requestu.
+**Klient → Faktury → Pozycje → Szczegóły**
 
-## Od odpowiedzi do kolejnego requestu
+## Wykorzystaj każdą odpowiedź.
 
-1. **Wyślij request.** Wybierz operację z dokumentu OpenAPI i uzupełnij jej parametry lub body JSON.
-2. **Zaznacz obiekt w Preview.** Przeglądaj JSON z kolorowaniem składni i wybierz fakturę lub jej pozycję. Na podstawie mapowań Necto uzupełni odpowiednie pola powiązanych requestów.
-3. **Wybierz, zmień lub wpisz wartość.** Powiązane requesty mają edytowalne pola z rozwijanymi podpowiedziami. Możesz zachować zaznaczoną wartość, wyszukać inną lub wpisać własną. Requesty GET i HEAD spełniające warunki można wysłać bezpośrednio, gdy dostępne są wymagane dane.
-4. **Prześledź kolejne kroki.** Każdy powiązany request tworzy nowy krok. Nawigacja okruszkowa pozwala wrócić do wcześniejszej odpowiedzi i wybrać inną ścieżkę.
+Odpowiedź jest początkiem kolejnego kroku. Czytelny podgląd JSON-a pomaga odnaleźć potrzebne dane. Zaznacz fakturę lub jej pozycję i wykorzystaj jej wartości w powiązanym requeście.
 
-Przykład: pobierz listę faktur, użyj ID faktury do pobrania jej pozycji, a potem ID pozycji do otwarcia jej szczegółów.
+Zachowaj podpowiedź, wyszukaj inną wartość albo wpisz własną. Ty decydujesz, co wyślesz dalej.
 
-## Powiązania wynikające z kodu
+## Poznaj całą historię.
 
-OpenAPI opisuje operacje. Necto dodaje podpowiedzi, jak można przekazywać między nimi dane.
+Każdy powiązany request staje się krokiem, do którego możesz wrócić. Otwórz wcześniejszą odpowiedź, wybierz inną ścieżkę i zobacz, dokąd prowadzą dane.
 
-Roslyn Source Generator analizuje obsługiwane rejestracje ASP.NET Core Minimal API podczas kompilacji. Dopasowuje pola odpowiedzi do danych wejściowych requestów na podstawie dedykowanych typów identyfikatorów, nazw identyfikatorów lub jawnych kluczy `[EndpointValue("...")]`. Dopasowanie wymaga zgodnych typów CLR.
+To przestrzeń do poznawania zależności w API, sprawdzania scenariuszy klienta i wdrażania się w serwis, z którym dopiero zaczynasz pracować.
 
-Generator opisuje również ścieżki przez zagnieżdżone obiekty i tablice odpowiedzi, uwzględniając nazwy pól JSON. Dzięki temu UI rozpoznaje obiekty, które można zaznaczyć, i odczytuje właściwe pole wybranego elementu.
+## Duża odpowiedź. Przestrzeń do odkrywania.
 
-Aplikacja udostępnia wygenerowane mapowania obok dokumentu OpenAPI. Necto UI sprawdza je względem dostępnych operacji, zanim pokaże podpowiedzi. Można też dostarczyć jawne mapowania — tak działa przykład z FastEndpoints.
+Długa odpowiedź też zasługuje na wygodny podgląd. Przeglądaj kolekcje strona po stronie, rozwijaj potrzebne szczegóły i zaznaczaj elementy tam, gdzie je znajdziesz. Stronicowanie Preview działa także wtedy, gdy API zwraca wszystkie dane naraz.
 
-To sugestie wykorzystania wartości, a nie deklaracja, że po jednym endpoincie zawsze musi nastąpić drugi. Ty decydujesz, który request wysłać.
+Potrzebujesz oryginału? Przełącz na Raw albo pobierz pełną odpowiedź.
 
-## Duże odpowiedzi też można przeglądać — strona po stronie
+**Sprawdzone na 100 000 rekordów w odpowiedzi o wielkości 117 MB.** [Zobacz pomiar i ograniczenia →](technical.md#large-response-preview)
 
-Duża odpowiedź nadal powinna nadawać się do przeglądania. Necto pokazuje tablice i obiekty JSON po 25 elementów na stronę. Możesz przechodzić między stronami lub od razu wpisać numer strony. Zagnieżdżone kontenery od drugiego poziomu są początkowo zwinięte i po rozwinięciu mają własne stronicowanie.
+## Ustaw kontekst raz.
 
-To paginacja podglądu. Nie wymaga obsługi paginacji przez API, nie zmienia odpowiedzi i nie wysyła kolejnego requestu. Zaznaczenie obiektu na dalszej stronie nadal uzupełnia powiązany request wartością z tego konkretnego elementu.
+Zapisz często używane nagłówki i parametry jako nazwane presety. Połącz kontekst potrzebny do bieżącego zadania i przechodź między requestami z mniejszą liczbą pól do ponownego uzupełnienia.
 
-Duży JSON jest parsowany w Web Workerze. Długie stringi i tekst w Raw również są stronicowane, a **Download response** zapisuje całą oryginalną treść niezależnie od wyświetlanej strony.
+## U siebie w Twoim API ASP.NET Core.
 
-W jednym teście Chromium w środowisku deweloperskim odpowiedź o wielkości około **117 MB, zawierająca 100 000 rekordów**, otworzyła się w Preview po około **2,2 sekundy**. Podgląd miał **886 elementów DOM** zarówno na pierwszej, jak i ostatniej stronie. To wynik konkretnego pomiaru, nie obietnica dla każdego urządzenia: pełna odpowiedź nadal zajmuje pamięć, a przekazanie sparsowanych danych może na krótko zablokować główny wątek.
+Dodaj Necto do aplikacji, którą już masz. Wykorzysta Twój dokument OpenAPI i udostępni interfejs obok API. Zespół zyska jedno miejsce do przeglądania endpointów i podążania za danymi między nimi.
 
-## Zachowaj kontekst. Zmieniaj requesty.
+Podpowiedzi powiązań wynikają z kodu C#. [Zobacz, jak Necto znajduje kolejne requesty →](technical.md#how-connections-work)
 
-Zapisz powtarzające się nagłówki oraz parametry ścieżki i zapytania jako nazwane presety. Połącz preset tenanta z presetem klienta lub urządzenia, a wartości dotyczące konkretnego przepływu ustaw w **Call-flow overrides**.
+## Zobacz, dokąd prowadzi Twoje API.
 
-Presety i nadpisania uzupełniają pasujące pola, gdy przechodzisz do kolejnych operacji. Przeglądarka zapisuje presety lokalnie dla skonfigurowanego adresu dokumentu OpenAPI.
+Wypróbuj przykładowy przepływ faktur. Zaznacz wartość w odpowiedzi. Przejdź do kolejnego requestu. Sprawdź inną ścieżkę.
 
-## Co potrafi dzisiaj
-
-- **Przeglądanie OpenAPI.** Wyszukiwanie endpointów, grupowanie według tagów oraz przełączanie nazw operacji i ścieżek.
-- **Wysyłanie requestów.** Parametry path, query i header, body JSON oraz podgląd statusu, czasu wykonania i treści odpowiedzi.
-- **Przeglądanie i zaznaczanie JSON-a.** Kolorowanie składni i wybór obiektów powiązanych z requestami, również w zagnieżdżonych tablicach.
-- **Ponowne użycie danych.** Uzupełnianie pól z zaznaczenia, wybór podpowiedzi lub wpisanie własnej wartości.
-- **Stronicowanie dużych payloadów.** Przechodzenie po stronach Preview, przeglądanie fragmentów Raw i pobieranie pełnej odpowiedzi.
-- **Nawigacja po łańcuchu requestów.** Powrót do wcześniejszych kroków i sprawdzenie innego wariantu przepływu.
-- **Łączenie kontekstu.** Zestawianie nazwanych presetów i nadpisywanie wartości dla konkretnego przepływu.
-- **UI razem z API.** Skompilowany frontend jest osadzony w pakiecie .NET i serwowany przez aplikację ASP.NET Core.
-
-## Zacznij od API, które już masz
-
-W aplikacji korzystającej z Necto i ASP.NET Core OpenAPI:
-
-```csharp
-using Necto;
-
-var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddOpenApi();
-
-var app = builder.Build();
-
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-    app.MapNectoEndpointMappings();
-    app.UseNectoUI(endpointMappingsPath: "/necto/endpoint-mappings");
-}
-
-// Zarejestruj endpointy ze stałymi operationId przez .WithName(...).
-
-app.Run();
-```
-
-Otwórz `/necto/`, aby przeglądać API. Domyślny dokument OpenAPI znajduje się pod `/openapi/v1.json`; adres interfejsu i dokumentu można zmienić.
-
-Repozytorium zawiera przykłady Minimal API i FastEndpoints z przepływami klientów, urządzeń i faktur. Aplikacja używająca spakowanego UI nie wymaga osobnego budowania frontendu; kompilowanie Necto ze źródeł wymaga Node.js i pnpm.
-
-**Przeczytaj instrukcję konfiguracji** → [Necto UI](../../Necto.UI/README.md)
-
-**Poznaj projekt** → [GitHub](https://github.com/nilphilus/necto)
+**[Zacznij z Necto](../../README.md)** · **[Przeczytaj opis techniczny](technical.md)**
