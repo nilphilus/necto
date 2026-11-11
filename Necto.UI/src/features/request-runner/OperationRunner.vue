@@ -14,7 +14,8 @@ const unsupported = computed(() => props.operation.requestBody && !content.value
 const form = ref(null)
 const responsePane = ref(null)
 
-watch(() => props.session.result, () => {
+watch([() => props.session, () => props.session.result], ([session, result], [previousSession]) => {
+  if (session !== previousSession || !result) return
   const response = responsePane.value
   if (!response || !form.value) return
   const top = response.getBoundingClientRect().top
@@ -42,9 +43,9 @@ function parameterHint(parameter) {
 
 <template>
   <div class="runner" @keydown.enter="sendShortcut">
-    <form ref="form" class="request-pane" @submit.prevent="run(operation)">
+    <form ref="form" class="request-pane" @submit.prevent="run(operation, session)">
       <header class="pane-header">
-        <h4>Request</h4>
+        <h3>Request</h3>
         <button
           class="primary"
           type="submit"
@@ -89,7 +90,7 @@ function parameterHint(parameter) {
 
     <section ref="responsePane" class="response-pane" aria-label="Response" :aria-busy="session.pending">
       <header class="pane-header">
-        <h4>{{ session.pending && session.result ? 'Last response' : 'Response' }}</h4>
+        <h3>{{ session.pending && session.result ? 'Last response' : 'Response' }}</h3>
         <div class="response-meta" role="status">
           <template v-if="session.result">
             <strong class="status" :class="{ failed: !session.result.ok }">
@@ -121,13 +122,13 @@ function parameterHint(parameter) {
 <style scoped>
 .runner {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  grid-template-columns: minmax(0, 1fr);
   border: 1px solid var(--line);
   border-radius: .75rem;
   background: var(--surface);
 }
 .runner > * { min-width: 0; }
-.response-pane { border-left: 1px solid var(--line); background: var(--subtle); border-radius: 0 0 .65rem 0; }
+.response-pane { border-top: 1px solid var(--line); background: var(--subtle); border-radius: 0 0 .65rem .65rem; }
 .pane-header {
   min-height: 3.5rem;
   display: flex;
@@ -138,7 +139,7 @@ function parameterHint(parameter) {
   padding: .55rem .8rem;
   border-bottom: 1px solid var(--line);
 }
-.pane-header h4 { margin: 0; font-size: .88rem; }
+.pane-header h3 { margin: 0; font-size: .88rem; }
 .pane-header button { font-size: .84rem; }
 .pane-header button span { margin-left: .25rem; }
 .pane-body { padding: .85rem; }
@@ -157,8 +158,4 @@ function parameterHint(parameter) {
 .response-body:first-child { margin-top: 0; }
 .response-type { margin: 0 0 .35rem; color: var(--muted); font-size: .74rem; overflow-wrap: anywhere; }
 pre { overflow: auto; max-height: 28rem; margin: 0; padding: .8rem; border-radius: .45rem; background: #182420; color: #e7f3eb; }
-@media (max-width: 960px) {
-  .runner { grid-template-columns: minmax(0, 1fr); }
-  .response-pane { border-top: 1px solid var(--line); border-left: 0; border-radius: 0 0 .65rem .65rem; }
-}
 </style>

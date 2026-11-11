@@ -2,9 +2,9 @@
 
 Necto UI is a Vue application for browsing and running the operations in an OpenAPI JSON document. The Necto NuGet package includes the compiled frontend in its assembly.
 
-Browse collapsible groups by tag and switch the sidebar between operation names and paths. Selecting a group shows an overview followed by each operation's open request and response. Select an operation in the sidebar or overview to jump to its form. Send with the button or with Ctrl+Enter (⌘+Enter on macOS) while focused in the operation's workspace. Drafts and their latest responses stay available as you switch groups.
+Browse collapsible groups by tag and switch the sidebar between operation names and paths. Selecting an endpoint in the sidebar opens its request and response page and starts a separate chain. Send with the button or with Ctrl+Enter (⌘+Enter on macOS) while focused in the operation's workspace. Drafts and responses from direct sidebar visits stay available when you revisit those endpoints.
 
-When endpoint mappings are configured, **Continue from this response** shows related operations and values. You can send a GET or HEAD that takes a single mapped parameter directly from this section, or open the request to review and edit it. The related request links back to the source response.
+When endpoint mappings are configured, **Continue from this response** shows related operations and values. You can send a GET or HEAD that takes a single mapped parameter directly from this section, or open the request to review and edit it. Each related request gets its own step in the breadcrumb trail. Select an earlier step to restore its request and response and continue along another branch.
 
 ## ASP.NET Core
 

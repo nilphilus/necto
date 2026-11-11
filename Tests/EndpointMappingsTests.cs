@@ -23,6 +23,10 @@ public sealed class EndpointMappingsTests : IClassFixture<WebApplicationFactory<
         Assert.NotNull(mappings);
         Assert.Contains(new EndpointMapping(new("Invoices", true, "id"),
             new("InvoiceLines", "parameter", "invoiceId"), "name", "InvoiceId"), mappings);
+        Assert.Contains(new EndpointMapping(new("InvoiceLines", true, "lineId"),
+            new("InvoiceLine", "parameter", "lineId"), "name", "LineId"), mappings);
+        Assert.Contains(new EndpointMapping(new("InvoiceLine", false, "detailId"),
+            new("InvoiceLineDetails", "parameter", "detailId"), "name", "DetailId"), mappings);
         Assert.Contains(new EndpointMapping(new("Customers", true, "id"),
             new("FindCustomer", "body", "selectedCustomer"), "type", null), mappings);
         Assert.Contains(new EndpointMapping(new("Invoices", true, "legacyNumber"),
@@ -50,7 +54,18 @@ public sealed class EndpointMappingsTests : IClassFixture<WebApplicationFactory<
         var invoices = await client.GetFromJsonAsync<JsonArray>("/invoices");
         var invoiceId = Assert.Single(invoices!)!["id"]!.GetValue<int>();
         var invoiceLines = await client.GetFromJsonAsync<JsonArray>($"/invoices/{invoiceId}/lines");
-        Assert.Equal(invoiceId, Assert.Single(invoiceLines!)!["invoiceId"]!.GetValue<int>());
+        Assert.Equal(2, invoiceLines!.Count);
+        foreach (var entry in invoiceLines)
+        {
+            Assert.Equal(invoiceId, entry!["invoiceId"]!.GetValue<int>());
+            var lineId = entry["lineId"]!.GetValue<int>();
+            var line = await client.GetFromJsonAsync<JsonObject>($"/invoices/lines/{lineId}");
+            var detailId = line!["detailId"]!.GetValue<int>();
+            var details = await client.GetFromJsonAsync<JsonObject>($"/invoices/line-details/{detailId}");
+            Assert.Equal(lineId, details!["lineId"]!.GetValue<int>());
+            Assert.Equal(line["quantity"]!.GetValue<int>() * details["unitPrice"]!.GetValue<decimal>(),
+                details["netAmount"]!.GetValue<decimal>());
+        }
 
         var customers = await client.GetFromJsonAsync<JsonArray>("/customers");
         var customerId = Assert.Single(customers!)!["id"]!;

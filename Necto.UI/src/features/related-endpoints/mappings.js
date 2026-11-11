@@ -9,7 +9,7 @@ function readValues(response, { eachItem, property }) {
   )
 }
 
-export function useRelatedEndpoints(configuration, operations, sessions) {
+export function useRelatedEndpoints(configuration, operations) {
   const mappings = ref([])
   const error = ref('')
 
@@ -47,20 +47,24 @@ export function useRelatedEndpoints(configuration, operations, sessions) {
         continue
       }
 
-      const response = sessions.get(from.key)?.result
-      if (!response?.ok) continue
-      const values = readValues(response.json, source).filter(value => location === 'body' || value !== null)
-      if (values.length) links.push({ from, to, location, name: target.name, values })
+      links.push({ from, to, location, name: target.name, source })
     }
     return links
   })
 
-  function targetsFor(operation) {
+  function mappedValues(link, result) {
+    if (!result?.ok) return []
+    return readValues(result.json, link.source).filter(value => link.location === 'body' || value !== null)
+  }
+
+  function targetsFor(operation, result) {
     const byTarget = new Map()
     for (const link of links.value) {
       if (link.from.key !== operation.key) continue
+      const values = mappedValues(link, result)
+      if (!values.length) continue
       const matches = byTarget.get(link.to) ?? new Map()
-      for (const value of link.values) {
+      for (const value of values) {
         const key = JSON.stringify([link.location, link.name, value])
         matches.set(key, { location: link.location, name: link.name, value })
       }
@@ -74,14 +78,16 @@ export function useRelatedEndpoints(configuration, operations, sessions) {
     })
   }
 
-  function choicesFor(operation, location, name) {
+  function choicesFor(operation, location, name, results) {
     const choices = new Map()
     for (const link of links.value) {
       if (link.to.key !== operation.key || link.location !== location ||
         (location !== 'body' && link.name !== name)) continue
-      for (const value of link.values) {
-        const key = JSON.stringify([link.name, value])
-        if (!choices.has(key)) choices.set(key, { key, name: link.name, value, source: link.from.name })
+      for (const result of results.get(link.from.key) ?? []) {
+        for (const value of mappedValues(link, result)) {
+          const key = JSON.stringify([link.name, value])
+          if (!choices.has(key)) choices.set(key, { key, name: link.name, value, source: link.from.name })
+        }
       }
     }
     return [...choices.values()]

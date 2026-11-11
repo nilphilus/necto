@@ -25,6 +25,16 @@ Accept: application/json
 
 ###
 
+GET {{SampleApi_HostAddress}}/invoices/lines/17
+Accept: application/json
+
+###
+
+GET {{SampleApi_HostAddress}}/invoices/line-details/117
+Accept: application/json
+
+###
+
 GET {{SampleApi_HostAddress}}/invoices/by-legacy-number?number=781
 Accept: application/json
 

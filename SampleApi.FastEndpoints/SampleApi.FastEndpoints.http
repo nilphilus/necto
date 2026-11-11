@@ -49,6 +49,21 @@ Accept: application/json
 GET {{SampleApi_HostAddress}}/invoices/501
 Accept: application/json
 
+### List the invoice's line items
+
+GET {{SampleApi_HostAddress}}/invoices/501/lines
+Accept: application/json
+
+### Get a line item and its pricing detail ID
+
+GET {{SampleApi_HostAddress}}/invoices/lines/17
+Accept: application/json
+
+### Get the line item's pricing details
+
+GET {{SampleApi_HostAddress}}/invoices/line-details/117
+Accept: application/json
+
 ### List locations that have simulated forecasts
 
 GET {{SampleApi_HostAddress}}/weather/locations

@@ -4,21 +4,24 @@ import { buildRequest, initialBody, sendRequest } from './request.js'
 export function useRequestRunner(configuration) {
   const sessions = reactive(new Map())
 
+  function createSession(operation) {
+    return reactive({
+      fields: {},
+      body: initialBody(operation),
+      result: null,
+      pending: false,
+      error: '',
+    })
+  }
+
   function sessionFor(operation) {
     if (!sessions.has(operation.key)) {
-      sessions.set(operation.key, {
-        fields: {},
-        body: initialBody(operation),
-        result: null,
-        pending: false,
-        error: '',
-      })
+      sessions.set(operation.key, createSession(operation))
     }
     return sessions.get(operation.key)
   }
 
-  async function run(operation) {
-    const session = sessionFor(operation)
+  async function run(operation, session) {
     if (session.pending) return
     session.error = ''
     session.pending = true
@@ -34,5 +37,5 @@ export function useRequestRunner(configuration) {
     }
   }
 
-  return { sessions, sessionFor, run }
+  return { sessions, sessionFor, createSession, run }
 }
