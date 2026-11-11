@@ -15,12 +15,16 @@ const { sessions, sessionFor, createSession, run } = useRequestRunner(configurat
 const { error: mappingError, targetsFor, choicesFor } = useRelatedEndpoints(configuration, operations)
 
 const selectedChain = ref([])
-const environments = ref(new Map())
-const environmentName = ref('')
-const newEnvironmentName = ref('')
-const environmentError = ref('')
+const presets = ref(new Map())
+const activePresetNames = ref([])
+const settingsOpen = ref(false)
+const editedPresetName = ref('')
+const newPresetName = ref('')
+const presetError = ref('')
 const flowOverrides = ref(new Map())
-const environmentValues = computed(() => environments.value.get(environmentName.value) ?? new Map())
+const activePresetValues = computed(() => activePresetNames.value.map(name => presets.value.get(name)))
+const editedPresetValues = computed(() => presets.value.get(editedPresetName.value))
+// Keep the original storage key so saved environments carry over to presets.
 const storageKey = computed(() => 'necto:environments:' + configuration.value?.openApiUrl)
 const endpointHeading = ref(null)
 const workArea = ref(null)
@@ -34,81 +38,102 @@ const current = computed(() => chain.value.at(-1))
 const requestValues = computed(() => current.value ? valuesFor(current.value.operation) : new Map())
 
 function valuesFor(operation) {
-  return resolveRequestValues(operation, environmentValues.value, flowOverrides.value)
+  return resolveRequestValues(operation, ...activePresetValues.value, flowOverrides.value)
 }
 
 watch(configuration, () => {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey.value))
     if (!saved) return
-    environments.value = new Map(saved.environments.map(([name, values]) => [name, new Map(values)]))
-    if (environments.value.has(saved.active)) environmentName.value = saved.active
+    presets.value = new Map((saved.presets ?? saved.environments).map(([name, values]) => [name, new Map(values)]))
+    const active = Array.isArray(saved.active) ? saved.active : [saved.active]
+    activePresetNames.value = [...new Set(active.filter(name => presets.value.has(name)))]
     const flow = saved.flow
-    if (flow?.environment !== environmentName.value) return
+    if (!flow) return
+    const flowPresets = flow.presets ?? (flow.environment ? [flow.environment] : [])
+    if (JSON.stringify(flowPresets) !== JSON.stringify(activePresetNames.value)) return
     const operation = operations.value.find(operation => operation.key === flow.operation)
     if (!operation) return
     const group = operation.tags.includes(flow.group) ? flow.group : operation.tags[0]
     selectedChain.value = [{ operation, group, session: sessionFor(operation) }]
     flowOverrides.value = new Map(flow.values)
   } catch {
-    environmentError.value = 'Could not load saved environments in this browser.'
+    presetError.value = 'Could not load saved presets in this browser.'
   }
 })
 
-watch(flowOverrides, saveEnvironments)
+watch(flowOverrides, savePresets)
 
-function saveEnvironments() {
+function savePresets() {
   try {
-    const entries = Array.from(environments.value, ([name, values]) => [name, [...values]])
+    const entries = Array.from(presets.value, ([name, values]) => [name, [...values]])
     const root = chain.value[0]
     const flow = root && flowOverrides.value.size ? {
       operation: root.operation.key,
       group: root.group,
-      environment: environmentName.value,
+      presets: activePresetNames.value,
       values: [...flowOverrides.value],
     } : undefined
-    localStorage.setItem(storageKey.value, JSON.stringify({ active: environmentName.value, environments: entries, flow }))
-    environmentError.value = ''
+    localStorage.setItem(storageKey.value, JSON.stringify({ active: activePresetNames.value, presets: entries, flow }))
+    presetError.value = ''
   } catch {
-    environmentError.value = 'Could not save environments in this browser.'
+    presetError.value = 'Could not save presets in this browser.'
   }
 }
 
-function resetEnvironmentSessions() {
+function resetPresetSessions() {
   const selected = current.value
   for (const [key, session] of sessions) {
     sessions.set(key, { ...session, result: null, pending: false, error: '' })
   }
-  if (selected) selectOperation(selected.operation, selected.group)
+  if (selected) {
+    flowOverrides.value = new Map()
+    const { operation, group } = selected
+    selectedChain.value = [{ operation, group, session: sessionFor(operation) }]
+  }
 }
 
-function selectEnvironment(name) {
-  environmentName.value = name
-  resetEnvironmentSessions()
-  saveEnvironments()
+function togglePreset(name, enabled) {
+  activePresetNames.value = enabled
+    ? [...activePresetNames.value, name]
+    : activePresetNames.value.filter(activeName => activeName !== name)
+  resetPresetSessions()
+  savePresets()
 }
 
-function addEnvironment() {
-  const name = newEnvironmentName.value.trim()
+function toggleSettings() {
+  settingsOpen.value = !settingsOpen.value
+  if (settingsOpen.value) {
+    editedPresetName.value = activePresetNames.value.at(-1) ?? presets.value.keys().next().value ?? ''
+  }
+}
+
+function addPreset() {
+  const name = newPresetName.value.trim()
   if (!name) return
-  if (environments.value.has(name)) {
-    environmentError.value = 'An environment with that name already exists.'
+  if (presets.value.has(name)) {
+    presetError.value = 'A preset with that name already exists.'
     return
   }
-  environments.value.set(name, new Map())
-  newEnvironmentName.value = ''
-  selectEnvironment(name)
+  presets.value.set(name, new Map())
+  newPresetName.value = ''
+  editedPresetName.value = name
+  savePresets()
 }
 
-function saveEnvironmentValues(values) {
-  environments.value.set(environmentName.value, values)
-  resetEnvironmentSessions()
-  saveEnvironments()
+function savePresetValues(values) {
+  const name = editedPresetName.value
+  presets.value.set(name, values)
+  if (activePresetNames.value.includes(name)) resetPresetSessions()
+  savePresets()
 }
 
-function removeEnvironment() {
-  environments.value.delete(environmentName.value)
-  selectEnvironment('')
+function removePreset() {
+  const name = editedPresetName.value
+  presets.value.delete(name)
+  editedPresetName.value = presets.value.keys().next().value ?? ''
+  if (activePresetNames.value.includes(name)) togglePreset(name, false)
+  else savePresets()
 }
 
 function runInContext(operation, session) {
@@ -204,87 +229,109 @@ function choose(session, location, choice) {
         </div>
         <p v-if="spec?.info?.description" class="muted">{{ spec.info.description }}</p>
       </div>
+      <button v-if="spec" type="button" class="secondary settings-toggle" @click="toggleSettings">
+        {{ settingsOpen ? 'Back to API' : 'Settings' }}
+      </button>
     </header>
 
     <p v-if="error" class="app-message error" role="alert">{{ error }}</p>
     <p v-else-if="!spec" class="app-message" role="status">Loading API documentation…</p>
-    <div v-else class="layout">
-      <EndpointCatalog
-        :groups="groups"
-        :active-group="current?.group ?? ''"
-        :active-operation="current?.operation.key ?? ''"
-        @select-group="selectGroup"
-        @select-operation="selectOperation"
-      />
-
-      <div ref="workArea" class="work-area">
-        <section class="environment-panel" aria-label="Request environment">
-          <label>
-            Environment
-            <select :value="environmentName" @change="selectEnvironment($event.target.value)">
-              <option value="">No environment</option>
-              <option v-for="name in environments.keys()" :key="name" :value="name">{{ name }}</option>
-            </select>
-          </label>
-          <details>
-            <summary>Manage environments</summary>
-            <form class="environment-actions" @submit.prevent="addEnvironment">
-              <label>New environment <input v-model="newEnvironmentName" required></label>
-              <button type="submit" class="secondary">Add</button>
-            </form>
-            <template v-if="environmentName">
-              <ValuesEditor :values="environmentValues" label="Environment values" @save="saveEnvironmentValues" />
-              <button type="button" class="secondary" @click="removeEnvironment">Delete {{ environmentName }}</button>
-            </template>
-          </details>
-          <details v-if="current">
-            <summary>Call-flow overrides<span v-if="flowOverrides.size"> ({{ flowOverrides.size }})</span></summary>
-            <ValuesEditor :values="flowOverrides" label="Values for this call-flow" @save="flowOverrides = $event" />
-          </details>
-          <p v-if="environmentError" class="error" role="alert">{{ environmentError }}</p>
+    <template v-else>
+      <section v-if="settingsOpen" class="work-area settings" aria-labelledby="settings-title">
+        <h2 id="settings-title">Settings</h2>
+        <section class="preset-panel" aria-labelledby="presets-title">
+          <h3 id="presets-title">Presets</h3>
+          <form class="preset-actions" @submit.prevent="addPreset">
+            <label>New preset <input v-model="newPresetName" required></label>
+            <button type="submit" class="secondary">Add</button>
+          </form>
+          <template v-if="presets.size">
+            <label>
+              Edit preset
+              <select v-model="editedPresetName">
+                <option v-for="name in presets.keys()" :key="name" :value="name">{{ name }}</option>
+              </select>
+            </label>
+            <ValuesEditor v-if="editedPresetValues" :values="editedPresetValues" label="Preset values" @save="savePresetValues" />
+            <button type="button" class="secondary" @click="removePreset">Delete {{ editedPresetName }}</button>
+          </template>
+          <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
         </section>
-        <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
-        <article v-if="current" aria-labelledby="endpoint-title">
-          <nav v-if="chain.length > 1" class="breadcrumbs" aria-label="Request chain">
-            <ol>
-              <li v-for="(step, index) in chain" :key="index">
-                <span v-if="index" class="separator" aria-hidden="true">›</span>
-                <span v-if="index === chain.length - 1" aria-current="step">
-                  {{ step.operation.method }} {{ step.operation.name }}
-                </span>
-                <button v-else type="button" @click="showChain(chain.slice(0, index + 1))">
-                  {{ step.operation.method }} {{ step.operation.name }}
-                </button>
-              </li>
-            </ol>
-          </nav>
-          <header class="endpoint-header">
-            <h2 id="endpoint-title" ref="endpointHeading" tabindex="-1">{{ current.operation.name }}</h2>
-            <div class="endpoint-route">
-              <span class="method" :data-method="current.operation.method">{{ current.operation.method }}</span>
-              <code>{{ current.operation.path }}</code>
+      </section>
+      <div v-show="!settingsOpen" class="layout">
+        <EndpointCatalog
+          :groups="groups"
+          :active-group="current?.group ?? ''"
+          :active-operation="current?.operation.key ?? ''"
+          @select-group="selectGroup"
+          @select-operation="selectOperation"
+        />
+
+        <div ref="workArea" class="work-area">
+          <fieldset class="preset-panel">
+            <legend>Presets</legend>
+            <div v-if="presets.size" class="preset-options">
+              <button
+                v-for="name in presets.keys()"
+                :key="name"
+                type="button"
+                class="preset-chip"
+                :aria-pressed="activePresetNames.includes(name)"
+                @click="togglePreset(name, !activePresetNames.includes(name))"
+              >
+                <span>{{ name }}</span>
+              </button>
             </div>
-            <p v-if="current.operation.description" class="muted">{{ current.operation.description }}</p>
-          </header>
-          <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues">
-            <template #choices="{ location, parameterName }">
-              <RelatedChoices
-                :choices="choicesFor(current.operation, location, parameterName, relatedResults)"
-                @choose="choose(current.session, location, $event)"
-              />
-            </template>
-            <template #related>
-              <RelatedTargets
-                :targets="relatedTargets"
-                :can-send="canSendRelated"
-                @follow="follow"
-              />
-            </template>
-          </OperationRunner>
-        </article>
-        <p v-else class="mapping-notice muted">No endpoints in this document.</p>
+            <p v-else class="muted">Add presets in Settings.</p>
+            <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
+          </fieldset>
+          <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
+          <article v-if="current" aria-labelledby="endpoint-title">
+            <nav v-if="chain.length > 1" class="breadcrumbs" aria-label="Request chain">
+              <ol>
+                <li v-for="(step, index) in chain" :key="index">
+                  <span v-if="index" class="separator" aria-hidden="true">›</span>
+                  <span v-if="index === chain.length - 1" aria-current="step">
+                    {{ step.operation.method }} {{ step.operation.name }}
+                  </span>
+                  <button v-else type="button" @click="showChain(chain.slice(0, index + 1))">
+                    {{ step.operation.method }} {{ step.operation.name }}
+                  </button>
+                </li>
+              </ol>
+            </nav>
+            <header class="endpoint-header">
+              <h2 id="endpoint-title" ref="endpointHeading" tabindex="-1">{{ current.operation.name }}</h2>
+              <div class="endpoint-route">
+                <span class="method" :data-method="current.operation.method">{{ current.operation.method }}</span>
+                <code>{{ current.operation.path }}</code>
+              </div>
+              <p v-if="current.operation.description" class="muted">{{ current.operation.description }}</p>
+            </header>
+            <details class="preset-panel">
+              <summary>Call-flow overrides<span v-if="flowOverrides.size"> ({{ flowOverrides.size }})</span></summary>
+              <ValuesEditor :values="flowOverrides" label="Values for this call-flow" @save="flowOverrides = $event" />
+            </details>
+            <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues">
+              <template #choices="{ location, parameterName }">
+                <RelatedChoices
+                  :choices="choicesFor(current.operation, location, parameterName, relatedResults)"
+                  @choose="choose(current.session, location, $event)"
+                />
+              </template>
+              <template #related>
+                <RelatedTargets
+                  :targets="relatedTargets"
+                  :can-send="canSendRelated"
+                  @follow="follow"
+                />
+              </template>
+            </OperationRunner>
+          </article>
+          <p v-else class="mapping-notice muted">No endpoints in this document.</p>
+        </div>
       </div>
-    </div>
+    </template>
   </main>
 </template>
 
@@ -327,11 +374,36 @@ body { margin: 0; background: #eef2ee; }
 .work-area { overflow: auto; min-width: 0; padding: 1.5rem; background: var(--canvas); scroll-padding-block: 1rem; }
 .app-message { margin: 1rem; }
 .mapping-notice { margin: 0 0 1rem; }
-.environment-panel { display: grid; gap: .45rem; margin-bottom: 1rem; padding: .75rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); font-size: .85rem; }
-.environment-panel > label select { margin-left: .35rem; max-width: 70%; }
-.environment-panel summary { cursor: pointer; width: fit-content; color: var(--accent); }
-.environment-panel p { margin: 0; }
-.environment-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .6rem; }
+.preset-panel { min-width: 0; margin-inline: 0; display: grid; gap: .45rem; margin-bottom: 1rem; padding: .75rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); font-size: .85rem; }
+.preset-panel legend { padding-inline: .25rem; font-weight: 650; }
+.preset-options { display: flex; flex-wrap: wrap; gap: .45rem; }
+.preset-chip {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2rem;
+  padding: .25rem .7rem;
+  border: 1px solid #a2b2a9;
+  border-radius: 999px;
+  background: var(--surface);
+  font-weight: 650;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.preset-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+.preset-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: white; }
+.preset-chip[aria-pressed="true"]:hover { background: #104737; }
+.preset-panel > label select { margin-left: .35rem; max-width: 70%; }
+.preset-panel summary { cursor: pointer; width: fit-content; color: var(--accent); }
+.preset-panel p { margin: 0; }
+.settings-toggle { margin-left: auto; flex-shrink: 0; }
+.settings { flex: 1; }
+.settings h2 { margin: 0 0 1rem; }
+.settings h3 { margin: 0; font-size: 1rem; }
+.settings .preset-panel { max-width: 48rem; gap: .85rem; justify-items: start; }
+.settings .preset-panel > label { width: 100%; }
+.preset-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .6rem; }
 .breadcrumbs ol { display: flex; flex-wrap: wrap; gap: .25rem; list-style: none; padding: 0; margin: 0 0 .85rem; }
 .breadcrumbs li { display: flex; align-items: baseline; gap: .25rem; min-width: 0; font-size: .82rem; overflow-wrap: anywhere; }
 .breadcrumbs button { padding: .3rem .45rem; color: var(--accent); text-align: left; overflow-wrap: anywhere; }
