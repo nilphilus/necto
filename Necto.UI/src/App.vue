@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useCatalog } from './features/api-catalog/catalog.js'
 import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
 import OperationRunner from './features/request-runner/OperationRunner.vue'
@@ -7,12 +7,21 @@ import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
 import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
 import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
 import RelatedTargets from './features/related-endpoints/RelatedTargets.vue'
+import ValuesEditor from './features/environments/ValuesEditor.vue'
+import { contextKey, resolveRequestValues, supportedParameters } from './features/request-runner/request.js'
 
 const { spec, configuration, error, operations, groups } = useCatalog()
 const { sessions, sessionFor, createSession, run } = useRequestRunner(configuration)
 const { error: mappingError, targetsFor, choicesFor } = useRelatedEndpoints(configuration, operations)
 
 const selectedChain = ref([])
+const environments = ref(new Map())
+const environmentName = ref('')
+const newEnvironmentName = ref('')
+const environmentError = ref('')
+const flowOverrides = ref(new Map())
+const environmentValues = computed(() => environments.value.get(environmentName.value) ?? new Map())
+const storageKey = computed(() => 'necto:environments:' + configuration.value?.openApiUrl)
 const endpointHeading = ref(null)
 const workArea = ref(null)
 const chain = computed(() => {
@@ -22,6 +31,90 @@ const chain = computed(() => {
   return operation ? [{ operation, group: group.name, session: sessionFor(operation) }] : []
 })
 const current = computed(() => chain.value.at(-1))
+const requestValues = computed(() => current.value ? valuesFor(current.value.operation) : new Map())
+
+function valuesFor(operation) {
+  return resolveRequestValues(operation, environmentValues.value, flowOverrides.value)
+}
+
+watch(configuration, () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey.value))
+    if (!saved) return
+    environments.value = new Map(saved.environments.map(([name, values]) => [name, new Map(values)]))
+    if (environments.value.has(saved.active)) environmentName.value = saved.active
+    const flow = saved.flow
+    if (flow?.environment !== environmentName.value) return
+    const operation = operations.value.find(operation => operation.key === flow.operation)
+    if (!operation) return
+    const group = operation.tags.includes(flow.group) ? flow.group : operation.tags[0]
+    selectedChain.value = [{ operation, group, session: sessionFor(operation) }]
+    flowOverrides.value = new Map(flow.values)
+  } catch {
+    environmentError.value = 'Could not load saved environments in this browser.'
+  }
+})
+
+watch(flowOverrides, saveEnvironments)
+
+function saveEnvironments() {
+  try {
+    const entries = Array.from(environments.value, ([name, values]) => [name, [...values]])
+    const root = chain.value[0]
+    const flow = root && flowOverrides.value.size ? {
+      operation: root.operation.key,
+      group: root.group,
+      environment: environmentName.value,
+      values: [...flowOverrides.value],
+    } : undefined
+    localStorage.setItem(storageKey.value, JSON.stringify({ active: environmentName.value, environments: entries, flow }))
+    environmentError.value = ''
+  } catch {
+    environmentError.value = 'Could not save environments in this browser.'
+  }
+}
+
+function resetEnvironmentSessions() {
+  const selected = current.value
+  for (const [key, session] of sessions) {
+    sessions.set(key, { ...session, result: null, pending: false, error: '' })
+  }
+  if (selected) selectOperation(selected.operation, selected.group)
+}
+
+function selectEnvironment(name) {
+  environmentName.value = name
+  resetEnvironmentSessions()
+  saveEnvironments()
+}
+
+function addEnvironment() {
+  const name = newEnvironmentName.value.trim()
+  if (!name) return
+  if (environments.value.has(name)) {
+    environmentError.value = 'An environment with that name already exists.'
+    return
+  }
+  environments.value.set(name, new Map())
+  newEnvironmentName.value = ''
+  selectEnvironment(name)
+}
+
+function saveEnvironmentValues(values) {
+  environments.value.set(environmentName.value, values)
+  resetEnvironmentSessions()
+  saveEnvironments()
+}
+
+function removeEnvironment() {
+  environments.value.delete(environmentName.value)
+  selectEnvironment('')
+}
+
+function runInContext(operation, session) {
+  return run(operation, session, valuesFor(operation))
+}
+
 const relatedResults = computed(() => {
   const results = new Map()
   for (const [key, session] of sessions) {
@@ -33,6 +126,19 @@ const relatedResults = computed(() => {
     }
   }
   return results
+})
+
+const relatedTargets = computed(() => {
+  if (!current.value) return []
+  return targetsFor(current.value.operation, current.value.session.result).map(target => {
+    const values = valuesFor(target.operation)
+    return {
+      ...target,
+      candidates: target.candidates.filter(choice =>
+        choice.location === 'body' || !values.has(contextKey({ in: choice.location, name: choice.name })),
+      ),
+    }
+  })
 })
 
 async function showChain(steps) {
@@ -49,14 +155,20 @@ function selectGroup(name) {
 }
 
 function selectOperation(operation, group) {
+  flowOverrides.value = new Map()
   return showChain([{ operation, group, session: sessionFor(operation) }])
 }
 
 function canSendRelated(operation, choice) {
-  return ['GET', 'HEAD'].includes(operation.method) &&
-    !operation.requestBody && operation.parameters.length === 1 &&
-    choice.location !== 'body' &&
-    ['string', 'number', 'boolean'].includes(typeof choice.value) && choice.value !== ''
+  if (!['GET', 'HEAD'].includes(operation.method) || operation.requestBody ||
+      !['string', 'number', 'boolean'].includes(typeof choice.value) || choice.value === '') return false
+  const parameters = supportedParameters(operation)
+  const target = parameters.find(parameter => parameter.in === choice.location && parameter.name === choice.name)
+  const values = valuesFor(operation)
+  if (!target || values.has(contextKey(target))) return false
+  return parameters.every(parameter => parameter === target ||
+    (!parameter.required && parameter.in !== 'path') ||
+    Boolean(values.get(contextKey(parameter))))
 }
 
 async function follow(operation, choice, send) {
@@ -65,7 +177,7 @@ async function follow(operation, choice, send) {
   if (choice) choose(session, choice.location, choice)
   const group = operation.tags.includes(current.value.group) ? current.value.group : operation.tags[0]
   await showChain([...chain.value, { operation, group, session }])
-  if (send) await run(operation, session)
+  if (send) await runInContext(operation, session)
 }
 
 function choose(session, location, choice) {
@@ -106,6 +218,31 @@ function choose(session, location, choice) {
       />
 
       <div ref="workArea" class="work-area">
+        <section class="environment-panel" aria-label="Request environment">
+          <label>
+            Environment
+            <select :value="environmentName" @change="selectEnvironment($event.target.value)">
+              <option value="">No environment</option>
+              <option v-for="name in environments.keys()" :key="name" :value="name">{{ name }}</option>
+            </select>
+          </label>
+          <details>
+            <summary>Manage environments</summary>
+            <form class="environment-actions" @submit.prevent="addEnvironment">
+              <label>New environment <input v-model="newEnvironmentName" required></label>
+              <button type="submit" class="secondary">Add</button>
+            </form>
+            <template v-if="environmentName">
+              <ValuesEditor :values="environmentValues" label="Environment values" @save="saveEnvironmentValues" />
+              <button type="button" class="secondary" @click="removeEnvironment">Delete {{ environmentName }}</button>
+            </template>
+          </details>
+          <details v-if="current">
+            <summary>Call-flow overrides<span v-if="flowOverrides.size"> ({{ flowOverrides.size }})</span></summary>
+            <ValuesEditor :values="flowOverrides" label="Values for this call-flow" @save="flowOverrides = $event" />
+          </details>
+          <p v-if="environmentError" class="error" role="alert">{{ environmentError }}</p>
+        </section>
         <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
         <article v-if="current" aria-labelledby="endpoint-title">
           <nav v-if="chain.length > 1" class="breadcrumbs" aria-label="Request chain">
@@ -129,7 +266,7 @@ function choose(session, location, choice) {
             </div>
             <p v-if="current.operation.description" class="muted">{{ current.operation.description }}</p>
           </header>
-          <OperationRunner :operation="current.operation" :session="current.session" :run="run">
+          <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues">
             <template #choices="{ location, parameterName }">
               <RelatedChoices
                 :choices="choicesFor(current.operation, location, parameterName, relatedResults)"
@@ -138,7 +275,7 @@ function choose(session, location, choice) {
             </template>
             <template #related>
               <RelatedTargets
-                :targets="targetsFor(current.operation, current.session.result)"
+                :targets="relatedTargets"
                 :can-send="canSendRelated"
                 @follow="follow"
               />
@@ -190,6 +327,11 @@ body { margin: 0; background: #eef2ee; }
 .work-area { overflow: auto; min-width: 0; padding: 1.5rem; background: var(--canvas); scroll-padding-block: 1rem; }
 .app-message { margin: 1rem; }
 .mapping-notice { margin: 0 0 1rem; }
+.environment-panel { display: grid; gap: .45rem; margin-bottom: 1rem; padding: .75rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); font-size: .85rem; }
+.environment-panel > label select { margin-left: .35rem; max-width: 70%; }
+.environment-panel summary { cursor: pointer; width: fit-content; color: var(--accent); }
+.environment-panel p { margin: 0; }
+.environment-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .6rem; }
 .breadcrumbs ol { display: flex; flex-wrap: wrap; gap: .25rem; list-style: none; padding: 0; margin: 0 0 .85rem; }
 .breadcrumbs li { display: flex; align-items: baseline; gap: .25rem; min-width: 0; font-size: .82rem; overflow-wrap: anywhere; }
 .breadcrumbs button { padding: .3rem .45rem; color: var(--accent); text-align: left; overflow-wrap: anywhere; }

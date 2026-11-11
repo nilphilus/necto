@@ -4,6 +4,31 @@ export const supportedParameters = operation => operation.parameters.filter(
   parameter => ['path', 'query', 'header'].includes(parameter.in),
 )
 
+export function contextKey(parameter) {
+  return parameter.in === 'header' ? fieldKey(parameter).toLowerCase() : fieldKey(parameter)
+}
+
+export function resolveRequestValues(operation, ...layers) {
+  const queryKeys = supportedParameters(operation)
+    .filter(parameter => parameter.in === 'query')
+    .map(contextKey)
+  const values = new Map()
+  for (const layer of layers) {
+    for (const [key, value] of layer) {
+      if (!key.startsWith('query:') || queryKeys.includes(key)) {
+        values.set(key, value)
+        continue
+      }
+      const normalized = key.toLowerCase()
+      const matches = queryKeys.filter(queryKey => queryKey.toLowerCase() === normalized)
+      if (matches.length !== 1 || layer.has(matches[0])) continue
+      const aliases = [...layer.keys()].filter(alias => alias.toLowerCase() === normalized)
+      if (aliases.length === 1) values.set(matches[0], value)
+    }
+  }
+  return values
+}
+
 export function jsonContent(operation) {
   return Object.entries(operation.requestBody?.content ?? {}).find(([type]) =>
     type === 'application/json' || type.endsWith('+json'),
@@ -109,12 +134,15 @@ function requestUrl(operation, configuration) {
   return url
 }
 
-export function buildRequest(operation, configuration, draft) {
+export function buildRequest(operation, configuration, draft, values = new Map()) {
   const url = requestUrl(operation, configuration)
   const headers = new Headers()
+  const parameters = supportedParameters(operation)
+  const declared = new Set(parameters.map(contextKey))
   let path = operation.path
-  for (const parameter of supportedParameters(operation)) {
-    const input = draft.fields[fieldKey(parameter)]
+  for (const parameter of parameters) {
+    const key = contextKey(parameter)
+    const input = values.has(key) ? values.get(key) : draft.fields[fieldKey(parameter)]
     if (input === undefined || input === '') {
       if (parameter.required || parameter.in === 'path') throw new Error(`${parameter.name} is required.`)
       continue
@@ -138,8 +166,11 @@ export function buildRequest(operation, configuration, draft) {
         throw new Error('Enter a valid JSON request body.')
       }
       options.body = draft.body
-      headers.set('Content-Type', content[0])
+      if (!values.has('header:content-type')) headers.set('Content-Type', content[0])
     }
+  }
+  for (const [key, value] of values) {
+    if (key.startsWith('header:') && !declared.has(key)) headers.set(key.slice(7), value)
   }
   return { url, options }
 }
