@@ -630,6 +630,8 @@ function removeScenario(id) {
       <div v-show="!graphView" class="layout" :class="{ 'presets-collapsed': presetsCollapsed, 'has-presets': visiblePresetNames.length }">
         <EndpointCatalog :inert="scenarioPending"
           :groups="groups"
+          :external-count="connections.length" :show-external="showExternalApis" :external-loading="externalPending"
+          @toggle-external="showExternalApis = $event"
           :active-group="current?.group ?? ''"
           :active-operation="current?.operation.key ?? ''"
           @select-group="selectGroup"
