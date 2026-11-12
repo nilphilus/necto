@@ -23,13 +23,14 @@ export function useRequestRunner(configuration) {
     return sessions.get(operation.key)
   }
 
-  async function run(operation, session, values, { signal } = {}) {
+  async function run(operation, session, values, { signal, onRequest } = {}) {
     if (session.pending) return
     session.error = ''
     session.pending = true
     try {
       const request = buildRequest(operation, configuration.value, session, values)
       if (signal) request.options.signal = signal
+      onRequest?.(request)
       const started = performance.now()
       const result = await sendRequest(request)
       if (result.json && typeof result.json === 'object') markRaw(result.json)

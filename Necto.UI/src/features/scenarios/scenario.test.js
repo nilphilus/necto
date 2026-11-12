@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { snapshotScenario, rememberBinding, prepareScenario, executeScenario, readResponseAt, validateScenario } from './scenario.js'
 import { applyChoice } from '../related-endpoints/mappings.js'
 import { buildRequest } from '../request-runner/request.js'
+import { traceSteps } from './trace.js'
 
 const op = (name, path, parameters = [], extra = {}) => ({ key: `GET ${path}`, apiId: 'local', id: name, name,
   method: 'GET', path, tags: ['Invoices'], parameters, resolve: schema => schema, ...extra })
@@ -75,8 +76,10 @@ test('run presets override saved literals and response bindings without changing
   const plan = prepareScenario(scenario, runContext)
   const paths = []
   const result = await executeScenario(plan, { signal: new AbortController().signal,
-    execute: async (operation, session, values) => {
-      paths.push(buildRequest(operation, runContext.configuration, session, values).url.pathname)
+    execute: async (operation, session, values, signal, onRequest) => {
+      const request = buildRequest(operation, runContext.configuration, session, values)
+      onRequest(request)
+      paths.push(request.url.pathname)
       return response([])
     } })
 
@@ -84,6 +87,32 @@ test('run presets override saved literals and response bindings without changing
   assert.deepEqual(paths, ['/invoices', '/invoices/70/lines', '/lines/90'])
   assert.deepEqual(scenario, saved)
   assert.deepEqual(prepareScenario(scenario, context())[1].bindings, saved.steps[1].bindings)
+  assert.ok(traceSteps(plan).every(card => !card.inputs.length && !card.outputs.length))
+})
+
+test('trace captures the sent request, links mapped values, and includes HTTP error responses', async () => {
+  const scenario = snapshotScenario(captured(), 'Invoice flow', 'scenario-1')
+  const runContext = context()
+  const plan = prepareScenario(scenario, runContext)
+  const result = await executeScenario(plan, { signal: new AbortController().signal,
+    execute: async (operation, session, values, signal, onRequest) => {
+      onRequest(buildRequest(operation, runContext.configuration, session, values))
+      if (operation === list) return response([{ id: 0, unrelatedId: 0 }])
+      return { ok: false, status: 404, statusText: 'Not Found', json: { message: 'missing' } }
+    } })
+
+  const [source, target, skipped] = traceSteps(plan)
+  assert.equal(result.status, 'failed')
+  assert.equal(source.outputs.length, 1)
+  assert.deepEqual(source.outputs[0].path, [0, 'id'])
+  assert.equal(source.outputs[0].value, '0')
+  assert.equal(target.inputs[0].id, source.outputs[0].id)
+  assert.equal(target.inputs[0].color, source.outputs[0].color)
+  assert.match(target.request.url, /\/invoices\/0\/lines$/)
+  assert.deepEqual(target.step.response.json, { message: 'missing' })
+  assert.equal(skipped.step.status, 'skipped')
+  assert.equal(skipped.request, undefined)
+  assert.deepEqual(skipped.inputs, [])
 })
 
 test('missing values and HTTP failures stop the chain without stale fallback IDs', async () => {

@@ -145,12 +145,18 @@ export async function executeScenario(plan, { execute, signal, onStep = () => {}
       }
       await onStep(index, step)
       signal.throwIfAborted()
-      const result = await execute(step.operation, step.session, step.values, signal)
+      const result = await execute(step.operation, step.session, step.values, signal, ({ url, options }) => {
+        step.request = { url: url.href, headers: Object.fromEntries(options.headers),
+          body: options.body === undefined ? undefined : JSON.parse(options.body) }
+      })
       signal.throwIfAborted()
       step.httpStatus = result?.status
       step.elapsed = result?.elapsed
+      if (result) {
+        step.response = result
+        step.session.result = result
+      }
       if (!result?.ok) throw new Error(result ? `HTTP ${result.status} ${result.statusText}` : step.session.error || 'No response received.')
-      step.session.result = result
       step.status = 'completed'
     }
     return { status: 'completed', error: '' }
