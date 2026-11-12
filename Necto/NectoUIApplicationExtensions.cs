@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -44,8 +45,14 @@ public static class NectoUIApplicationExtensions
                 return Results.LocalRedirect(location + "/" + context.Request.QueryString);
             }
 
-            return ServeAsset("index.html");
+            return ServeIndex(context, uiPath);
         });
+
+        foreach (var route in new[] { "/api", "/api/endpoint/{operation}", "/scenarios",
+            "/scenarios/{id}/steps/{step:int}", "/entities", "/endpoints" })
+        {
+            ui.MapMethods(route, ReadMethods, (HttpContext context) => ServeIndex(context, uiPath));
+        }
 
         ui.MapMethods("/configuration", ReadMethods, (HttpContext context) =>
         {
@@ -61,6 +68,15 @@ public static class NectoUIApplicationExtensions
         ui.MapMethods("/assets/{assetName}", ReadMethods, (string assetName) => ServeAsset("assets/" + assetName));
 
         return app;
+    }
+
+    private static IResult ServeIndex(HttpContext context, string uiPath)
+    {
+        using var stream = typeof(NectoUIApplicationExtensions).Assembly.GetManifestResourceStream("Necto.UI/index.html")!;
+        using var reader = new StreamReader(stream);
+        var baseUrl = context.Request.PathBase.Add(new PathString(uiPath)).ToUriComponent() + "/";
+        var html = reader.ReadToEnd().Replace("<base href=\"/\">", $"<base href=\"{HtmlEncoder.Default.Encode(baseUrl)}\">", StringComparison.Ordinal);
+        return Results.Content(html, "text/html; charset=utf-8");
     }
 
     private static IResult ServeAsset(string assetPath)

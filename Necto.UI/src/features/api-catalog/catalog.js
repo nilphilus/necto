@@ -83,11 +83,11 @@ export function useCatalog() {
   onMounted(async () => {
     try {
       const settings = await fetchJson('./configuration')
-      const openApiUrl = new URL(settings.openApiUrl, window.location.href).href
-      const document = await fetchJson(openApiUrl)
-      if (!document?.openapi) throw new Error('Expected an OpenAPI document')
+      const openApiUrl = new URL(settings.openApiUrl, document.baseURI).href
+      const openApiDocument = await fetchJson(openApiUrl)
+      if (!openApiDocument?.openapi) throw new Error('Expected an OpenAPI document')
       configuration.value = { ...settings, openApiUrl }
-      spec.value = document
+      spec.value = openApiDocument
     } catch (cause) {
       error.value = `Could not load the API documentation. ${cause.message}`
     }
