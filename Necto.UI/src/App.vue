@@ -7,13 +7,17 @@ import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
 import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
 import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
 import RelatedTargets from './features/related-endpoints/RelatedTargets.vue'
+import ExternalApiSettings from './features/external-apis/ExternalApiSettings.vue'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
 import { contextKey, resolveRequestValues, supportedParameters } from './features/request-runner/request.js'
 
-const { spec, configuration, error, operations, groups } = useCatalog()
+const { spec, configuration, error, operations, groups, externalApis } = useCatalog()
 const { sessions, sessionFor, createSession, run } = useRequestRunner(configuration)
-const { error: mappingError, targetsFor, choicesFor } = useRelatedEndpoints(configuration, operations)
+const { error: mappingError, targetsFor, choicesFor } = useRelatedEndpoints(configuration, operations, externalApis.contexts)
 
+const { connections, show: showExternalApis, statuses: externalStatuses, storageError: externalStorageError } = externalApis
+const externalPending = computed(() => showExternalApis.value && [...externalStatuses.values()].some(status => status.pending))
+const externalErrors = computed(() => showExternalApis.value ? connections.value.filter(entry => externalStatuses.get(entry.id)?.error) : [])
 const selectedChain = ref([])
 const presets = ref(new Map())
 const activePresetNames = ref([])
@@ -38,8 +42,34 @@ const current = computed(() => chain.value.at(-1))
 const requestValues = computed(() => current.value ? valuesFor(current.value.operation) : new Map())
 
 function valuesFor(operation) {
+  if (operation.apiId && operation.apiId !== 'local') {
+    return operation.usePresets ? resolveRequestValues(operation, ...activePresetValues.value) : new Map()
+  }
   return resolveRequestValues(operation, ...activePresetValues.value, flowOverrides.value)
 }
+
+watch(operations, available => {
+  if (!selectedChain.value.length) return
+  const byKey = new Map(available.map(operation => [operation.key, operation]))
+  const missing = selectedChain.value.findIndex(step => !byKey.has(step.operation.key))
+  const valid = missing < 0 ? selectedChain.value : selectedChain.value.slice(0, missing)
+  selectedChain.value = valid.map(step => {
+    const operation = byKey.get(step.operation.key)
+    return { ...step, operation, group: operation.tags.includes(step.group) ? step.group : operation.tags[0] }
+  })
+})
+
+watch(showExternalApis, visible => {
+  if (visible) return
+  const firstExternal = chain.value.findIndex(step => step.operation.apiId !== 'local')
+  if (firstExternal >= 0) selectedChain.value = chain.value.slice(0, firstExternal)
+})
+watch(externalApis.revision, () => {
+  const id = externalApis.changedApiId.value
+  for (const [key, session] of sessions) if (session.apiId === id) sessions.delete(key)
+  const index = chain.value.findIndex(step => step.operation.apiId === id)
+  if (index >= 0) selectedChain.value = chain.value.slice(0, index)
+})
 
 watch(configuration, () => {
   try {
@@ -257,6 +287,8 @@ function choose(session, location, choice) {
           </template>
           <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
         </section>
+        <ExternalApiSettings :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
+          :save="externalApis.saveConnection" :remove="externalApis.removeConnection" :test="externalApis.testConnection" />
       </section>
       <div v-show="!settingsOpen" class="layout">
         <EndpointCatalog
@@ -268,6 +300,13 @@ function choose(session, location, choice) {
         />
 
         <div ref="workArea" class="work-area">
+          <section class="external-toggle preset-panel" aria-label="External API visibility">
+            <label><input v-model="showExternalApis" type="checkbox" role="switch"> Show external APIs</label>
+            <span class="muted" role="status">{{ showExternalApis ? 'Visible' : 'Hidden' }} · {{ connections.length }} configured<template v-if="externalPending"> · Connecting…</template></span>
+            <p v-if="!connections.length" class="muted">Add connections in Settings → External APIs.</p>
+            <p v-for="entry in externalErrors" :key="entry.id" class="error">{{ entry.name }}: {{ externalStatuses.get(entry.id).error }}</p>
+            <p v-if="externalStorageError" class="error">{{ externalStorageError }}</p>
+          </section>
           <fieldset class="preset-panel">
             <legend>Presets</legend>
             <div v-if="presets.size" class="preset-options">
@@ -292,15 +331,16 @@ function choose(session, location, choice) {
                 <li v-for="(step, index) in chain" :key="index">
                   <span v-if="index" class="separator" aria-hidden="true">›</span>
                   <span v-if="index === chain.length - 1" aria-current="step">
-                    {{ step.operation.method }} {{ step.operation.name }}
+                    {{ step.operation.apiId !== 'local' ? step.operation.apiName + ' [' + step.operation.apiId + '] · ' : '' }}{{ step.operation.method }} {{ step.operation.name }}
                   </span>
                   <button v-else type="button" @click="showChain(chain.slice(0, index + 1))">
-                    {{ step.operation.method }} {{ step.operation.name }}
+                    {{ step.operation.apiId !== 'local' ? step.operation.apiName + ' [' + step.operation.apiId + '] · ' : '' }}{{ step.operation.method }} {{ step.operation.name }}
                   </button>
                 </li>
               </ol>
             </nav>
             <header class="endpoint-header">
+              <p v-if="current.operation.apiId !== 'local'" class="external-api-label">{{ current.operation.apiName }} · {{ current.operation.apiId }}</p>
               <h2 id="endpoint-title" ref="endpointHeading" tabindex="-1">{{ current.operation.name }}</h2>
               <div class="endpoint-route">
                 <span class="method" :data-method="current.operation.method">{{ current.operation.method }}</span>
@@ -308,10 +348,11 @@ function choose(session, location, choice) {
               </div>
               <p v-if="current.operation.description" class="muted">{{ current.operation.description }}</p>
             </header>
-            <details class="preset-panel">
+            <details v-if="current.operation.apiId === 'local'" class="preset-panel">
               <summary>Call-flow overrides<span v-if="flowOverrides.size"> ({{ flowOverrides.size }})</span></summary>
               <ValuesEditor :values="flowOverrides" label="Values for this call-flow" @save="flowOverrides = $event" />
             </details>
+            <p v-if="current.operation.apiId !== 'local'" class="muted external-context-note">{{ current.operation.usePresets ? 'Active request presets are applied to this API.' : 'Active request presets are not applied to this API.' }}</p>
             <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues">
               <template #choices="{ location, parameterName }">
                 <RelatedChoices
@@ -397,6 +438,14 @@ body { margin: 0; background: #eef2ee; }
 .preset-panel > label select { margin-left: .35rem; max-width: 70%; }
 .preset-panel summary { cursor: pointer; width: fit-content; color: var(--accent); }
 .preset-panel p { margin: 0; }
+.external-toggle label { display: flex; gap: .5rem; align-items: center; font-weight: 650; }
+.external-toggle input[role="switch"] { appearance: none; position: relative; width: 2.25rem; height: 1.3rem; margin: 0; border: 1px solid #9bad9f; border-radius: 999px; background: #cbd8cf; cursor: pointer; flex-shrink: 0; }
+.external-toggle input[role="switch"]::before { content: ''; position: absolute; top: .12rem; left: .13rem; width: .94rem; height: .94rem; border-radius: 50%; background: white; box-shadow: 0 1px 3px #0003; }
+.external-toggle input[role="switch"]:checked { background: var(--accent); border-color: var(--accent); }
+.external-toggle input[role="switch"]:checked::before { left: 1.04rem; }
+.external-toggle span, .external-toggle p { font-size: .78rem; }
+.external-api-label { color: var(--accent); font-weight: 650; }
+.external-context-note { font-size: .8rem; }
 .settings-toggle { margin-left: auto; flex-shrink: 0; }
 .settings { flex: 1; }
 .settings h2 { margin: 0 0 1rem; }

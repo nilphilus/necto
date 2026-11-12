@@ -25,6 +25,14 @@ sample provides these links through explicit endpoint mappings.
 The [HTTP examples](SampleApi.FastEndpoints/SampleApi.FastEndpoints.http)
 show the same flow with sample IDs.
 
+## External API connections
+
+Configure additional OpenAPI documents and Necto mappings in **Settings → External
+APIs**, then use **Show external APIs** in the workspace. Services retain their
+own request URLs and operation identities. Explicit `source.apiId` / `target.apiId`
+selectors allow response values to flow between configured services. See the
+[external API guide](Necto.UI/README.md#external-apis) for configuration and CORS.
+
 ## Endpoint mappings
 
 Necto generates suggestions for reusing response values in other API requests. The
