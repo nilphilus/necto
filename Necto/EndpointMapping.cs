@@ -21,6 +21,10 @@ public sealed record ResponseValue(string OperationId, bool EachItem, string? Pr
     /// <summary>Optional API connection ID. Omitted means the API serving this mapping; local identifies the host UI API.</summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? ApiId { get; init; }
+
+    /// <summary>Path to the containing object. Null segments select array items.
+    /// When omitted, EachItem selects the legacy root object or root array items.</summary>
+    public string?[]? ObjectPath { get; init; }
 }
 
 /// <param name="OperationId">The OpenAPI operation ID.</param>

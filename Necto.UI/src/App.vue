@@ -5,15 +5,18 @@ import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
 import OperationRunner from './features/request-runner/OperationRunner.vue'
 import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
 import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
+import ValueInput from './features/related-endpoints/ValueInput.vue'
 import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
 import RelatedTargets from './features/related-endpoints/RelatedTargets.vue'
 import ExternalApiSettings from './features/external-apis/ExternalApiSettings.vue'
+import EndpointGraph from './features/endpoint-graph/EndpointGraph.vue'
+import EntityGraph from './features/entity-graph/EntityGraph.vue'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
-import { contextKey, resolveRequestValues, supportedParameters } from './features/request-runner/request.js'
+import { buildRequest, fieldKey, contextKey, resolveRequestValues } from './features/request-runner/request.js'
 
 const { spec, configuration, error, operations, groups, externalApis } = useCatalog()
 const { sessions, sessionFor, createSession, run } = useRequestRunner(configuration)
-const { error: mappingError, targetsFor, choicesFor } = useRelatedEndpoints(configuration, operations, externalApis.contexts)
+const { error: mappingError, targetsFor, choicesFor, selectablePaths, mappings: endpointMappings } = useRelatedEndpoints(configuration, operations, externalApis.contexts)
 
 const { connections, show: showExternalApis, statuses: externalStatuses, storageError: externalStorageError } = externalApis
 const externalPending = computed(() => showExternalApis.value && [...externalStatuses.values()].some(status => status.pending))
@@ -22,6 +25,7 @@ const selectedChain = ref([])
 const presets = ref(new Map())
 const activePresetNames = ref([])
 const settingsOpen = ref(false)
+const graphView = ref('')
 const editedPresetName = ref('')
 const newPresetName = ref('')
 const presetError = ref('')
@@ -132,6 +136,7 @@ function togglePreset(name, enabled) {
 }
 
 function toggleSettings() {
+  graphView.value = ''
   settingsOpen.value = !settingsOpen.value
   if (settingsOpen.value) {
     editedPresetName.value = activePresetNames.value.at(-1) ?? presets.value.keys().next().value ?? ''
@@ -185,10 +190,15 @@ const relatedResults = computed(() => {
 
 const relatedTargets = computed(() => {
   if (!current.value) return []
-  return targetsFor(current.value.operation, current.value.session.result).map(target => {
+  const { operation, session } = current.value
+  const selected = session.result?.selectedPath
+    ? targetsFor(operation, session.result) : []
+  const result = session.result ? { ...session.result, selectedPath: undefined } : null
+  return targetsFor(operation, result).map(target => {
     const values = valuesFor(target.operation)
     return {
       ...target,
+      selectedCandidates: selected.find(entry => entry.operation.key === target.operation.key)?.candidates ?? [],
       candidates: target.candidates.filter(choice =>
         choice.location === 'body' || !values.has(contextKey({ in: choice.location, name: choice.name })),
       ),
@@ -210,26 +220,27 @@ function selectGroup(name) {
 }
 
 function selectOperation(operation, group) {
+  graphView.value = ''
   flowOverrides.value = new Map()
   return showChain([{ operation, group, session: sessionFor(operation) }])
 }
 
-function canSendRelated(operation, choice) {
-  if (!['GET', 'HEAD'].includes(operation.method) || operation.requestBody ||
-      !['string', 'number', 'boolean'].includes(typeof choice.value) || choice.value === '') return false
-  const parameters = supportedParameters(operation)
-  const target = parameters.find(parameter => parameter.in === choice.location && parameter.name === choice.name)
-  const values = valuesFor(operation)
-  if (!target || values.has(contextKey(target))) return false
-  return parameters.every(parameter => parameter === target ||
-    (!parameter.required && parameter.in !== 'path') ||
-    Boolean(values.get(contextKey(parameter))))
+function canSendRelated(operation, choices) {
+  if (!['GET', 'HEAD'].includes(operation.method) || operation.requestBody) return false
+  try {
+    const session = createSession(operation)
+    for (const choice of choices) applyChoice(session, choice.location, choice)
+    buildRequest(operation, configuration.value, session, valuesFor(operation))
+    return true
+  } catch {
+    return false
+  }
 }
 
-async function follow(operation, choice, send) {
-  if (send && (!choice || !canSendRelated(operation, choice))) return
+async function follow(operation, choices, send) {
+  if (send && !canSendRelated(operation, choices)) return
   const session = createSession(operation)
-  if (choice) choose(session, choice.location, choice)
+  for (const choice of choices) choose(session, choice.location, choice)
   const group = operation.tags.includes(current.value.group) ? current.value.group : operation.tags[0]
   await showChain([...chain.value, { operation, group, session }])
   if (send) await runInContext(operation, session)
@@ -259,6 +270,11 @@ function choose(session, location, choice) {
         </div>
         <p v-if="spec?.info?.description" class="muted">{{ spec.info.description }}</p>
       </div>
+      <nav v-if="spec" class="view-navigation" aria-label="Workspace views">
+        <button type="button" class="secondary" :aria-pressed="!settingsOpen && !graphView" @click="settingsOpen = false; graphView = ''">API</button>
+        <button type="button" class="secondary" :aria-pressed="graphView === 'entities'" @click="settingsOpen = false; graphView = 'entities'">Entity graph</button>
+        <button type="button" class="secondary" :aria-pressed="graphView === 'endpoints'" @click="settingsOpen = false; graphView = 'endpoints'">Endpoint graph</button>
+      </nav>
       <button v-if="spec" type="button" class="secondary settings-toggle" @click="toggleSettings">
         {{ settingsOpen ? 'Back to API' : 'Settings' }}
       </button>
@@ -290,7 +306,11 @@ function choose(session, location, choice) {
         <ExternalApiSettings :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
           :save="externalApis.saveConnection" :remove="externalApis.removeConnection" :test="externalApis.testConnection" />
       </section>
-      <div v-show="!settingsOpen" class="layout">
+      <EntityGraph v-if="graphView === 'entities'" :spec="spec" :apis="externalApis.contexts.value" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
+        @open-operation="operation => selectOperation(operation, operation.tags[0])" />
+      <EndpointGraph v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
+        @open-operation="operation => selectOperation(operation, operation.tags[0])" />
+      <div v-show="!settingsOpen && !graphView" class="layout">
         <EndpointCatalog
           :groups="groups"
           :active-group="current?.group ?? ''"
@@ -353,9 +373,14 @@ function choose(session, location, choice) {
               <ValuesEditor :values="flowOverrides" label="Values for this call-flow" @save="flowOverrides = $event" />
             </details>
             <p v-if="current.operation.apiId !== 'local'" class="muted external-context-note">{{ current.operation.usePresets ? 'Active request presets are applied to this API.' : 'Active request presets are not applied to this API.' }}</p>
-            <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues">
+            <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)">
+              <template #parameter-input="{ parameter, hint }">
+                <ValueInput v-model="current.session.fields[fieldKey(parameter)]"
+                  :choices="choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
+                  :required="parameter.required || parameter.in === 'path'" :placeholder="hint" />
+              </template>
               <template #choices="{ location, parameterName }">
-                <RelatedChoices
+                <RelatedChoices v-if="location === 'body'"
                   :choices="choicesFor(current.operation, location, parameterName, relatedResults)"
                   @choose="choose(current.session, location, $event)"
                 />
@@ -403,7 +428,7 @@ body { margin: 0; background: #eef2ee; }
   border: 1px solid var(--line);
   border-radius: .75rem;
 }
-.hero { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--line); }
+.hero { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--line); }
 .api-info { min-width: 0; overflow-wrap: anywhere; }
 .api-title { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-height: 1.65rem; }
 .hero h1 { margin: 0; font-size: 1.05rem; letter-spacing: -.025em; }
@@ -446,7 +471,9 @@ body { margin: 0; background: #eef2ee; }
 .external-toggle span, .external-toggle p { font-size: .78rem; }
 .external-api-label { color: var(--accent); font-weight: 650; }
 .external-context-note { font-size: .8rem; }
-.settings-toggle { margin-left: auto; flex-shrink: 0; }
+.view-navigation { display: flex; flex-wrap: wrap; gap: .35rem; margin-left: auto; }
+.view-navigation [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.settings-toggle { margin-left: 0; flex-shrink: 0; }
 .settings { flex: 1; }
 .settings h2 { margin: 0 0 1rem; }
 .settings h3 { margin: 0; font-size: 1rem; }

@@ -49,3 +49,13 @@ POST {{SampleApi_HostAddress}}/customers/search
 Content-Type: application/json
 
 {"selectedCustomer":{"value":7}}
+
+### Large payload: one complete response, paging happens only in Necto Preview
+
+GET {{SampleApi_HostAddress}}/invoices/large-payload?count=100000&noteSize=1024
+Accept: application/json
+
+### Last record from page 4000 in Preview
+
+GET {{SampleApi_HostAddress}}/invoices/large-lines/199999
+Accept: application/json
