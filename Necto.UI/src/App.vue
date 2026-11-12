@@ -372,18 +372,6 @@ function removeScenario(id) {
           <span aria-hidden="true">⚙︎</span>
         </button>
       </div>
-      <div v-if="!graphView && visiblePresetNames.length" class="preset-bar" role="group" aria-label="Presets">
-        <span class="preset-bar-label" aria-hidden="true">Presets</span>
-        <button
-          v-for="name in visiblePresetNames"
-          :key="name"
-          type="button"
-          class="preset-chip"
-          :disabled="scenarioPending"
-          :aria-pressed="activePresetNames.includes(name)"
-          @click="togglePreset(name, !activePresetNames.includes(name))"
-        >{{ name }}</button>
-      </div>
     </header>
 
     <p v-if="error" class="app-message error" role="alert">{{ error }}</p>
@@ -454,6 +442,17 @@ function removeScenario(id) {
                 </li>
               </ol>
             </nav>
+            <div v-if="visiblePresetNames.length" class="preset-bar" role="group" aria-label="Presets">
+              <span class="preset-bar-label" aria-hidden="true">Presets</span>
+              <button
+                v-for="name in visiblePresetNames"
+                :key="name"
+                type="button"
+                class="preset-chip"
+                :aria-pressed="activePresetNames.includes(name)"
+                @click="togglePreset(name, !activePresetNames.includes(name))"
+              >{{ name }}</button>
+            </div>
             <header class="endpoint-header">
               <p v-if="current.operation.apiId !== 'local'" class="external-api-label">{{ current.operation.apiName }} · {{ current.operation.apiId }}</p>
               <h2 id="endpoint-title" ref="endpointHeading" tabindex="-1">{{ current.operation.name }}</h2>
@@ -574,7 +573,7 @@ body { margin: 0; background: #eef2ee; }
 .app-message { margin: 1rem; }
 .mapping-notice { margin: 0 0 1rem; }
 .preset-panel { min-width: 0; margin-inline: 0; display: grid; gap: .45rem; margin-bottom: 1rem; padding: .75rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); font-size: .85rem; }
-.preset-bar { flex: 0 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; min-width: 0; margin-top: -.5rem; }
+.preset-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-bottom: .85rem; padding-bottom: .55rem; border-bottom: 1px solid var(--line); }
 .preset-bar-label { margin-right: .2rem; color: var(--muted); font-size: .75rem; font-weight: 650; }
 .preset-chip {
   display: inline-flex;
