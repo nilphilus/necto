@@ -14,6 +14,11 @@ const props = defineProps({
 const parameters = computed(() => supportedParameters(props.operation))
 const content = computed(() => jsonContent(props.operation))
 const effectiveBody = computed(() => applyBodyPresets(props.operation, props.session.body, props.values).body)
+const editingBody = ref(false)
+const displayedBody = computed({
+  get: () => editingBody.value ? props.session.body : effectiveBody.value,
+  set: body => { props.session.body = body },
+})
 const unsupported = computed(() => props.operation.requestBody && !content.value)
 const form = ref(null)
 const responsePane = ref(null)
@@ -87,11 +92,14 @@ function parameterHint(parameter) {
         <div v-if="content" class="field">
           <label class="field-label">
             <span>Request body <small>{{ content[0] }}</small></span>
-            <textarea v-model="session.body" rows="7" spellcheck="false" :required="operation.requestBody.required && !effectiveBody" />
-          </label>
-          <label v-if="effectiveBody !== session.body" class="field-label">
-            <span>Request body with active presets</span>
-            <textarea :value="effectiveBody" rows="7" readonly spellcheck="false" />
+            <textarea
+              v-model="displayedBody"
+              rows="7"
+              spellcheck="false"
+              :required="operation.requestBody.required && !effectiveBody"
+              @focus="editingBody = true"
+              @blur="editingBody = false"
+            />
           </label>
           <slot name="choices" location="body" />
         </div>
