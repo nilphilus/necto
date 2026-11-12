@@ -29,7 +29,7 @@ const selectedChain = ref([])
 const inspectedScenarioStep = ref(null)
 const scenarioPanel = ref(null)
 const scenarioStore = useScenarios(configuration)
-const { scenarios, state: scenarioState, pending: scenarioPending, error: scenarioError } = scenarioStore
+const { scenarios, state: scenarioState, runs: scenarioRuns, pending: scenarioPending, error: scenarioError } = scenarioStore
 const scenarioName = ref('')
 const editingScenarioId = ref('')
 const overwriteScenario = computed(() => scenarios.value.find(scenario =>
@@ -313,22 +313,22 @@ async function replayScenario(scenario, presetNames) {
   if (scenarioBusy.value) return
   const layers = presetNames.map(name => presets.value.get(name))
   const replay = scenarioStore.run(scenario, scenarioContext(operation => valuesFor(operation, layers)),
-    (operation, session, values, signal) => run(operation, session, values, { signal }))
+    (operation, session, values, signal, onRequest) => run(operation, session, values, { signal, onRequest }))
   await nextTick()
   scenarioPanel.value?.showProgress()
   await replay
 }
-function inspectScenario(index) {
+function inspectScenario(index, execution) {
   const byKey = new Map(operations.value.map(operation => [operation.key, operation]))
-  const missing = scenarioState.steps.findIndex(step => !byKey.has(step.operation.key))
-  const visible = missing < 0 ? scenarioState.steps : scenarioState.steps.slice(0, missing)
+  const missing = execution.steps.findIndex(step => !byKey.has(step.operation.key))
+  const visible = missing < 0 ? execution.steps : execution.steps.slice(0, missing)
   if (!visible[index]) {
     scenarioError.value = 'This scenario step is unavailable. Enable its API connection before inspecting it.'
     return
   }
   scenarioError.value = ''
-  editingScenarioId.value = scenarioState.id
-  scenarioName.value = scenarioState.name
+  editingScenarioId.value = execution.id
+  scenarioName.value = execution.name
   graphView.value = ''
   void showChain(visible.map(step => ({ ...step, operation: byKey.get(step.operation.key) })), index)
 }
@@ -409,7 +409,7 @@ function removeScenario(id) {
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <EndpointGraph v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
-      <ScenarioPanel v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState"
+      <ScenarioPanel v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
         :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"
         @remove="removeScenario" @stop="scenarioStore.stop" @inspect="inspectScenario" />

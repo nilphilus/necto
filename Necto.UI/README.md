@@ -89,10 +89,13 @@ resolved when the source step finishes. External API steps require a visible, lo
 or removed mappings stop preflight; no requests are sent in that case. API-side
 validation and business rules still apply when the request executes.
 
-Requests run sequentially. The progress panel shows each step, HTTP status and
-elapsed time; HTTP errors, network failures and unavailable response values stop
-later steps. Successful and failed responses remain available for inspection in
-the current workspace, but are not persisted with the scenario. **Stop scenario**
+Requests run sequentially. The latest run appears under its scenario, with
+side-by-side **Request** and **Response** columns for each step. Scroll
+horizontally for later steps. Values copied from a response into a later request
+share a color. Hover or focus a value to see its connections, or click to keep
+them visible while scrolling. HTTP errors, network failures and unavailable
+response values stop later steps. Run details are kept in memory for the
+current workspace. **Stop scenario**
 aborts the active browser request/background parser and prevents later steps;
 it cannot undo work already received by the API. Running a scenario explicitly
 sends all its configured methods, including POST/PUT/PATCH/DELETE. Nothing runs

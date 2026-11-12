@@ -1,13 +1,14 @@
 <script setup>
 import { ref } from 'vue'
 import { pathLabel } from './scenario.js'
+import ScenarioTrace from './ScenarioTrace.vue'
 const props = defineProps({ scenarios: Array, state: Object, pending: Boolean, busy: Boolean, error: String,
-  presetNames: Array, activePresetNames: Array })
+  presetNames: Array, activePresetNames: Array, runs: Map })
 const emit = defineEmits(['open', 'run', 'remove', 'stop', 'inspect'])
 const runId = ref('')
 const selectedPresets = ref([])
-const progressTitle = ref(null)
-defineExpose({ showProgress: () => progressTitle.value?.scrollIntoView({ block: 'nearest', behavior: 'instant' }) })
+const list = ref(null)
+defineExpose({ showProgress: () => list.value?.querySelector('[data-current-run]')?.scrollIntoView({ block: 'nearest', behavior: 'instant' }) })
 
 function configureRun(scenario) {
   selectedPresets.value = [...props.activePresetNames]
@@ -24,7 +25,7 @@ function runScenario(scenario) {
   <section class="scenario-panel work-area" aria-labelledby="scenarios-title">
     <h2 id="scenarios-title">Scenarios</h2>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
-    <ul class="saved-list">
+    <ul ref="list" class="saved-list">
       <li v-for="scenario in scenarios" :key="scenario.id">
         <div class="saved-title"><strong>{{ scenario.name }}</strong><span class="muted">{{ scenario.steps.length }} steps</span></div>
         <details class="review"><summary>Review steps</summary>
@@ -59,23 +60,20 @@ function runScenario(scenario) {
             <button type="button" class="secondary" @click="runId = ''">Cancel</button>
           </div>
         </form>
+        <p v-if="state.id === scenario.id && state.error && state.error !== runs.get(scenario.id)?.error" class="error" role="alert">{{ state.error }}</p>
+        <section v-for="execution in runs.has(scenario.id) ? [runs.get(scenario.id)] : []" :key="execution"
+          class="run-status" :data-current-run="state.id === scenario.id || undefined" aria-label="Scenario execution">
+          <div class="saved-title">
+            <span role="status" aria-live="polite">{{ execution.status }}</span>
+            <button v-if="execution.status === 'running'" type="button" class="secondary" @click="emit('stop')">Stop scenario</button>
+          </div>
+          <p v-if="execution.error" class="error" role="alert">{{ execution.error }}</p>
+          <ScenarioTrace v-if="execution.steps.length" :steps="execution.steps" :pending="pending"
+            @inspect="emit('inspect', $event, execution)" />
+        </section>
       </li>
     </ul>
     <p v-if="!scenarios.length" class="muted">Save a request chain from the API view to see it here.</p>
-    <section v-if="state.id" class="run-status" aria-label="Scenario execution">
-      <div ref="progressTitle" class="saved-title"><strong>{{ state.name }}</strong><span role="status" aria-live="polite">{{ state.status }}</span><button v-if="pending" type="button" class="secondary" @click="emit('stop')">Stop scenario</button></div>
-      <p v-if="state.error" class="error" role="alert">{{ state.error }}</p>
-      <ol>
-        <li v-for="(step, index) in state.steps" :key="index" class="run-step">
-          <button type="button" :disabled="pending" :aria-label="'Inspect scenario step ' + (index + 1)" @click="emit('inspect', index)">
-            <span class="method" :data-method="step.operation.method">{{ step.operation.method }}</span> {{ step.operation.name }}
-          </button>
-          <span :class="{ error: step.status === 'failed' }">{{ step.status }}<template v-if="step.httpStatus !== undefined"> · {{ step.httpStatus }}<template v-if="step.elapsed !== undefined"> · {{ step.elapsed }} ms</template></template></span>
-          <small v-if="step.error" class="error">{{ step.error }}</small>
-        </li>
-      </ol>
-      <small v-if="pending" class="muted">Stop prevents later steps. A request already received by the API may still finish.</small>
-    </section>
   </section>
 </template>
 <style scoped>
@@ -88,7 +86,6 @@ function runScenario(scenario) {
 .run-form p { margin-top: .4rem; }
 ul { list-style: none; margin: 0; padding: 0; }.saved-list > li { border-top: 1px solid var(--line); padding: .7rem 0; }.saved-title { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }.saved-title span { font-size: .75rem; }
 .actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }.actions button { font-size: .8rem; }
-.review { margin-top: .4rem; font-size: .78rem; }.review summary { color: var(--muted); }.review ol, .run-status ol { padding-left: 1.3rem; margin: .5rem 0; }.review li { padding: .3rem 0; overflow-wrap: anywhere; }.review small { display: block; color: var(--muted); }.review .binding-note { font-size: .72rem; margin: .2rem 0; color: var(--accent); }
-.run-status ol { max-height: 14rem; overflow: auto; }
-.run-status { border-top: 1px solid var(--line); padding-top: .7rem; }.run-step { padding: .3rem 0; font-size: .78rem; }.run-step button { padding: .25rem; text-align: left; }.run-step > span { display: inline-block; margin-left: .4rem; color: var(--muted); }.run-step small { display: block; }
+.review { margin-top: .4rem; font-size: .78rem; }.review summary { color: var(--muted); }.review ol { padding-left: 1.3rem; margin: .5rem 0; }.review li { padding: .3rem 0; overflow-wrap: anywhere; }.review small { display: block; color: var(--muted); }.review .binding-note { font-size: .72rem; margin: .2rem 0; color: var(--accent); }
+.run-status { margin-top: .7rem; border-top: 1px solid var(--line); padding-top: .7rem; }
 </style>

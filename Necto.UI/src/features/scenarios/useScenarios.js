@@ -5,13 +5,14 @@ export function useScenarios(configuration) {
   const scenarios = ref([])
   const error = ref('')
   const state = reactive({ id: '', name: '', status: 'idle', steps: [], error: '' })
+  const runs = reactive(new Map())
   const pending = ref(false)
   let controller
   const key = computed(() => configuration.value?.openApiUrl && `necto:scenarios:${configuration.value.openApiUrl}`)
   const stop = () => controller?.abort()
   onScopeDispose(stop)
   watch(key, storageKey => {
-    stop(); scenarios.value = []; error.value = ''
+    stop(); runs.clear(); scenarios.value = []; error.value = ''
     if (!storageKey) return
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey))
@@ -41,6 +42,7 @@ export function useScenarios(configuration) {
   function remove(id) {
     if (pending.value) return
     persist(scenarios.value.filter(item => item.id !== id))
+    runs.delete(id)
     if (state.id === id) { state.id = ''; state.name = ''; state.steps = []; state.status = 'idle'; state.error = '' }
   }
   function open(scenario, context) {
@@ -58,19 +60,22 @@ export function useScenarios(configuration) {
   async function run(scenario, context, execute) {
     if (pending.value) return
     state.error = ''; error.value = ''
-    let plan
-    try { plan = prepareScenario(scenario, context) }
+    const execution = reactive({ id: scenario.id, name: scenario.name, status: 'running', steps: [], error: '' })
+    runs.set(scenario.id, execution)
+    try { execution.steps = prepareScenario(scenario, context) }
     catch (cause) {
-      Object.assign(state, { id: scenario.id, name: scenario.name, status: 'failed', steps: [], error: cause.message })
+      Object.assign(execution, { status: 'failed', error: cause.message })
+      Object.assign(state, execution)
       return
     }
     controller = new AbortController()
     pending.value = true
-    Object.assign(state, { id: scenario.id, name: scenario.name, status: 'running', steps: plan, error: '' })
+    Object.assign(state, execution)
     try {
-      const outcome = await executeScenario(state.steps, { execute, signal: controller.signal })
-      Object.assign(state, outcome)
+      const outcome = await executeScenario(execution.steps, { execute, signal: controller.signal })
+      Object.assign(execution, outcome)
+      if (runs.get(scenario.id) === execution) Object.assign(state, outcome)
     } finally { pending.value = false; controller = undefined }
   }
-  return { scenarios, error, state, pending, save, remove, open, run, stop }
+  return { scenarios, error, state, runs, pending, save, remove, open, run, stop }
 }
