@@ -16,9 +16,9 @@ export function useRequestRunner(configuration) {
     })
   }
 
-  function sessionFor(operation) {
+  function sessionFor(operation, initialize = createSession) {
     if (!sessions.has(operation.key)) {
-      sessions.set(operation.key, createSession(operation))
+      sessions.set(operation.key, initialize(operation))
     }
     return sessions.get(operation.key)
   }

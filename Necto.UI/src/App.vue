@@ -5,6 +5,8 @@ import { useCatalog } from './features/api-catalog/catalog.js'
 import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
 import OperationRunner from './features/request-runner/OperationRunner.vue'
 import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
+import RequestSamples from './features/request-runner/RequestSamples.vue'
+import { applySample, readSamples } from './features/request-runner/samples.js'
 import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
 import ValueInput from './features/related-endpoints/ValueInput.vue'
 import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
@@ -56,7 +58,7 @@ const chain = computed(() => {
   if (selectedChain.value.length) return selectedChain.value
   const group = groups.value[0]
   const operation = group?.operations[0]
-  return operation ? [{ operation, group: group.name, session: sessionFor(operation) }] : []
+  return operation ? [{ operation, group: group.name, session: draftFor(operation) }] : []
 })
 const currentIndex = computed(() => inspectedScenarioStep.value === null ? chain.value.length - 1 : Math.min(inspectedScenarioStep.value, chain.value.length - 1))
 const current = computed(() => chain.value[currentIndex.value])
@@ -75,6 +77,29 @@ const visiblePresetNames = computed(() => {
 function valuesFor(operation, layers = activePresetValues.value) {
   if (operation.apiId && operation.apiId !== 'local' && !operation.usePresets) return new Map()
   return resolveRequestValues(operation, ...layers)
+}
+
+function sampleStorageKey(operation) {
+  return 'necto:request-samples:' + JSON.stringify([
+    (operation.configuration ?? configuration.value)?.openApiUrl,
+    operation.key,
+  ])
+}
+
+function createDraft(operation) {
+  const session = createSession(operation)
+  try {
+    const { samples, defaultName } = readSamples(localStorage, sampleStorageKey(operation))
+    const sample = samples.find(sample => sample.name === defaultName)
+    if (sample) applySample(operation, session, sample)
+  } catch {
+    // The sample controls report storage errors when the operation is opened.
+  }
+  return session
+}
+
+function draftFor(operation) {
+  return sessionFor(operation, createDraft)
 }
 
 watch(operations, available => {
@@ -127,13 +152,17 @@ function savePresets() {
 
 function resetPresetSessions() {
   const selected = current.value
+  const separateDraft = selected?.session.sampleName && selected.session !== sessions.get(selected.operation.key)
   for (const [key, session] of sessions) {
     sessions.set(key, { ...session, result: null, pending: false, error: '' })
   }
   if (selected) {
     editingScenarioId.value = ''
-    const { operation, group } = selected
-    selectedChain.value = [{ operation, group, session: sessionFor(operation) }]
+    const { operation, group, session } = selected
+    const draft = separateDraft
+      ? { ...session, bindings: [], result: null, pending: false, error: '' }
+      : draftFor(operation)
+    selectedChain.value = [{ operation, group, session: draft }]
   }
 }
 
@@ -255,13 +284,13 @@ function selectOperation(operation, group) {
   graphView.value = ''
   editingScenarioId.value = ''
   scenarioName.value = ''
-  return showChain([{ operation, group, session: sessionFor(operation) }])
+  return showChain([{ operation, group, session: draftFor(operation) }])
 }
 
 function canSendRelated(operation, choices) {
   if (!['GET', 'HEAD'].includes(operation.method) || operation.requestBody) return false
   try {
-    const session = createSession(operation)
+    const session = createDraft(operation)
     for (const choice of choices) applyChoice(session, choice.location, choice)
     buildRequest(operation, configuration.value, session, valuesFor(operation))
     return true
@@ -272,7 +301,7 @@ function canSendRelated(operation, choices) {
 
 async function follow(operation, choices, send) {
   if (send && !canSendRelated(operation, choices)) return
-  const session = createSession(operation)
+  const session = createDraft(operation)
   for (const choice of choices) choose(session, choice.location, choice, currentIndex.value)
   const group = operation.tags.includes(current.value.group) ? current.value.group : operation.tags[0]
   await showChain([...chain.value.slice(0, currentIndex.value + 1), { operation, group, session }])
@@ -471,6 +500,8 @@ function removeScenario(id) {
               <p v-if="scenarioError" class="error" role="alert">{{ scenarioError }}</p>
               <p v-else-if="overwriteScenario && scenarioState.status === 'saved' && scenarioState.id === overwriteScenario.id" role="status">Scenario saved.</p>
             </details>
+            <RequestSamples :key="sampleStorageKey(current.operation)" :storage-key="sampleStorageKey(current.operation)"
+              :operation="current.operation" :session="current.session" :values="requestValues" />
             <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)">
               <template #parameter-input="{ parameter, hint }">
                 <ValueInput v-model="current.session.fields[fieldKey(parameter)]"

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { buildRequest, contextKey, resolveRequestValues } from './request.js'
+import { applySample, readSamples } from './samples.js'
 
 const configuration = { openApiUrl: 'https://api.example/openapi/v1.json' }
 const tenant = { in: 'header', name: 'X-Tenant', required: true }
@@ -14,6 +15,32 @@ const invoice = {
   ],
   resolve: value => value,
 }
+
+test('a saved request sample supplies the body and draft fields beneath active presets', () => {
+  const operation = {
+    ...invoice,
+    method: 'POST',
+    requestBody: { content: { 'application/json': {} } },
+  }
+  const sample = {
+    name: 'Example',
+    body: '{"amount":12}',
+    fields: { 'header:X-Tenant': 'sample-tenant', 'path:customer': 'sample-customer', 'path:id': '123' },
+  }
+  const storage = new Map([['invoice', JSON.stringify({ samples: [sample], defaultName: sample.name })]])
+  const { samples, defaultName } = readSamples({ getItem: key => storage.get(key) ?? null }, 'invoice')
+  const draft = { fields: { 'query:old': 'old value' }, body: '{}', bindings: [{}] }
+  applySample(operation, draft, samples.find(entry => entry.name === defaultName))
+
+  const values = new Map([[contextKey(tenant), 'preset-tenant'], ['path:customer', 'preset-customer']])
+  const request = buildRequest(operation, configuration, draft, values)
+  assert.equal(request.url.pathname, '/preset-customer/Invoice/123')
+  assert.equal(request.options.headers.get('X-Tenant'), 'preset-tenant')
+  assert.equal(request.options.body, sample.body)
+  assert.equal(buildRequest(operation, configuration, draft).options.headers.get('X-Tenant'), 'sample-tenant')
+  assert.deepEqual(draft.fields, sample.fields)
+  assert.deepEqual(draft.bindings, [])
+})
 
 test('environment values override request fields by location and name', () => {
   const request = buildRequest(invoice, configuration, {
