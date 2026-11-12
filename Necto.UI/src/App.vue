@@ -17,7 +17,7 @@ import EndpointGraph from './features/endpoint-graph/EndpointGraph.vue'
 import EntityGraph from './features/entity-graph/EntityGraph.vue'
 import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
 import { useScenarios } from './features/scenarios/useScenarios.js'
-import { rememberBinding } from './features/scenarios/scenario.js'
+import { rememberBinding, snapshotScenario } from './features/scenarios/scenario.js'
 import { readRoute, routePath } from './features/routing/routes.js'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
 import { buildRequest, fieldKey, contextKey, hasPresetFor, migratePreset, presetInputs, resolveNamedRequestValues } from './features/request-runner/request.js'
@@ -37,6 +37,13 @@ const scenarioName = ref('')
 const scenarioDialog = ref(null)
 const requestSamples = ref(null)
 const editingScenarioId = ref('')
+const editingScenario = computed(() => scenarios.value.find(scenario => scenario.id === editingScenarioId.value))
+const scenarioDirty = computed(() => {
+  const saved = editingScenario.value
+  if (!saved) return false
+  try { return JSON.stringify(snapshotScenario(chain.value, saved.name, saved.id, valuesFor).steps) !== JSON.stringify(saved.steps) }
+  catch { return true }
+})
 const overwriteScenario = computed(() => scenarios.value.find(scenario =>
   scenario.id === editingScenarioId.value && scenario.name === scenarioName.value.trim()))
 const scenarioBusy = computed(() => scenarioPending.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
@@ -502,6 +509,16 @@ function saveScenario() {
   }
   catch (cause) { scenarioError.value = cause.message }
 }
+function updateEditingScenario() {
+  if (!editingScenario.value) return
+  scenarioName.value = editingScenario.value.name
+  saveScenario()
+}
+function copyEditingScenario() {
+  scenarioName.value = editingScenario.value.name + ' copy'
+  scenarioDialog.value.showModal()
+}
+
 function openScenario(scenario) {
   const steps = scenarioStore.open(scenario, scenarioContext())
   if (!steps) return
@@ -687,10 +704,15 @@ function removeScenario(id) {
                   </li>
                 </ol>
               </nav>
-              <button class="secondary save-scenario" type="button" aria-haspopup="dialog" @click="scenarioDialog.showModal()">
+              <button v-if="!editingScenario" class="secondary save-scenario" type="button" aria-haspopup="dialog" @click="scenarioDialog.showModal()">
                 Save scenario
               </button>
             </div>
+            <section v-if="editingScenario" class="scenario-edit-context" aria-label="Scenario editing">
+              <div><strong>Scenario: {{ editingScenario.name }}</strong><span>Step {{ currentIndex + 1 }}/{{ chain.length }}</span><span role="status" class="save-state" :class="{ dirty: scenarioDirty }">{{ scenarioDirty ? 'Unsaved changes' : 'All changes saved' }}</span></div>
+              <div class="scenario-edit-actions"><button type="button" class="primary" :disabled="scenarioBusy || !scenarioDirty" @click="updateEditingScenario">Update scenario</button><button type="button" class="secondary" :disabled="scenarioBusy" @click="copyEditingScenario">Save as copy</button></div>
+              <details><summary>Scenario steps ({{ chain.length }})</summary><ol><li v-for="(step, index) in chain" :key="index"><button type="button" :aria-current="index === currentIndex ? 'step' : undefined" @click="selectChainStep(index)">{{ index + 1 }}. {{ step.operation.method }} {{ step.operation.name }}</button></li></ol></details>
+            </section>
             <header class="endpoint-header">
               <p v-if="current.operation.apiId !== 'local'" class="external-api-label">{{ current.operation.apiName }} · {{ current.operation.apiId }}</p>
               <h2 id="endpoint-title" ref="endpointHeading" tabindex="-1">{{ current.operation.name }}</h2>
@@ -701,7 +723,7 @@ function removeScenario(id) {
               <p v-if="current.operation.description" class="muted">{{ current.operation.description }}</p>
             </header>
             <dialog :key="current.operation.key" ref="scenarioDialog" class="endpoint-dialog" aria-labelledby="save-scenario-title">
-              <h3 id="save-scenario-title">Save scenario</h3>
+              <h3 id="save-scenario-title">{{ editingScenario && !overwriteScenario ? 'Save scenario copy' : 'Save scenario' }}</h3>
               <form @submit.prevent="saveScenario">
                 <label class="dialog-field">Scenario name <input v-model="scenarioName" required autofocus maxlength="120" placeholder="Invoice details"></label>
                 <p v-if="scenarioError" class="error" role="alert">{{ scenarioError }}</p>
@@ -898,6 +920,13 @@ body { margin: 0; background: #eef2ee; }
   .settings-drawer-enter-active, .settings-drawer-leave-active { transition: none; }
 }
 .preset-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .6rem; }
+.scenario-edit-context { display: grid; gap: .6rem; padding: .8rem; margin-bottom: 1rem; border: 1px solid #b4cdc0; border-radius: .6rem; background: var(--accent-soft); font-size: .8rem; }
+.scenario-edit-context > div { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+.scenario-edit-context summary { cursor: pointer; }
+.scenario-edit-context ol { margin: .4rem 0 0; padding-left: 1.4rem; }
+.scenario-edit-context li button { padding: .25rem; text-align: left; }
+.scenario-edit-context [aria-current] { font-weight: 700; text-decoration: underline; }
+.save-state { padding: .2rem .4rem; border-radius: .3rem; background: var(--surface); }.save-state.dirty { background: #fff0cc; color: #755018; }
 .chain-header { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .55rem; margin-bottom: .5rem; }
 .breadcrumbs { min-width: 0; }
 .breadcrumbs ol { display: flex; flex-wrap: wrap; gap: .25rem; list-style: none; padding: 0; margin: 0; }
