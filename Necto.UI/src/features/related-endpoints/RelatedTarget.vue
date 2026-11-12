@@ -28,12 +28,12 @@ watch(fields, fields => {
 }, { immediate: true })
 const choices = computed(() => fields.value.filter(field => drafts[field.key] !== '').map(field => {
   const input = drafts[field.key]
-  const match = field.choices.find(choice => (typeof choice.value === 'object' ? JSON.stringify(choice.value) : String(choice.value)) === input)
+  const match = [...field.selected, ...field.choices].find(choice => (typeof choice.value === 'object' ? JSON.stringify(choice.value) : String(choice.value)) === input)
   let value = match ? match.value : input
   if (!match && field.location === 'body') {
     try { value = JSON.parse(input) } catch { /* Let the request editor handle text values. */ }
   }
-  return { location: field.location, name: field.name, value }
+  return { location: field.location, name: field.name, value, binding: match?.binding, sourceResult: match?.sourceResult }
 }))
 </script>
 

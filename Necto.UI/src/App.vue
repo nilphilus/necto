@@ -11,17 +11,25 @@ import RelatedTargets from './features/related-endpoints/RelatedTargets.vue'
 import ExternalApiSettings from './features/external-apis/ExternalApiSettings.vue'
 import EndpointGraph from './features/endpoint-graph/EndpointGraph.vue'
 import EntityGraph from './features/entity-graph/EntityGraph.vue'
+import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
+import { useScenarios } from './features/scenarios/useScenarios.js'
+import { rememberBinding } from './features/scenarios/scenario.js'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
 import { buildRequest, fieldKey, contextKey, resolveRequestValues } from './features/request-runner/request.js'
 
 const { spec, configuration, error, operations, groups, externalApis } = useCatalog()
 const { sessions, sessionFor, createSession, run } = useRequestRunner(configuration)
-const { error: mappingError, targetsFor, choicesFor, selectablePaths, mappings: endpointMappings } = useRelatedEndpoints(configuration, operations, externalApis.contexts)
+const { error: mappingError, targetsFor, choicesFor, selectablePaths, mappings: endpointMappings, links: mappingLinks, pending: mappingPending } = useRelatedEndpoints(configuration, operations, externalApis.contexts)
 
 const { connections, show: showExternalApis, statuses: externalStatuses, storageError: externalStorageError } = externalApis
 const externalPending = computed(() => showExternalApis.value && [...externalStatuses.values()].some(status => status.pending))
 const externalErrors = computed(() => showExternalApis.value ? connections.value.filter(entry => externalStatuses.get(entry.id)?.error) : [])
 const selectedChain = ref([])
+const inspectedScenarioStep = ref(null)
+const scenarioPanel = ref(null)
+const scenarioStore = useScenarios(configuration)
+const { scenarios, state: scenarioState, pending: scenarioPending, error: scenarioError } = scenarioStore
+const scenarioBusy = computed(() => scenarioPending.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
 const presets = ref(new Map())
 const activePresetNames = ref([])
 const settingsOpen = ref(false)
@@ -42,7 +50,8 @@ const chain = computed(() => {
   const operation = group?.operations[0]
   return operation ? [{ operation, group: group.name, session: sessionFor(operation) }] : []
 })
-const current = computed(() => chain.value.at(-1))
+const currentIndex = computed(() => inspectedScenarioStep.value === null ? chain.value.length - 1 : Math.min(inspectedScenarioStep.value, chain.value.length - 1))
+const current = computed(() => chain.value[currentIndex.value])
 const requestValues = computed(() => current.value ? valuesFor(current.value.operation) : new Map())
 
 function valuesFor(operation) {
@@ -71,6 +80,9 @@ watch(showExternalApis, visible => {
 watch(externalApis.revision, () => {
   const id = externalApis.changedApiId.value
   for (const [key, session] of sessions) if (session.apiId === id) sessions.delete(key)
+  if (scenarioState.steps.some(step => step.operation.apiId === id)) {
+    scenarioState.steps = []; scenarioState.status = scenarioState.id ? 'saved' : 'idle'; scenarioState.error = ''
+  }
   const index = chain.value.findIndex(step => step.operation.apiId === id)
   if (index >= 0) selectedChain.value = chain.value.slice(0, index)
 })
@@ -180,7 +192,7 @@ const relatedResults = computed(() => {
   for (const [key, session] of sessions) {
     if (session.result) results.set(key, [session.result])
   }
-  for (const { operation, session } of chain.value.slice(0, -1)) {
+  for (const { operation, session } of chain.value.slice(0, currentIndex.value)) {
     if (session.result) {
       results.set(operation.key, [session.result, ...(results.get(operation.key) ?? [])])
     }
@@ -206,8 +218,9 @@ const relatedTargets = computed(() => {
   })
 })
 
-async function showChain(steps) {
+async function showChain(steps, inspectIndex = null) {
   selectedChain.value = steps
+  inspectedScenarioStep.value = inspectIndex
   await nextTick()
   if (workArea.value) workArea.value.scrollTop = 0
   endpointHeading.value?.scrollIntoView({ block: 'nearest' })
@@ -240,20 +253,63 @@ function canSendRelated(operation, choices) {
 async function follow(operation, choices, send) {
   if (send && !canSendRelated(operation, choices)) return
   const session = createSession(operation)
-  for (const choice of choices) choose(session, choice.location, choice)
+  for (const choice of choices) choose(session, choice.location, choice, currentIndex.value)
   const group = operation.tags.includes(current.value.group) ? current.value.group : operation.tags[0]
-  await showChain([...chain.value, { operation, group, session }])
+  await showChain([...chain.value.slice(0, currentIndex.value + 1), { operation, group, session }])
   if (send) await runInContext(operation, session)
 }
 
-function choose(session, location, choice) {
+function choose(session, location, choice, sourceIndex) {
   try {
     applyChoice(session, location, choice)
+    const targetIndex = sourceIndex === undefined ? currentIndex.value : sourceIndex + 1
+    const origin = sourceIndex ?? chain.value.slice(0, targetIndex).findLastIndex(step =>
+      step.operation.key === choice.binding?.operationKey && step.session.result === choice.sourceResult)
+    rememberBinding(session, { ...choice, location }, origin)
     session.error = ''
   } catch (cause) {
     session.error = cause.message
   }
 }
+function scenarioContext() {
+  return { operations: operations.value, links: mappingLinks.value, configuration: configuration.value,
+    createSession, valuesFor }
+}
+function saveScenario(name, id) {
+  try { scenarioStore.save(chain.value, name, id, valuesFor) }
+  catch (cause) { scenarioError.value = cause.message }
+}
+function openScenario(scenario) {
+  const steps = scenarioStore.open(scenario, scenarioContext())
+  if (steps) void showChain(steps, 0)
+}
+async function replayScenario(scenario) {
+  if (scenarioBusy.value) return
+  await scenarioStore.run(scenario, scenarioContext(),
+    (operation, session, values, signal) => run(operation, session, values, { signal }),
+    async (steps, index) => {
+      selectedChain.value = steps
+      inspectedScenarioStep.value = index
+      await nextTick()
+      scenarioPanel.value?.showProgress()
+    })
+}
+function inspectScenario(index) {
+  const byKey = new Map(operations.value.map(operation => [operation.key, operation]))
+  const missing = scenarioState.steps.findIndex(step => !byKey.has(step.operation.key))
+  const visible = missing < 0 ? scenarioState.steps : scenarioState.steps.slice(0, missing)
+  if (!visible[index]) {
+    scenarioError.value = 'This scenario step is unavailable. Enable its API connection before inspecting it.'
+    return
+  }
+  scenarioError.value = ''
+  void showChain(visible.map(step => ({ ...step, operation: byKey.get(step.operation.key) })), index)
+}
+function removeScenario(id) {
+  try { scenarioStore.remove(id) }
+  catch (cause) { scenarioError.value = cause.message }
+}
+
 </script>
 
 <template>
@@ -271,11 +327,11 @@ function choose(session, location, choice) {
         <p v-if="spec?.info?.description" class="muted">{{ spec.info.description }}</p>
       </div>
       <nav v-if="spec" class="view-navigation" aria-label="Workspace views">
-        <button type="button" class="secondary" :aria-pressed="!settingsOpen && !graphView" @click="settingsOpen = false; graphView = ''">API</button>
-        <button type="button" class="secondary" :aria-pressed="graphView === 'entities'" @click="settingsOpen = false; graphView = 'entities'">Entity graph</button>
-        <button type="button" class="secondary" :aria-pressed="graphView === 'endpoints'" @click="settingsOpen = false; graphView = 'endpoints'">Endpoint graph</button>
+        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="!settingsOpen && !graphView" @click="settingsOpen = false; graphView = ''">API</button>
+        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'entities'" @click="settingsOpen = false; graphView = 'entities'">Entity graph</button>
+        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'endpoints'" @click="settingsOpen = false; graphView = 'endpoints'">Endpoint graph</button>
       </nav>
-      <button v-if="spec" type="button" class="secondary settings-toggle" @click="toggleSettings">
+      <button v-if="spec" type="button" class="secondary settings-toggle" :disabled="scenarioPending" @click="toggleSettings">
         {{ settingsOpen ? 'Back to API' : 'Settings' }}
       </button>
     </header>
@@ -311,7 +367,7 @@ function choose(session, location, choice) {
       <EndpointGraph v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <div v-show="!settingsOpen && !graphView" class="layout">
-        <EndpointCatalog
+        <EndpointCatalog :inert="scenarioPending"
           :groups="groups"
           :active-group="current?.group ?? ''"
           :active-operation="current?.operation.key ?? ''"
@@ -320,14 +376,14 @@ function choose(session, location, choice) {
         />
 
         <div ref="workArea" class="work-area">
-          <section class="external-toggle preset-panel" aria-label="External API visibility">
+          <section :inert="scenarioPending" class="external-toggle preset-panel" aria-label="External API visibility">
             <label><input v-model="showExternalApis" type="checkbox" role="switch"> Show external APIs</label>
             <span class="muted" role="status">{{ showExternalApis ? 'Visible' : 'Hidden' }} · {{ connections.length }} configured<template v-if="externalPending"> · Connecting…</template></span>
             <p v-if="!connections.length" class="muted">Add connections in Settings → External APIs.</p>
             <p v-for="entry in externalErrors" :key="entry.id" class="error">{{ entry.name }}: {{ externalStatuses.get(entry.id).error }}</p>
             <p v-if="externalStorageError" class="error">{{ externalStorageError }}</p>
           </section>
-          <fieldset class="preset-panel">
+          <fieldset class="preset-panel" :disabled="scenarioPending">
             <legend>Presets</legend>
             <div v-if="presets.size" class="preset-options">
               <button
@@ -344,16 +400,19 @@ function choose(session, location, choice) {
             <p v-else class="muted">Add presets in Settings.</p>
             <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
           </fieldset>
+          <ScenarioPanel ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :pending="scenarioPending" :busy="scenarioBusy"
+            :chain-length="chain.length" :error="scenarioError" @save="saveScenario" @open="openScenario" @run="replayScenario"
+            @remove="removeScenario" @stop="scenarioStore.stop" @inspect="inspectScenario" />
           <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
-          <article v-if="current" aria-labelledby="endpoint-title">
+          <article v-if="current" :inert="scenarioPending" aria-labelledby="endpoint-title">
             <nav v-if="chain.length > 1" class="breadcrumbs" aria-label="Request chain">
               <ol>
                 <li v-for="(step, index) in chain" :key="index">
                   <span v-if="index" class="separator" aria-hidden="true">›</span>
-                  <span v-if="index === chain.length - 1" aria-current="step">
+                  <span v-if="index === currentIndex" aria-current="step">
                     {{ step.operation.apiId !== 'local' ? step.operation.apiName + ' [' + step.operation.apiId + '] · ' : '' }}{{ step.operation.method }} {{ step.operation.name }}
                   </span>
-                  <button v-else type="button" @click="showChain(chain.slice(0, index + 1))">
+                  <button v-else type="button" @click="inspectedScenarioStep === null ? showChain(chain.slice(0, index + 1)) : showChain(chain, index)">
                     {{ step.operation.apiId !== 'local' ? step.operation.apiName + ' [' + step.operation.apiId + '] · ' : '' }}{{ step.operation.method }} {{ step.operation.name }}
                   </button>
                 </li>
@@ -377,7 +436,8 @@ function choose(session, location, choice) {
               <template #parameter-input="{ parameter, hint }">
                 <ValueInput v-model="current.session.fields[fieldKey(parameter)]"
                   :choices="choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
-                  :required="parameter.required || parameter.in === 'path'" :placeholder="hint" />
+                  :required="parameter.required || parameter.in === 'path'" :placeholder="hint"
+                  @choose="choose(current.session, parameter.in, $event)" />
               </template>
               <template #choices="{ location, parameterName }">
                 <RelatedChoices v-if="location === 'body'"

@@ -44,6 +44,15 @@ opens the matching field and lets you select its mapped object for related
 requests. Search runs in a background worker, with paginated results and no extra
 API calls. See [response search](Necto.UI/README.md#search-an-entire-response).
 
+## Saved request scenarios
+
+Save a request chain from the **Scenarios** panel and run it again with values
+from fresh responses. Selections keep their JSON paths, so a chosen line item's
+new ID flows into the next request. Review and edit steps, inspect run results,
+or stop a running scenario. Scenarios are stored in your browser; current request
+presets and external API connections apply when replaying. See the
+[scenario guide](Necto.UI/README.md#saved-scenarios).
+
 ## External API connections
 
 Configure additional OpenAPI documents and Necto mappings in **Settings → External

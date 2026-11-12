@@ -176,25 +176,31 @@ export function buildRequest(operation, configuration, draft, values = new Map()
   return { url, options }
 }
 
-async function parseResponse(text) {
+async function parseResponse(text, signal) {
+  signal?.throwIfAborted()
   if (text.length < 1000000 || typeof Worker === 'undefined') {
     try { return JSON.parse(text) } catch { return undefined }
   }
   const worker = new Worker(new URL('./json.worker.js', import.meta.url), { type: 'module' })
+  let abort
   try {
     return await new Promise((resolve, reject) => {
+      abort = () => reject(signal.reason)
+      signal?.addEventListener('abort', abort, { once: true })
+      if (signal?.aborted) { abort(); return }
       worker.onmessage = ({ data }) => resolve(data.valid ? data.json : undefined)
       worker.onerror = () => reject(new Error('Could not parse the response in the background.'))
       worker.postMessage(text)
     })
-  } finally { worker.terminate() }
+  } finally { signal?.removeEventListener('abort', abort); worker.terminate() }
 }
 
 export async function sendRequest(request) {
   const response = await fetch(request.url, request.options)
   const contentType = response.headers.get('content-type') ?? ''
   const text = await response.text()
-  const json = text ? await parseResponse(text) : undefined
+  const json = text ? await parseResponse(text, request.options.signal) : undefined
+  request.options.signal?.throwIfAborted()
   return {
     ok: response.ok,
     status: response.status,
