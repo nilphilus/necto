@@ -51,6 +51,52 @@ in about 2.2 seconds, with 886 preview DOM elements on both the first and last
 pages and one API call. The longest observed main-thread task was 307 ms.
 These are a development baseline, not a cross-device performance guarantee.
 
+## Saved scenarios
+
+Build a request chain using **Continue from this response**, then open
+**Scenarios** in the API workspace, enter a name, and choose **Save current
+chain**. Scenarios are stored locally in the browser, scoped to the host OpenAPI
+URL. A scenario can contain up to 100 steps.
+
+Values selected through related requests or response suggestions from an earlier
+step are recorded as response selectors. For example, selecting the second
+invoice line records `$[1]["lineId"]`, rather than the line ID received today.
+Each replay sends fresh requests and reads that position from the new response.
+Array selection is positional: changed ordering can select a different object;
+a missing item or field stops the run. Values taken from unrelated response
+history outside the current chain are saved as literal inputs instead.
+
+Use **Review steps** to inspect operations, API IDs and bindings before running.
+**Open** loads a saved chain without sending requests. Select a step through its
+breadcrumbs or the scenario step list, edit its inputs, then **Update scenario**.
+Other steps and their response bindings are preserved. Changing a bound field
+manually to another value makes it a literal on save. Enter a different scenario
+name to save a separate copy. Response-bound inputs in a newly opened scenario
+remain empty until the scenario runs. Editing a scenario does not automatically
+change its saved definition: save changes before pressing **Run scenario**.
+
+Runs use the current presets and request context, frozen at the beginning of
+the run. Preset-controlled inputs, values recorded as response bindings, and response
+bodies are not copied into scenario storage. Manually entered request inputs, including
+JSON bodies, are stored as supplied; request presets are suitable for reusable
+authentication values. External API preset opt-in rules still apply.
+
+Before any request is sent, Necto checks operation availability, configured
+bindings, required inputs and JSON body syntax. Actual response values are
+resolved when the source step finishes. A preset or override replacing a mapped input is reported
+as a conflict. External API steps require a visible, loaded connection. Invalid
+or removed mappings stop preflight; no requests are sent in that case. API-side
+validation and business rules still apply when the request executes.
+
+Requests run sequentially. The progress panel shows each step, HTTP status and
+elapsed time; HTTP errors, network failures and unavailable response values stop
+later steps. Successful and failed responses remain available for inspection in
+the current workspace, but are not persisted with the scenario. **Stop scenario**
+aborts the active browser request/background parser and prevents later steps;
+it cannot undo work already received by the API. Running a scenario explicitly
+sends all its configured methods, including POST/PUT/PATCH/DELETE. Nothing runs
+automatically when a scenario is saved, opened or restored after reload.
+
 ## Entity graph
 
 Choose **Entity graph** in the workspace header to explore models from OpenAPI.
