@@ -103,6 +103,8 @@ it cannot undo work already received by the API. Running a scenario explicitly
 sends all its configured methods, including POST/PUT/PATCH/DELETE. Nothing runs
 automatically when a scenario is saved, opened or restored after reload.
 
+Scenario execution opens in **Steps**: a compact status list and the request/response for one selected step. It follows the running step and ends on the completed, failed or cancelled step. Selecting a step pauses following; **Follow execution** resumes it during a run. Mapped input values link back to their source step. **Open request** inspects the selected step in the API workspace without sending it. **Compare all** retains the horizontal, color-linked trace as an optional view. On phones, step details and request/response sections stack to fit the available width.
+
 ## Entity graph
 
 Choose **Entity graph** in the workspace header to explore models from OpenAPI.
