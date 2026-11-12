@@ -59,3 +59,17 @@ test('inline objects, schema parameters, escaped names and empty catalogs', () =
   const positioned = layoutGraph(result.nodes)
   assert.equal(new Set(positioned.map(node => `${node.x}:${node.y}`)).size, 2)
 })
+
+test('nested Preview mapping paths connect their containing model to consumers', () => {
+  const spec = { components: { schemas: {
+    Envelope: { properties: { lines: { type: 'array', items: ref('Line') } } },
+    Line: { properties: { lineId: { type: 'integer' } } },
+    Detail: { properties: { lineId: { type: 'integer' } } },
+  } } }
+  const result = buildEntityGraph(spec, [operation('List', ref('Envelope')),
+    operation('Get', ref('Detail'), { parameters: [{ name: 'lineId', in: 'path' }] })], [{
+    source: { operationId: 'List', property: 'lineId', eachItem: false, objectPath: ['lines', null] },
+    target: { operationId: 'Get', location: 'path', name: 'lineId' },
+  }])
+  assert.ok(result.edges.some(edge => edge.kind === 'mapping' && edge.from === 'schema:Line' && edge.to === 'schema:Detail'))
+})

@@ -25,6 +25,20 @@ sample provides these links through explicit endpoint mappings.
 The [HTTP examples](SampleApi.FastEndpoints/SampleApi.FastEndpoints.http)
 show the same flow with sample IDs.
 
+Both samples contain 12 invoices and enough line items to try searchable value
+suggestions. For example, in SampleApi run `GET /invoices`, type an invoice ID
+in the related **Invoice lines** field, or select an invoice in Preview to fill
+it automatically. Invoice 42 has 12 lines; the FastEndpoints equivalent is
+invoice 501.
+
+## Large payload experiment
+
+The `feat/paginated-large-response-preview` branch adds local Preview pagination.
+Run SampleApi and use `GET /invoices/large-payload?count=100000&noteSize=1024`
+for a single response above 100 MB. Preview pages contain 25 entries and retain
+absolute indices for selecting objects; changing pages does not call the API.
+See the [UI guide](Necto.UI/README.md#large-responses) for limits and measurements.
+
 ## Endpoint mappings
 
 Necto generates suggestions for reusing response values in other API requests. The
@@ -53,7 +67,17 @@ dedicated type. The UI should resolve the operation IDs and fields against its
 active OpenAPI document before offering the suggestions.
 
 The generator currently handles Minimal API registrations with a constant
-`.WithName(...)` in the same fluent chain. It reads top-level JSON properties
+`.WithName(...)` in the same fluent chain. It reads JSON properties on response objects and nested objects/arrays
 under the default ASP.NET Core web naming policy, honors `JsonPropertyName`, and
-supports explicit `[FromBody]` models. Use `SampleApi/SampleApi.http` to try all
+supports explicit `[FromBody]` models. Recursive response types stop at the first
+repeated type on a branch; traversal is limited to 16 path segments. Custom JSON
+converters are opaque to the generator.
+
+For nested response fields, `source.objectPath` describes the containing object:
+string segments are exact JSON property names and `null` segments select each
+array item. For example, `{"objectPath":["invoice-lines",null],"property":"lineId"}`
+selects line IDs inside an envelope. When `objectPath` is present it takes
+precedence over `eachItem`; when absent, the original root selectors still apply.
+The UI uses mappings resolved against OpenAPI to mark selectable objects, without
+adding metadata to the API's business responses or requiring another attribute. Use `SampleApi/SampleApi.http` to try all
 three match rules.
