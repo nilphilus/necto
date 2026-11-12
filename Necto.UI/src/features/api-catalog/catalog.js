@@ -51,6 +51,7 @@ export function readOperations(spec, api = { id: 'local' }) {
           .map(tag => api.id === 'local' ? tag : `${api.name} [${api.id}] · ${tag}`),
         parameters: [...parameters.values()],
         requestBody: resolve(operation.requestBody),
+        responses: operation.responses ?? {},
         server: [operation.servers, item.servers, spec.servers].find(servers => servers?.length)?.[0],
         resolve,
       }
