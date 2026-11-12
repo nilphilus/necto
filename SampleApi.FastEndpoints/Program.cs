@@ -8,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddFastEndpoints().OpenApiDocument(options =>
 {
     options.Title = "SampleApi.FastEndpoints";
+    options.ShortSchemaNames = true;
     options.AutoTagPathSegmentIndex = 0;
 });
 

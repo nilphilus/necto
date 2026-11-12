@@ -21,7 +21,8 @@ function readEntityGraph(spec, operations) {
       ['allOf', 'anyOf', 'oneOf'].some(key => schema[key]?.some(child => objectSchema(child, seen))))
   }
   function addNode(id, name, schema) {
-    if (!nodes.has(id)) nodes.set(id, { id, name, schema, endpoints: new Map() })
+    const title = typeof schema.title === 'string' ? schema.title.trim() : ''
+    if (!nodes.has(id)) nodes.set(id, { id, name: title || name, schema, endpoints: new Map() })
     return id
   }
   for (const [name, schema] of Object.entries(schemas)) {
