@@ -42,6 +42,7 @@ const scenarioBusy = computed(() => scenarioPending.value || mappingPending.valu
 const presets = ref(new Map())
 const presetColors = ref(new Map())
 const presetsCollapsed = ref(false)
+const mobilePresetsOpen = ref(false)
 const defaultPresetColor = '#287557'
 const activePresetNames = ref([])
 const settingsOpen = ref(false)
@@ -604,7 +605,7 @@ function removeScenario(id) {
         :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"
         @remove="removeScenario" @stop="scenarioStore.stop" @inspect="inspectScenario" />
-      <div v-show="!graphView" class="layout" :class="{ 'presets-collapsed': presetsCollapsed }">
+      <div v-show="!graphView" class="layout" :class="{ 'presets-collapsed': presetsCollapsed, 'has-presets': visiblePresetNames.length }">
         <EndpointCatalog :inert="scenarioPending"
           :groups="groups"
           :active-group="current?.group ?? ''"
@@ -613,9 +614,13 @@ function removeScenario(id) {
           @select-operation="selectOperation"
         />
 
-        <aside class="presets-column" aria-label="Presets" :inert="scenarioPending">
+        <button v-if="visiblePresetNames.length" type="button" class="secondary mobile-presets-toggle" :disabled="scenarioPending"
+          :aria-expanded="mobilePresetsOpen" aria-controls="request-presets" @click="mobilePresetsOpen = !mobilePresetsOpen">
+          Presets ({{ visiblePresetNames.length }}) <span aria-hidden="true">{{ mobilePresetsOpen ? '▴' : '▾' }}</span>
+        </button>
+        <aside v-if="visiblePresetNames.length" class="presets-column" :class="{ 'mobile-open': mobilePresetsOpen }" aria-label="Presets" :inert="scenarioPending">
           <div class="presets-header">
-            <h2 v-if="!presetsCollapsed">Presets</h2>
+            <h2>Presets</h2>
             <button type="button" class="secondary presets-toggle"
               :aria-label="presetsCollapsed ? 'Expand presets' : 'Collapse presets'"
               :title="presetsCollapsed ? 'Expand presets' : 'Collapse presets'"
@@ -638,9 +643,8 @@ function removeScenario(id) {
               @click="togglePreset(name, !activePresetNames.includes(name))"
             >
               <span class="preset-dot" aria-hidden="true"></span>
-              <span v-if="!presetsCollapsed">{{ name }}</span>
+              <span class="preset-name">{{ name }}</span>
             </button>
-            <p v-if="!presetsCollapsed && !visiblePresetNames.length" class="muted">No matching presets.</p>
           </div>
         </aside>
 
@@ -796,8 +800,11 @@ body { margin: 0; background: #eef2ee; }
   display: grid;
   flex: 1;
   min-height: 0;
-  grid-template-columns: clamp(14rem, 23vw, 18rem) var(--presets-width) minmax(0, 1fr);
+  grid-template-columns: clamp(14rem, 23vw, 18rem) minmax(0, 1fr);
 }
+.layout.has-presets { grid-template-columns: clamp(14rem, 23vw, 18rem) var(--presets-width) minmax(0, 1fr); }
+.mobile-presets-toggle { display: none; }
+.layout.presets-collapsed .presets-header h2, .layout.presets-collapsed .preset-name { display: none; }
 .layout.presets-collapsed { --presets-width: 3rem; }
 .presets-column { min-width: 0; overflow: auto; padding: .65rem .4rem; border-right: 1px solid var(--line); }
 .presets-header { display: flex; align-items: center; justify-content: space-between; gap: .25rem; margin-bottom: .5rem; }
@@ -907,7 +914,14 @@ input:not([type="checkbox"]), select, textarea {
 @media (max-width: 760px) {
   #app { --app-gutter: .75rem; }
   .app { height: auto; min-height: calc(100dvh - 2 * var(--app-gutter)); }
-  .layout { --presets-width: 7.5rem; grid-template-columns: var(--presets-width) minmax(0, 1fr); }
+  .layout, .layout.has-presets { grid-template-columns: minmax(0, 1fr); }
+  .mobile-presets-toggle { display: flex; justify-content: space-between; align-items: center; margin: .5rem 1rem; }
+  .presets-column { display: none; border-right: 0; border-bottom: 1px solid var(--line); padding: .5rem 1rem; }
+  .presets-column.mobile-open { display: block; }
+  .presets-column .presets-header { display: none; }
+  .presets-column .presets-list { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .layout.presets-collapsed .preset-name { display: inline; }
+  .layout.presets-collapsed .preset-toggle { justify-content: start; }
   .layout > .catalog { grid-column: 1 / -1; }
   .work-area { overflow: visible; padding: 1rem; }
   .settings { overflow: auto; }
