@@ -35,6 +35,7 @@ const choices = computed(() => fields.value.filter(field => drafts[field.key] !=
   }
   return { location: field.location, name: field.name, value, binding: match?.binding, sourceResult: match?.sourceResult }
 }))
+const quickSend = computed(() => ['GET', 'HEAD'].includes(props.target.operation.method) && !props.target.operation.requestBody)
 const ready = computed(() => props.canSend(props.target.operation, choices.value))
 </script>
 
@@ -43,19 +44,21 @@ const ready = computed(() => props.canSend(props.target.operation, choices.value
     <div class="destination-title">
       <span class="method" :data-method="target.operation.method">{{ target.operation.method }}</span>
       <strong>{{ target.operation.name }}</strong>
+      <button type="button" class="secondary open-request" :aria-label="'Open request ' + target.operation.name"
+        @click="emit('follow', target.operation, choices, false)">Open request</button>
       <small v-if="target.operation.apiId && target.operation.apiId !== 'local'">{{ target.operation.apiName }} [{{ target.operation.apiId }}]</small>
     </div>
     <ul v-if="target.presetInputs?.length" class="preset-inputs" aria-label="Preset inputs for this request">
       <li v-for="input in target.presetInputs" :key="input.key"><code>{{ input.label }}<template v-if="input.value !== undefined"> = {{ input.value }}</template></code> · <button type="button" class="preset-link" :aria-label="'Edit preset ' + input.preset" @click="emit('edit-preset', input.preset)">{{ input.preset }}</button></li>
     </ul>
-    <form @submit.prevent="ready && emit('follow', target.operation, choices, true)">
-      <button v-if="!fields.length" type="submit" class="secondary send" :disabled="!ready"
+    <form @submit.prevent="(!quickSend || ready) && emit('follow', target.operation, choices, quickSend)">
+      <button v-if="!fields.length && quickSend" type="submit" class="secondary send" :disabled="!ready"
         :aria-label="'Send ' + target.operation.name">Send ↗</button>
       <div v-if="fields.length" class="fields">
         <div v-for="(field, index) in fields" :key="field.key" class="field">
           <ValueInput v-model="drafts[field.key]" :choices="field.choices" dropdown placeholder="Type or choose a value…">
             <template #label>{{ field.name ?? 'body' }} <small>{{ field.location }}</small></template>
-            <template v-if="index === 0" #trailing>
+            <template v-if="index === 0 && quickSend" #trailing>
               <button type="submit" class="send send-joined" :disabled="!ready"
                 :aria-label="'Send ' + target.operation.name">Send ↗</button>
             </template>
@@ -75,7 +78,8 @@ const ready = computed(() => props.canSend(props.target.operation, choices.value
 .preset-link { color: var(--accent); text-decoration: underline; padding: .1rem .2rem; }
 li { padding: .65rem 0; }
 li + li { border-top: 1px solid var(--line); }
-.destination-title { display: flex; align-items: center; gap: .4rem; font-size: .87rem; }
+.destination-title { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; font-size: .87rem; }
+.open-request { margin-left: auto; font-size: .75rem; }
 form { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin-top: .45rem; }
 .fields { display: flex; flex: 1 1 12rem; flex-wrap: wrap; align-items: end; gap: .5rem; min-width: 0; }
 .field { min-width: min(12rem, 100%); max-width: 100%; font-size: .8rem; }

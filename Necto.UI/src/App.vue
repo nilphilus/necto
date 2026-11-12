@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import AgentPanel from './features/agents/AgentPanel.vue'
 import NectoSkeleton from './NectoSkeleton.vue'
 import { useCatalog } from './features/api-catalog/catalog.js'
 import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
@@ -42,6 +43,7 @@ const scenarioBusy = computed(() => scenarioPending.value || mappingPending.valu
 const presets = ref(new Map())
 const presetColors = ref(new Map())
 const presetsCollapsed = ref(false)
+const mobilePresetsOpen = ref(false)
 const defaultPresetColor = '#287557'
 const activePresetNames = ref([])
 const settingsOpen = ref(false)
@@ -544,6 +546,7 @@ function removeScenario(id) {
     <header class="hero">
       <nav v-if="spec" class="view-navigation" aria-label="Workspace views">
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="!graphView" @click="navigateView('')">API</button>
+        <button v-if="configuration?.agentUrl" type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'agent'" @click="navigateView('agent')">Bring your agent</button>
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'scenarios'" @click="navigateView('scenarios')">Scenarios</button>
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'entities'" @click="navigateView('entities')">Entity graph</button>
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'endpoints'" @click="navigateView('endpoints')">Endpoint graph</button>
@@ -605,6 +608,8 @@ function removeScenario(id) {
           </div>
         </aside>
       </Transition>
+      <p v-if="graphView === 'agent' && !configuration?.agentUrl" class="app-message">Bring your agent is not enabled on this server.</p>
+      <AgentPanel v-if="configuration?.agentUrl" v-show="graphView === 'agent'" :spec="spec" :configuration="configuration" :operations="operations" :mappings="endpointMappings" :apis="externalApis.contexts.value" :busy="mappingPending || externalPending" />
       <EntityGraph v-if="graphView === 'entities'" :spec="spec" :apis="externalApis.contexts.value" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <EndpointGraph v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
@@ -622,7 +627,7 @@ function removeScenario(id) {
         <small v-if="current?.operation.apiId && current.operation.apiId !== 'local' && !current.operation.usePresets">Not applied to this external API.</small>
         <small v-else-if="!visiblePresetNames.some(name => activePresetNames.includes(name))">None apply to this request; related requests may still use them.</small>
       </section>
-      <div v-show="!graphView" class="layout" :class="{ 'presets-collapsed': presetsCollapsed }">
+      <div v-show="!graphView" class="layout" :class="{ 'presets-collapsed': presetsCollapsed, 'has-presets': visiblePresetNames.length }">
         <EndpointCatalog :inert="scenarioPending"
           :groups="groups"
           :active-group="current?.group ?? ''"
@@ -631,9 +636,13 @@ function removeScenario(id) {
           @select-operation="selectOperation"
         />
 
-        <aside class="presets-column" aria-label="Presets" :inert="scenarioPending">
+        <button v-if="visiblePresetNames.length" type="button" class="secondary mobile-presets-toggle" :disabled="scenarioPending"
+          :aria-expanded="mobilePresetsOpen" aria-controls="request-presets" @click="mobilePresetsOpen = !mobilePresetsOpen">
+          Presets ({{ visiblePresetNames.length }}) <span aria-hidden="true">{{ mobilePresetsOpen ? '▴' : '▾' }}</span>
+        </button>
+        <aside v-if="visiblePresetNames.length" class="presets-column" :class="{ 'mobile-open': mobilePresetsOpen }" aria-label="Presets" :inert="scenarioPending">
           <div class="presets-header">
-            <h2 v-if="!presetsCollapsed">Presets</h2>
+            <h2>Presets</h2>
             <button type="button" class="secondary presets-toggle"
               :aria-label="presetsCollapsed ? 'Expand presets' : 'Collapse presets'"
               :title="presetsCollapsed ? 'Expand presets' : 'Collapse presets'"
@@ -656,9 +665,8 @@ function removeScenario(id) {
               @click="togglePreset(name, !activePresetNames.includes(name))"
             >
               <span class="preset-dot" aria-hidden="true"></span>
-              <span v-if="!presetsCollapsed">{{ name }}</span>
+              <span class="preset-name">{{ name }}</span>
             </button>
-            <p v-if="!presetsCollapsed && !visiblePresetNames.length" class="muted">No matching presets.</p>
           </div>
         </aside>
 
@@ -703,7 +711,7 @@ function removeScenario(id) {
                 </div>
               </form>
             </dialog>
-            <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)" @edit-preset="editActivePreset">
+            <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" @edit-preset="editActivePreset">
               <template #request-actions>
                 <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">
                   Store as sample
@@ -819,8 +827,11 @@ body { margin: 0; background: #eef2ee; }
   display: grid;
   flex: 1;
   min-height: 0;
-  grid-template-columns: clamp(14rem, 23vw, 18rem) var(--presets-width) minmax(0, 1fr);
+  grid-template-columns: clamp(14rem, 23vw, 18rem) minmax(0, 1fr);
 }
+.layout.has-presets { grid-template-columns: clamp(14rem, 23vw, 18rem) var(--presets-width) minmax(0, 1fr); }
+.mobile-presets-toggle { display: none; }
+.layout.presets-collapsed .presets-header h2, .layout.presets-collapsed .preset-name { display: none; }
 .layout.presets-collapsed { --presets-width: 3rem; }
 .presets-column { min-width: 0; overflow: auto; padding: .65rem .4rem; border-right: 1px solid var(--line); }
 .presets-header { display: flex; align-items: center; justify-content: space-between; gap: .25rem; margin-bottom: .5rem; }
@@ -930,7 +941,14 @@ input:not([type="checkbox"]), select, textarea {
 @media (max-width: 760px) {
   #app { --app-gutter: .75rem; }
   .app { height: auto; min-height: calc(100dvh - 2 * var(--app-gutter)); }
-  .layout { --presets-width: 7.5rem; grid-template-columns: var(--presets-width) minmax(0, 1fr); }
+  .layout, .layout.has-presets { grid-template-columns: minmax(0, 1fr); }
+  .mobile-presets-toggle { display: flex; justify-content: space-between; align-items: center; margin: .5rem 1rem; }
+  .presets-column { display: none; border-right: 0; border-bottom: 1px solid var(--line); padding: .5rem 1rem; }
+  .presets-column.mobile-open { display: block; }
+  .presets-column .presets-header { display: none; }
+  .presets-column .presets-list { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .layout.presets-collapsed .preset-name { display: inline; }
+  .layout.presets-collapsed .preset-toggle { justify-content: start; }
   .layout > .catalog { grid-column: 1 / -1; }
   .work-area { overflow: visible; padding: 1rem; }
   .settings { overflow: auto; }

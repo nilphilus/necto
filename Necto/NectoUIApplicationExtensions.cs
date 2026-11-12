@@ -15,18 +15,22 @@ public static class NectoUIApplicationExtensions
     /// <param name="app">The application serving Necto UI.</param>
     /// <param name="routePrefix">The UI path, relative to the application's path base.</param>
     /// <param name="openApiPath">The OpenAPI JSON path, relative to the application's path base.</param>
+    /// <param name="agentPath">Optional path registered using MapNectoAgent.</param>
     /// <param name="endpointMappingsPath">The optional endpoint mappings JSON path.</param>
     public static WebApplication UseNectoUI(
         this WebApplication app,
         string routePrefix = "/necto",
         string openApiPath = "/openapi/v1.json",
-        string? endpointMappingsPath = null)
+        string? endpointMappingsPath = null,
+        string? agentPath = null)
     {
         ArgumentNullException.ThrowIfNull(app);
         ValidatePath(routePrefix, nameof(routePrefix));
         ValidatePath(openApiPath, nameof(openApiPath));
         if (endpointMappingsPath is not null)
             ValidatePath(endpointMappingsPath, nameof(endpointMappingsPath));
+
+        if (agentPath is not null) ValidatePath(agentPath, nameof(agentPath));
 
         var uiPath = routePrefix.TrimEnd('/');
         if (uiPath.Length == 0)
@@ -49,7 +53,7 @@ public static class NectoUIApplicationExtensions
         });
 
         foreach (var route in new[] { "/api", "/api/endpoint/{operation}", "/scenarios",
-            "/scenarios/{id}/steps/{step:int}", "/entities", "/endpoints" })
+            "/scenarios/{id}/steps/{step:int}", "/entities", "/endpoints", "/agent" })
         {
             ui.MapMethods(route, ReadMethods, (HttpContext context) => ServeIndex(context, uiPath));
         }
@@ -63,6 +67,8 @@ public static class NectoUIApplicationExtensions
             };
             if (endpointMappingsPath is not null)
                 configuration["endpointMappingsUrl"] = context.Request.PathBase.Add(endpointMappingsPath).ToUriComponent();
+            if (agentPath is not null)
+                configuration["agentUrl"] = context.Request.PathBase.Add(agentPath).ToUriComponent();
             return Results.Json(configuration, JsonSerializerOptions.Web);
         });
         ui.MapMethods("/assets/{assetName}", ReadMethods, (string assetName) => ServeAsset("assets/" + assetName));
