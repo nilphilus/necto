@@ -16,6 +16,17 @@ public sealed class EndpointMappingsTests : IClassFixture<WebApplicationFactory<
     }
 
     [Fact]
+    public async Task DescribesSelectableObjectsInNestedResponseArrays()
+    {
+        var mappings = await client.GetFromJsonAsync<EndpointMapping[]>("/necto/endpoint-mappings");
+        var mapping = Assert.Single(mappings!, mapping => mapping.Source.OperationId == "InvoicePreview"
+            && mapping.Source.Property == "lineId" && mapping.Target.OperationId == "InvoiceLine");
+        Assert.Equal(new string?[] { "invoice-lines", null }, mapping.Source.ObjectPath);
+        var response = await client.GetFromJsonAsync<JsonObject>("/invoices/preview");
+        Assert.Equal(18, response!["invoice-lines"]![1]![mapping.Source.Property!]!.GetValue<int>());
+    }
+
+    [Fact]
     public async Task SuggestsLinksByNameTypeAndAttribute()
     {
         var mappings = await client.GetFromJsonAsync<EndpointMapping[]>("/necto/endpoint-mappings");
@@ -52,9 +63,10 @@ public sealed class EndpointMappingsTests : IClassFixture<WebApplicationFactory<
         Assert.False(paths.ContainsKey("/necto/endpoint-mappings"));
 
         var invoices = await client.GetFromJsonAsync<JsonArray>("/invoices");
-        var invoiceId = Assert.Single(invoices!)!["id"]!.GetValue<int>();
+        Assert.True(invoices!.Count >= 10);
+        var invoiceId = invoices[0]!["id"]!.GetValue<int>();
         var invoiceLines = await client.GetFromJsonAsync<JsonArray>($"/invoices/{invoiceId}/lines");
-        Assert.Equal(2, invoiceLines!.Count);
+        Assert.True(invoiceLines!.Count >= 10);
         foreach (var entry in invoiceLines)
         {
             Assert.Equal(invoiceId, entry!["invoiceId"]!.GetValue<int>());

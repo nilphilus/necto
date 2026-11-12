@@ -192,6 +192,7 @@ export async function sendRequest(request) {
     status: response.status,
     statusText: response.statusText,
     contentType,
+    rawText: text,
     text: json === undefined ? text : formatJson(json),
     json,
   }

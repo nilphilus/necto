@@ -94,14 +94,35 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
             yield break;
         }
 
+        foreach (var field in ReadObjectFields(type, eachItem ? new string?[] { null } : Array.Empty<string?>(),
+                     new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default), eachItem))
+            yield return field;
+    }
+
+    private static IEnumerable<Field> ReadObjectFields(ITypeSymbol type, string?[] path,
+        HashSet<ITypeSymbol> ancestors, bool eachItem)
+    {
+        // Recursive DTOs cannot be expanded into a finite set of wire paths.
+        if (path.Length > 16 || !ancestors.Add(type))
+            yield break;
         foreach (var property in JsonProperties(type))
         {
             var name = property.Name.Equals("Id", StringComparison.OrdinalIgnoreCase)
-                ? type.Name + "Id"
-                : property.Name;
-            yield return new Field(NonNullable(property.Type), JsonName(property), IdentifierName(name),
-                ValueKey(property), "", eachItem);
+                ? type.Name + "Id" : property.Name;
+            var propertyType = NonNullable(property.Type);
+            yield return new Field(propertyType, JsonName(property), IdentifierName(name),
+                ValueKey(property), "", eachItem, path.Length > (eachItem ? 1 : 0) ? path : null);
+            if (IsTypedId(propertyType))
+                continue;
+            var item = propertyType is IArrayTypeSymbol { Rank: 1 } array
+                ? array.ElementType : EnumerableItem(propertyType);
+            var childPath = path.Concat(new string?[] { JsonName(property) });
+            if (item is not null)
+                childPath = childPath.Concat(new string?[] { null });
+            foreach (var field in ReadObjectFields(NonNullable(item ?? propertyType), childPath.ToArray(), ancestors, eachItem))
+                yield return field;
         }
+        ancestors.Remove(type);
     }
 
     private static IEnumerable<Field> ReadRequest(IParameterSymbol parameter)
@@ -278,7 +299,9 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
             if (producer == consumer || Match(source, target) is not { } match)
                 continue;
             var suggestion = IsScalar(source.Type) ? source.ConventionName ?? target.ConventionName : null;
-            code.AppendLine($"        new(new({Literal(producer.Id)}, {(source.EachItem ? "true" : "false")}, {Literal(source.WireName)}), "
+            var objectPath = source.ObjectPath is null ? "" : " { ObjectPath = new string?[] { "
+                + string.Join(", ", source.ObjectPath.Select(Literal)) + " } }";
+            code.AppendLine($"        new(new ResponseValue({Literal(producer.Id)}, {(source.EachItem ? "true" : "false")}, {Literal(source.WireName)}){objectPath}, "
                 + $"new({Literal(consumer.Id)}, {Literal(target.Location)}, {Literal(target.WireName)}), {Literal(match)}, {Literal(suggestion)}),");
         }
         code.AppendLine("""
@@ -297,5 +320,5 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
 
     private sealed record Endpoint(string Id, Field[] Response, Field[] Request);
     private sealed record Field(
-        ITypeSymbol Type, string? WireName, string? ConventionName, string? Key, string Location, bool EachItem = false);
+        ITypeSymbol Type, string? WireName, string? ConventionName, string? Key, string Location, bool EachItem = false, string?[]? ObjectPath = null);
 }
