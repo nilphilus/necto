@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, watchPostEffect } from 'vue'
 import ResponsePreview from './ResponsePreview.vue'
 import { applyBodyPresets, contextKey, fieldKey, jsonContent, supportedParameters } from './request.js'
 
@@ -21,7 +21,39 @@ const displayedBody = computed({
 })
 const unsupported = computed(() => props.operation.requestBody && !content.value)
 const form = ref(null)
+const bodyEditor = ref(null)
 const responsePane = ref(null)
+
+watchPostEffect(onCleanup => {
+  const editor = bodyEditor.value
+  if (!editor) return
+
+  const requestPane = form.value
+  const workArea = requestPane.closest('.work-area')
+  const endpoint = requestPane.closest('article')
+
+  function limitBodyHeight() {
+    const bounds = workArea?.getBoundingClientRect()
+    const top = Math.max(0, bounds?.top ?? 0)
+    const bottom = Math.min(window.innerHeight, bounds?.bottom ?? window.innerHeight)
+    const editorTop = editor.getBoundingClientRect().top
+    // On a long form, size the editor for when the user scrolls it into view.
+    const available = bottom - Math.max(top, editorTop)
+    const space = available >= 96 ? available : bottom - top
+    editor.style.setProperty('--body-height-limit', `${Math.max(0, space - 16)}px`)
+  }
+
+  limitBodyHeight()
+  const observer = new ResizeObserver(limitBodyHeight)
+  observer.observe(requestPane)
+  if (workArea) observer.observe(workArea)
+  if (endpoint) observer.observe(endpoint)
+  window.addEventListener('resize', limitBodyHeight)
+  onCleanup(() => {
+    observer.disconnect()
+    window.removeEventListener('resize', limitBodyHeight)
+  })
+})
 
 watch([() => props.session, () => props.session.result], ([session, result], [previousSession]) => {
   if (session !== previousSession || !result) return
@@ -94,8 +126,9 @@ function parameterHint(parameter) {
           <label class="field-label">
             <span>Request body <small>{{ content[0] }}</small></span>
             <textarea
+              ref="bodyEditor"
               v-model="displayedBody"
-              rows="7"
+              rows="3"
               spellcheck="false"
               :required="operation.requestBody.required && !effectiveBody"
               @focus="editingBody = true"
@@ -171,7 +204,15 @@ function parameterHint(parameter) {
 .field-label span { font-weight: 650; font-size: .88rem; }
 .field-label small { margin-left: .4rem; color: var(--muted); font-weight: 400; }
 .field-label input, .field-label textarea { width: 100%; }
-.field-label textarea { font-family: ui-monospace, Consolas, monospace; font-size: .875rem; resize: vertical; }
+.field-label textarea {
+  field-sizing: content;
+  min-height: min(4.5rem, var(--body-height-limit, 70dvh));
+  max-height: var(--body-height-limit, 70dvh);
+  overflow: auto;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: .875rem;
+  resize: vertical;
+}
 .response-meta { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; color: var(--muted); font-size: .75rem; }
 .status { padding: .22rem .4rem; border-radius: .35rem; background: #ddf3e8; color: #125f41; }
 .status.failed { background: #ffe3e2; color: #8f2225; }
