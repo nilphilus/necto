@@ -1,10 +1,37 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildEntityGraph, layoutGraph } from './graph.js'
+import { buildEntityGraph, groupConnections, layoutGraph } from './graph.js'
 const ref = name => ({ $ref: '#/components/schemas/' + name })
 const response = schema => ({ 200: { content: { 'application/json': { schema } } } })
 const operation = (id, schema, extra = {}) => ({ id, key: `GET /${id}`, path: `/${id}`, name: id,
   method: 'GET', parameters: [], resolve: x => x, responses: response(schema), ...extra })
+
+test('layout keeps connected nodes in adjacent layers and honors a focus root', () => {
+  const nodes = ['leaf', 'isolated', 'hub', 'middle', 'branch'].map(id => ({ id }))
+  const edges = [
+    { from: 'hub', to: 'middle' },
+    { from: 'middle', to: 'leaf' },
+    { from: 'branch', to: 'hub' },
+  ]
+  const positions = new Map(layoutGraph(nodes, edges, 'hub').map(node => [node.id, node]))
+  assert.ok(positions.get('hub').x < positions.get('middle').x)
+  assert.equal(positions.get('branch').x, positions.get('middle').x)
+  assert.ok(positions.get('leaf').x > positions.get('middle').x)
+  assert.ok(positions.get('isolated').y > Math.max(...nodes.filter(node => node.id !== 'isolated').map(node => positions.get(node.id).y)))
+})
+
+test('parallel links share a path per kind while keeping both directions and labels', () => {
+  const edges = [
+    { from: 'B', to: 'A', kind: 'schema', label: 'parent' },
+    { from: 'A', to: 'B', kind: 'schema', label: 'child' },
+    { from: 'A', to: 'B', kind: 'mapping', label: 'id' },
+  ]
+  const [schema, mapping] = groupConnections(edges)
+  assert.deepEqual(schema.edges, edges.slice(0, 2))
+  assert.ok(schema.forward && schema.reverse)
+  assert.deepEqual(mapping.edges, edges.slice(2))
+  assert.ok(mapping.forward && !mapping.reverse)
+})
 
 test('schema references are direct and endpoints include nested entities', () => {
   const spec = { components: { schemas: {
