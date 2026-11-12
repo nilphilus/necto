@@ -52,7 +52,7 @@ const ready = computed(() => props.canSend(props.target.operation, choices.value
         <div v-for="(field, index) in fields" :key="field.key" class="field">
           <ValueInput v-model="drafts[field.key]" :choices="field.choices" dropdown placeholder="Type or choose a value…">
             <template #label>{{ field.name ?? 'body' }} <small>{{ field.location }}</small></template>
-            <template v-if="index === 0" #leading>
+            <template v-if="index === 0" #trailing>
               <button type="submit" class="send send-joined" :disabled="!ready"
                 :aria-label="'Send ' + target.operation.name">Send ↗</button>
             </template>
@@ -76,6 +76,6 @@ form { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin-top:
 .field:first-child { min-width: min(16rem, 100%); }
 small { color: var(--muted); }
 .send { padding: .5rem .65rem; color: var(--accent); font-size: .8rem; white-space: nowrap; }
-.send-joined { border-inline-end: 1px solid var(--line); border-radius: .45rem 0 0 .45rem; }
+.send-joined { border-inline-start: 1px solid var(--line); border-radius: 0 .45rem .45rem 0; }
 .suggestion-note { flex-basis: 100%; }
 </style>

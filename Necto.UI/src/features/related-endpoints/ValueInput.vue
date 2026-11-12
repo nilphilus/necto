@@ -71,7 +71,6 @@ async function navigate(event) {
   <div v-if="dropdown" class="dropdown">
     <label :for="id"><slot name="label" /></label>
     <div class="control">
-      <slot name="leading" />
       <div class="picker">
         <span class="search-icon" aria-hidden="true"></span>
         <span v-for="value in options" :key="value" class="measure" aria-hidden="true">{{ value }}</span>
@@ -92,6 +91,7 @@ async function navigate(event) {
           <p v-if="!matches.length" role="status">No matching suggestions</p>
         </div>
       </div>
+      <slot name="trailing" />
     </div>
   </div>
   <template v-else>
@@ -131,6 +131,7 @@ async function navigate(event) {
   transform-origin: left;
 }
 .toggle { position: absolute; inset: 1px 1px 1px auto; width: 1.8rem; color: var(--accent); }
+.toggle[aria-expanded="true"] span { display: inline-block; transform: rotate(180deg); }
 .popup {
   position: absolute;
   z-index: 2;
