@@ -444,11 +444,6 @@ onMounted(() => {
 })
 onUnmounted(() => window.removeEventListener('popstate', restoreRoute))
 
-function selectGroup(name) {
-  const operation = groups.value.find(group => group.name === name)?.operations[0]
-  if (operation) selectOperation(operation, name)
-}
-
 function selectOperation(operation, group) {
   editingScenarioId.value = ''
   scenarioName.value = ''
@@ -632,7 +627,6 @@ function removeScenario(id) {
           :groups="groups"
           :active-group="current?.group ?? ''"
           :active-operation="current?.operation.key ?? ''"
-          @select-group="selectGroup"
           @select-operation="selectOperation"
         />
 
