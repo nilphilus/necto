@@ -11,37 +11,38 @@ export function matchesPath(template, path) {
 
 export const RELATED_VALUE_LIMIT = 200
 
-export function readValues(response, source, selectedPath, limit = Infinity) {
+export function readResponseEntries(response, source, selectedPath, limit = Infinity) {
   const template = sourcePath(source)
-  const values = []
-  function visit(value, depth) {
-    if (values.length >= limit) return
+  const entries = []
+  function visit(value, depth, path) {
+    if (entries.length >= limit) return
     if (depth === template.length) {
-      // A selected descendant cannot provide values from its ancestors.
       if (selectedPath && selectedPath.length > depth) return
       if (source.property === null) {
-        if (value !== undefined) values.push(value)
-      } else if (value && Object.hasOwn(value, source.property)) values.push(value[source.property])
+        if (value !== undefined) entries.push({ value, path })
+      } else if (value && Object.hasOwn(value, source.property)) {
+        entries.push({ value: value[source.property], path: [...path, source.property] })
+      }
       return
     }
-    const part = template[depth]
-    const selected = selectedPath?.[depth]
+    const part = template[depth], selected = selectedPath?.[depth]
     if (part === null) {
       if (!Array.isArray(value)) return
       if (selected !== undefined) {
-        if (Number.isInteger(selected) && selected >= 0 && selected < value.length) visit(value[selected], depth + 1)
+        if (Number.isInteger(selected) && selected >= 0 && selected < value.length) visit(value[selected], depth + 1, [...path, selected])
       } else {
-        for (const item of value) {
-          visit(item, depth + 1)
-          if (values.length >= limit) break
-        }
+        for (let index = 0; index < value.length && entries.length < limit; index++) visit(value[index], depth + 1, [...path, index])
       }
     } else if ((selected === undefined || selected === part) && value && Object.hasOwn(value, part)) {
-      visit(value[part], depth + 1)
+      visit(value[part], depth + 1, [...path, part])
     }
   }
-  visit(response, 0)
-  return values
+  visit(response, 0, [])
+  return entries
+}
+
+export function readValues(response, source, selectedPath, limit = Infinity) {
+  return readResponseEntries(response, source, selectedPath, limit).map(entry => entry.value)
 }
 
 export function resolveMappingLinks(operations, catalogs) {
@@ -73,10 +74,12 @@ export function resolveMappingLinks(operations, catalogs) {
 export function useRelatedEndpoints(configuration, operations, externalContexts = ref([])) {
   const mappings = ref([])
   const error = ref('')
+  const pending = ref(false)
 
   watch(() => configuration.value?.endpointMappingsUrl, async (url, previous, onCleanup) => {
-    mappings.value = []; error.value = ''
+    mappings.value = []; error.value = ''; pending.value = false
     if (!url) return
+    pending.value = true
     const controller = new AbortController()
     onCleanup(() => controller.abort())
     try {
@@ -87,7 +90,7 @@ export function useRelatedEndpoints(configuration, operations, externalContexts 
       if (!controller.signal.aborted) mappings.value = entries
     } catch (cause) {
       if (!controller.signal.aborted) error.value = `Could not load related endpoints. ${cause.message}`
-    }
+    } finally { if (!controller.signal.aborted) pending.value = false }
   })
 
   const graphMappings = computed(() => [
@@ -102,21 +105,26 @@ export function useRelatedEndpoints(configuration, operations, externalContexts 
     ...externalContexts.value.map(api => ({ apiId: api.id, mappings: api.mappings })),
   ]))
 
-  function mappedValues(link, result) {
+  function mappedEntries(link, result) {
     if (!result?.ok) return []
-    return readValues(result.json, link.source, result.selectedPath, RELATED_VALUE_LIMIT).filter(value => link.location === 'body' || value !== null)
+    return readResponseEntries(result.json, link.source, result.selectedPath, RELATED_VALUE_LIMIT)
+      .filter(entry => link.location === 'body' || entry.value !== null)
+  }
+  function provenance(link, entry, result) {
+    return { binding: { operationKey: link.from.key, path: entry.path }, sourceResult: result }
   }
 
   function targetsFor(operation, result) {
     const byTarget = new Map()
     for (const link of links.value) {
       if (link.from.key !== operation.key) continue
-      const values = mappedValues(link, result)
+      const values = mappedEntries(link, result)
       if (!values.length) continue
       const matches = byTarget.get(link.to) ?? new Map()
-      for (const value of values) {
+      for (const entry of values) {
+        const value = entry.value
         const key = JSON.stringify([link.location, link.name, value])
-        matches.set(key, { location: link.location, name: link.name, value })
+        matches.set(key, { location: link.location, name: link.name, value, ...provenance(link, entry, result) })
       }
       byTarget.set(link.to, matches)
     }
@@ -129,9 +137,10 @@ export function useRelatedEndpoints(configuration, operations, externalContexts 
       if (link.to.key !== operation.key || link.location !== location ||
         (location !== 'body' && link.name !== name)) continue
       for (const result of results.get(link.from.key) ?? []) {
-        for (const value of mappedValues(link, result)) {
+        for (const entry of mappedEntries(link, result)) {
+          const value = entry.value
           const key = JSON.stringify([link.name, value])
-          if (!choices.has(key)) choices.set(key, { key, name: link.name, value, source: (link.from.apiId && link.from.apiId !== 'local' ? link.from.apiName + ' · ' : '') + link.from.name })
+          if (!choices.has(key)) choices.set(key, { key, name: link.name, value, ...provenance(link, entry, result), source: (link.from.apiId && link.from.apiId !== 'local' ? link.from.apiName + ' · ' : '') + link.from.name })
         }
       }
     }
@@ -142,7 +151,7 @@ export function useRelatedEndpoints(configuration, operations, externalContexts 
     return links.value.filter(link => link.from.key === operation.key).map(link => sourcePath(link.source))
   }
 
-  return { error, targetsFor, choicesFor, selectablePaths, mappings: graphMappings }
+  return { error, targetsFor, choicesFor, selectablePaths, mappings: graphMappings, links, pending }
 }
 
 export function applyChoice(session, location, choice) {
