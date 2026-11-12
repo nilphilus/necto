@@ -54,7 +54,7 @@ These are a development baseline, not a cross-device performance guarantee.
 ## Saved scenarios
 
 Build a request chain using **Continue from this response**, then open
-**Save scenario** from the options bar above the endpoint title, enter a name, and choose **Save current
+**Save scenario** next to the request breadcrumbs, enter a name, and choose **Save current
 chain**. Browse saved chains in the **Scenarios** workspace. Scenarios are stored locally in the browser, scoped to the host OpenAPI
 URL. A scenario can contain up to 100 steps.
 
