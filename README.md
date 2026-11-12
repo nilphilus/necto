@@ -39,6 +39,11 @@ for a single response above 100 MB. Preview pages contain 25 entries and retain
 absolute indices for selecting objects; changing pages does not call the API.
 See the [UI guide](Necto.UI/README.md#large-responses) for limits and measurements.
 
+**Search entire response** finds keys and values across every Preview page,
+opens the matching field and lets you select its mapped object for related
+requests. Search runs in a background worker, with paginated results and no extra
+API calls. See [response search](Necto.UI/README.md#search-an-entire-response).
+
 ## Saved request scenarios
 
 Save a request chain from the **Scenarios** panel and run it again with values
