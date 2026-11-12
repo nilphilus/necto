@@ -1,6 +1,7 @@
 <script setup>
 import { reactive, ref } from 'vue'
 const props = defineProps({ connections: Array, statuses: Map, storageError: String, save: Function, remove: Function, test: Function })
+const show = defineModel('show', { type: Boolean })
 const blank = () => ({ id: '', name: '', openApiUrl: '', endpointMappingsUrl: '', apiBaseUrl: '', usePresets: false })
 const draft = reactive(blank())
 const editing = ref('')
@@ -16,7 +17,8 @@ function remove(id) { props.remove(id); if (editing.value === id) reset() }
 <template>
   <section class="external-settings preset-panel" aria-labelledby="external-settings-title">
     <h3 id="external-settings-title">External APIs</h3>
-    <p class="muted">Connect APIs that expose OpenAPI and Necto mappings. Show or hide them using the switch in the API workspace.</p>
+    <label class="external-toggle"><input v-model="show" type="checkbox" role="switch"> Show external APIs</label>
+    <p class="muted">Connect APIs that expose OpenAPI and Necto mappings.</p>
     <ul v-if="connections.length" class="connection-list">
       <li v-for="entry in connections" :key="entry.id">
         <div><strong>{{ entry.name }}</strong> <code>{{ entry.id }}</code><small>{{ entry.openApiUrl }}</small>
@@ -51,6 +53,10 @@ function remove(id) { props.remove(id); if (editing.value === id) reset() }
 </template>
 <style scoped>
 .external-settings { width: 100%; }
+.external-toggle { display: flex; align-items: center; gap: .5rem; font-weight: 650; }
+.external-toggle input { appearance: none; display: flex; align-items: center; flex-shrink: 0; width: 2.25rem; height: 1.3rem; margin: 0; padding: .13rem; border: 1px solid #9bad9f; border-radius: 999px; background: #cbd8cf; cursor: pointer; }
+.external-toggle input::before { content: ''; width: .94rem; height: .94rem; border-radius: 50%; background: white; box-shadow: 0 1px 3px #0003; }
+.external-toggle input:checked { justify-content: flex-end; background: var(--accent); border-color: var(--accent); }
 h4 { margin: .35rem 0; }
 .connection-list { width: 100%; list-style: none; padding: 0; margin: 0; }
 .connection-list li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; padding: .7rem 0; border-bottom: 1px solid var(--line); }

@@ -56,7 +56,7 @@ presets and external API connections apply when replaying. See the
 ## External API connections
 
 Configure additional OpenAPI documents and Necto mappings in **Settings → External
-APIs**, then use **Show external APIs** in the workspace. Services retain their
+APIs**, then turn on **Show external APIs** in the same section. Services retain their
 own request URLs and operation identities. Explicit `source.apiId` / `target.apiId`
 selectors allow response values to flow between configured services. See the
 [external API guide](Necto.UI/README.md#external-apis) for configuration and CORS.

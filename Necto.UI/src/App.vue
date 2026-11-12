@@ -16,7 +16,7 @@ import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
 import { useScenarios } from './features/scenarios/useScenarios.js'
 import { rememberBinding } from './features/scenarios/scenario.js'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
-import { buildRequest, fieldKey, contextKey, resolveRequestValues } from './features/request-runner/request.js'
+import { buildRequest, fieldKey, contextKey, resolveRequestValues, supportedParameters } from './features/request-runner/request.js'
 
 const { spec, configuration, error, operations, groups, externalApis } = useCatalog()
 const { sessions, sessionFor, createSession, run } = useRequestRunner(configuration)
@@ -24,7 +24,6 @@ const { error: mappingError, targetsFor, choicesFor, selectablePaths, mappings: 
 
 const { connections, show: showExternalApis, statuses: externalStatuses, storageError: externalStorageError } = externalApis
 const externalPending = computed(() => showExternalApis.value && [...externalStatuses.values()].some(status => status.pending))
-const externalErrors = computed(() => showExternalApis.value ? connections.value.filter(entry => externalStatuses.get(entry.id)?.error) : [])
 const selectedChain = ref([])
 const inspectedScenarioStep = ref(null)
 const scenarioPanel = ref(null)
@@ -62,6 +61,16 @@ const chain = computed(() => {
 const currentIndex = computed(() => inspectedScenarioStep.value === null ? chain.value.length - 1 : Math.min(inspectedScenarioStep.value, chain.value.length - 1))
 const current = computed(() => chain.value[currentIndex.value])
 const requestValues = computed(() => current.value ? valuesFor(current.value.operation) : new Map())
+const visiblePresetNames = computed(() => {
+  if (!current.value) return []
+  const { operation } = current.value
+  const parameterKeys = new Set(supportedParameters(operation).map(contextKey))
+  return [...presets.value].filter(([, preset]) => {
+    const values = valuesFor(operation, [preset])
+    // The request runner also sends preset headers absent from the OpenAPI definition.
+    return [...values.keys()].some(key => key.startsWith('header:') || parameterKeys.has(key))
+  }).map(([name]) => name)
+})
 
 function valuesFor(operation, layers = activePresetValues.value) {
   if (operation.apiId && operation.apiId !== 'local' && !operation.usePresets) return new Map()
@@ -363,6 +372,18 @@ function removeScenario(id) {
           <span aria-hidden="true">⚙︎</span>
         </button>
       </div>
+      <div v-if="!graphView && visiblePresetNames.length" class="preset-bar" role="group" aria-label="Presets">
+        <span class="preset-bar-label" aria-hidden="true">Presets</span>
+        <button
+          v-for="name in visiblePresetNames"
+          :key="name"
+          type="button"
+          class="preset-chip"
+          :disabled="scenarioPending"
+          :aria-pressed="activePresetNames.includes(name)"
+          @click="togglePreset(name, !activePresetNames.includes(name))"
+        >{{ name }}</button>
+      </div>
     </header>
 
     <p v-if="error" class="app-message error" role="alert">{{ error }}</p>
@@ -395,7 +416,7 @@ function removeScenario(id) {
               </template>
               <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
             </section>
-            <ExternalApiSettings :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
+            <ExternalApiSettings v-model:show="showExternalApis" :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
               :save="externalApis.saveConnection" :remove="externalApis.removeConnection" :test="externalApis.testConnection" />
           </div>
         </aside>
@@ -418,30 +439,6 @@ function removeScenario(id) {
         />
 
         <div ref="workArea" class="work-area">
-          <section :inert="scenarioPending" class="external-toggle preset-panel" aria-label="External API visibility">
-            <label><input v-model="showExternalApis" type="checkbox" role="switch"> Show external APIs</label>
-            <span class="muted" role="status">{{ showExternalApis ? 'Visible' : 'Hidden' }} · {{ connections.length }} configured<template v-if="externalPending"> · Connecting…</template></span>
-            <p v-if="!connections.length" class="muted">Add connections in Settings → External APIs.</p>
-            <p v-for="entry in externalErrors" :key="entry.id" class="error">{{ entry.name }}: {{ externalStatuses.get(entry.id).error }}</p>
-            <p v-if="externalStorageError" class="error">{{ externalStorageError }}</p>
-          </section>
-          <fieldset class="preset-panel" :disabled="scenarioPending">
-            <legend>Presets</legend>
-            <div v-if="presets.size" class="preset-options">
-              <button
-                v-for="name in presets.keys()"
-                :key="name"
-                type="button"
-                class="preset-chip"
-                :aria-pressed="activePresetNames.includes(name)"
-                @click="togglePreset(name, !activePresetNames.includes(name))"
-              >
-                <span>{{ name }}</span>
-              </button>
-            </div>
-            <p v-else class="muted">Add presets in Settings.</p>
-            <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
-          </fieldset>
           <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
           <article v-if="current" :inert="scenarioPending" aria-labelledby="endpoint-title">
             <nav v-if="chain.length > 1" class="breadcrumbs" aria-label="Request chain">
@@ -475,7 +472,6 @@ function removeScenario(id) {
               <p v-if="scenarioError" class="error" role="alert">{{ scenarioError }}</p>
               <p v-else-if="overwriteScenario && scenarioState.status === 'saved' && scenarioState.id === overwriteScenario.id" role="status">Scenario saved.</p>
             </details>
-            <p v-if="current.operation.apiId !== 'local'" class="muted external-context-note">{{ current.operation.usePresets ? 'Active request presets are applied to this API.' : 'Active request presets are not applied to this API.' }}</p>
             <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)">
               <template #parameter-input="{ parameter, hint }">
                 <ValueInput v-model="current.session.fields[fieldKey(parameter)]"
@@ -578,39 +574,33 @@ body { margin: 0; background: #eef2ee; }
 .app-message { margin: 1rem; }
 .mapping-notice { margin: 0 0 1rem; }
 .preset-panel { min-width: 0; margin-inline: 0; display: grid; gap: .45rem; margin-bottom: 1rem; padding: .75rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); font-size: .85rem; }
-.preset-panel legend { padding-inline: .25rem; font-weight: 650; }
-.preset-options { display: flex; flex-wrap: wrap; gap: .45rem; }
+.preset-bar { flex: 0 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; min-width: 0; margin-top: -.5rem; }
+.preset-bar-label { margin-right: .2rem; color: var(--muted); font-size: .75rem; font-weight: 650; }
 .preset-chip {
   display: inline-flex;
   align-items: center;
   min-width: 0;
   max-width: 100%;
-  min-height: 2rem;
-  padding: .25rem .7rem;
-  border: 1px solid #a2b2a9;
+  min-height: 1.5rem;
+  padding: .15rem .55rem;
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface);
+  color: var(--muted);
+  font-size: .75rem;
   font-weight: 650;
   text-align: left;
   overflow-wrap: anywhere;
 }
 .preset-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
-.preset-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: white; }
-.preset-chip[aria-pressed="true"]:hover { background: #104737; }
+.preset-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .preset-panel > label select { margin-left: .35rem; max-width: 70%; }
 .preset-panel p { margin: 0; }
 .scenario-save summary { cursor: pointer; font-weight: 650; }
 .scenario-save form { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin-block: .65rem; }
 .scenario-save label { display: grid; gap: .3rem; flex: 1 1 14rem; }
 .scenario-save input { width: 100%; min-width: 0; }
-.external-toggle label { display: flex; gap: .5rem; align-items: center; font-weight: 650; }
-.external-toggle input[role="switch"] { appearance: none; position: relative; width: 2.25rem; height: 1.3rem; margin: 0; border: 1px solid #9bad9f; border-radius: 999px; background: #cbd8cf; cursor: pointer; flex-shrink: 0; }
-.external-toggle input[role="switch"]::before { content: ''; position: absolute; top: .12rem; left: .13rem; width: .94rem; height: .94rem; border-radius: 50%; background: white; box-shadow: 0 1px 3px #0003; }
-.external-toggle input[role="switch"]:checked { background: var(--accent); border-color: var(--accent); }
-.external-toggle input[role="switch"]:checked::before { left: 1.04rem; }
-.external-toggle span, .external-toggle p { font-size: .78rem; }
 .external-api-label { color: var(--accent); font-weight: 650; }
-.external-context-note { font-size: .8rem; }
 .view-navigation { display: flex; flex-wrap: wrap; gap: .35rem; }
 .view-navigation [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .settings-icon.secondary { display: grid; flex: none; place-items: center; width: 2rem; height: 2rem; padding: 0; font-size: 1.2rem; line-height: 1; }
