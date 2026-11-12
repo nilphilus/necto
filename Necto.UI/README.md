@@ -260,3 +260,32 @@ Building or packing Necto from source requires Node.js 22.12 or later and pnpm. 
 Run `dotnet run --project SampleApi --launch-profile http` from the repository root to try the packaged UI at `http://localhost:5000/necto/`. To work on the frontend with hot reload, keep SampleApi running and run `pnpm dev` from `Necto.UI`. Vite proxies configuration, OpenAPI, endpoint mappings and SampleApi calls.
 
 The Vue frontend uses vertical slices under `src/features`. Each slice keeps its components and logic together. `api-catalog` handles discovery and navigation, `request-runner` owns request drafts and responses, and `related-endpoints` resolves mappings against response values. `App.vue` connects the three slices.
+
+## Search an entire response
+
+Open **Search entire response** above Preview and type an ID, field name or value.
+Search covers the complete JSON response, including collapsed objects and all
+Preview pages. Choose keys, values or both, with optional case sensitivity and
+exact matching. Terms are literal text (up to 200 characters); numbers, booleans
+and null use their JSON spelling. Each matching location appears once, even when
+both its key and value match or its value contains repeated occurrences.
+
+Results include a JSON path and a short excerpt. They are paginated in groups of
+25 without a total-results cap. **Show match**, **Previous match** and **Next
+match** open the necessary Preview pages and highlight the field. Long strings
+jump to their matching text page. For paths deeper than 32 levels, Preview shows
+the containing object with a **Back to full response** action.
+
+Where Necto mappings identify a containing object, **Select object** fills the
+related request fields using that object. Finding or showing a match does not
+change the selected object or send a request. Clearing a search preserves the
+selection.
+
+Search runs in a dedicated Web Worker. It parses a private copy of the response
+once, then reuses it across queries and result pages. Only one page of result
+paths and excerpts is retained; the total is counted across the whole response.
+This uses additional memory for the raw text transfer and parsed copy; it does
+not make arbitrarily large payloads free to hold in memory. Clear or cancel the
+search, replace the response, or leave the view to terminate the worker. Search
+never refetches the response or changes API pagination. Browsers without worker
+support retain Preview, Raw and download, and display a search error.

@@ -1,15 +1,37 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import PreviewPager from './PreviewPager.vue'
 import { pageRange, TEXT_PAGE_SIZE } from './preview.js'
+import PayloadSearch from '../payload-search/PayloadSearch.vue'
+import { valueAtPath, pathLabel } from '../payload-search/search.js'
 import JsonNode from './JsonNode.vue'
 const props = defineProps({ result: { type: Object, required: true }, selectors: { type: Array, default: () => [] } })
 const raw = ref(false)
 const textPage = ref(1)
+const navigation = ref(null)
+const focusPath = ref([])
+const preview = ref(null)
+let navigationId = 0
+const previewValue = computed(() => valueAtPath(props.result.json, focusPath.value))
 const text = computed(() => props.result.rawText ?? props.result.text ?? '')
 const range = computed(() => pageRange(text.value.length, textPage.value, TEXT_PAGE_SIZE))
 const visibleText = computed(() => text.value.slice(range.value.start, range.value.end))
-watch(() => props.result, () => { textPage.value = 1; raw.value = false })
+watch(() => props.result, () => { textPage.value = 1; raw.value = false; navigation.value = null; focusPath.value = []; navigationId++ })
+async function reveal(match, scroll = true) {
+  const id = ++navigationId
+  navigation.value = match ? { ...match, id } : null
+  if (!match) return
+  if (scroll) raw.value = false
+  // Deep documents are shown at their containing object rather than mounting thousands of ancestors.
+  focusPath.value = match.path.length > 32 ? match.path.slice(0, -1) : []
+  await nextTick(); await nextTick()
+  if (!scroll || id !== navigationId) return
+  const element = preview.value?.querySelector('[data-search-match="true"], [data-search-key="true"]') ??
+    preview.value?.querySelector('[data-search-target="true"]')
+  element?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' })
+}
+function fullResponse() { focusPath.value = []; navigation.value = null; navigationId++ }
+
 function download() {
   const url = URL.createObjectURL(new Blob([text.value], { type: props.result.contentType || 'text/plain' }))
   const link = document.createElement('a')
@@ -35,8 +57,10 @@ function download() {
         <span v-else-if="selectors.length">Select an object to fill related request fields.</span>
       </template>
     </div>
-    <div v-if="result.json !== undefined" v-show="!raw" class="json-preview" tabindex="0" aria-label="JSON response preview">
-      <JsonNode :value="result.json" :path="[]" :selectors="selectors" :selected="result.selectedPath" @select="result.selectedPath = $event" />
+    <PayloadSearch v-if="result.json !== undefined" :result="result" :selectors="selectors" @reveal="reveal" @select="result.selectedPath = $event" />
+    <div v-if="focusPath.length && !raw" class="preview-toolbar"><code>Focused object: {{ pathLabel(focusPath) }}</code><button type="button" @click="fullResponse">Back to full response</button></div>
+    <div v-if="result.json !== undefined" v-show="!raw" ref="preview" class="json-preview" tabindex="0" aria-label="JSON response preview">
+      <JsonNode :key="JSON.stringify(focusPath)" :value="previewValue" :path="focusPath" :root="true" :navigation="navigation" :selectors="selectors" :selected="result.selectedPath" @select="result.selectedPath = $event" />
     </div>
     <div v-if="text && (raw || result.json === undefined)" class="raw-preview">
       <PreviewPager :range="range" label="Text characters" @change="textPage = $event" />
@@ -48,6 +72,7 @@ function download() {
 
 <style scoped>
 .preview-toolbar { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-bottom: .5rem; font-size: .75rem; color: var(--muted); }
+.preview-toolbar code { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .preview-toolbar button { padding: .25rem .4rem; border: 1px solid var(--line); }
 .preview-toolbar button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .json-preview, pre { overflow: auto; max-height: 32rem; margin: 0; padding: .8rem; border-radius: .45rem; background: #182420; color: #e7f3eb; font: .85rem/1.65 ui-monospace, Consolas, monospace; }
