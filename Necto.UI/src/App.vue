@@ -40,6 +40,9 @@ const overwriteScenario = computed(() => scenarios.value.find(scenario =>
   scenario.id === editingScenarioId.value && scenario.name === scenarioName.value.trim()))
 const scenarioBusy = computed(() => scenarioPending.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
 const presets = ref(new Map())
+const presetColors = ref(new Map())
+const presetsCollapsed = ref(false)
+const defaultPresetColor = '#287557'
 const activePresetNames = ref([])
 const settingsOpen = ref(false)
 const skeletonWalking = ref(false)
@@ -142,6 +145,8 @@ watch(configuration, () => {
     if (!saved) return
     presets.value = new Map((saved.presets ?? saved.environments).map(([name, values]) =>
       [name, saved.version === 2 ? new Map(values) : migratePreset(values)]))
+    presetColors.value = new Map(Object.entries(saved.colors ?? {}).filter(([name, color]) =>
+      presets.value.has(name) && /^#[0-9a-f]{6}$/i.test(color)))
     const active = Array.isArray(saved.active) ? saved.active : [saved.active]
     activePresetNames.value = [...new Set(active.filter(name => presets.value.has(name)))]
   } catch {
@@ -152,7 +157,12 @@ watch(configuration, () => {
 function savePresets() {
   try {
     const entries = Array.from(presets.value, ([name, values]) => [name, [...values]])
-    localStorage.setItem(storageKey.value, JSON.stringify({ version: 2, active: activePresetNames.value, presets: entries }))
+    localStorage.setItem(storageKey.value, JSON.stringify({
+      version: 2,
+      active: activePresetNames.value,
+      presets: entries,
+      colors: Object.fromEntries(presetColors.value)
+    }))
     presetError.value = ''
   } catch {
     presetError.value = 'Could not save presets in this browser.'
@@ -231,9 +241,15 @@ function savePresetValues(values) {
   savePresets()
 }
 
+function savePresetColor(color) {
+  presetColors.value.set(editedPresetName.value, color)
+  savePresets()
+}
+
 function removePreset() {
   const name = editedPresetName.value
   presets.value.delete(name)
+  presetColors.value.delete(name)
   editedPresetName.value = presets.value.keys().next().value ?? ''
   if (activePresetNames.value.includes(name)) togglePreset(name, false)
   else savePresets()
@@ -565,6 +581,11 @@ function removeScenario(id) {
                     <option v-for="name in presets.keys()" :key="name" :value="name">{{ name }}</option>
                   </select>
                 </label>
+                <label class="preset-color-field">
+                  Preset color
+                  <input type="color" :value="presetColors.get(editedPresetName) ?? defaultPresetColor"
+                    @input="savePresetColor($event.target.value)">
+                </label>
                 <ValuesEditor v-if="editedPresetValues" :values="editedPresetValues" label="Preset values" @save="savePresetValues" />
                 <button type="button" class="secondary" @click="removePreset">Delete {{ editedPresetName }}</button>
               </template>
@@ -583,7 +604,7 @@ function removeScenario(id) {
         :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"
         @remove="removeScenario" @stop="scenarioStore.stop" @inspect="inspectScenario" />
-      <div v-show="!graphView" class="layout">
+      <div v-show="!graphView" class="layout" :class="{ 'presets-collapsed': presetsCollapsed }">
         <EndpointCatalog :inert="scenarioPending"
           :groups="groups"
           :active-group="current?.group ?? ''"
@@ -591,6 +612,37 @@ function removeScenario(id) {
           @select-group="selectGroup"
           @select-operation="selectOperation"
         />
+
+        <aside class="presets-column" aria-label="Presets" :inert="scenarioPending">
+          <div class="presets-header">
+            <h2 v-if="!presetsCollapsed">Presets</h2>
+            <button type="button" class="secondary presets-toggle"
+              :aria-label="presetsCollapsed ? 'Expand presets' : 'Collapse presets'"
+              :title="presetsCollapsed ? 'Expand presets' : 'Collapse presets'"
+              :aria-expanded="!presetsCollapsed"
+              aria-controls="request-presets"
+              @click="presetsCollapsed = !presetsCollapsed">
+              <span aria-hidden="true">{{ presetsCollapsed ? '›' : '‹' }}</span>
+            </button>
+          </div>
+          <div id="request-presets" class="presets-list" role="group" aria-label="Request presets">
+            <button
+              v-for="name in visiblePresetNames"
+              :key="name"
+              type="button"
+              class="preset-toggle"
+              :aria-label="name"
+              :title="name"
+              :aria-pressed="activePresetNames.includes(name)"
+              :style="{ '--preset-color': presetColors.get(name) ?? defaultPresetColor }"
+              @click="togglePreset(name, !activePresetNames.includes(name))"
+            >
+              <span class="preset-dot" aria-hidden="true"></span>
+              <span v-if="!presetsCollapsed">{{ name }}</span>
+            </button>
+            <p v-if="!presetsCollapsed && !visiblePresetNames.length" class="muted">No matching presets.</p>
+          </div>
+        </aside>
 
         <div ref="workArea" class="work-area">
           <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
@@ -618,17 +670,6 @@ function removeScenario(id) {
                   title="Store as sample" @click="requestSamples.openStoreDialog()">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l5 5v4m-5-9v5h5m-1 7v7m-3.5-3.5h7"/></svg>
                 </button>
-              </div>
-              <div v-if="visiblePresetNames.length" class="endpoint-presets" role="group" aria-label="Presets">
-                <span class="preset-bar-label" aria-hidden="true">Presets:</span>
-                <button
-                  v-for="name in visiblePresetNames"
-                  :key="name"
-                  type="button"
-                  class="preset-chip"
-                  :aria-pressed="activePresetNames.includes(name)"
-                  @click="togglePreset(name, !activePresetNames.includes(name))"
-                >{{ name }}</button>
               </div>
             </div>
             <header class="endpoint-header">
@@ -752,7 +793,39 @@ body { margin: 0; background: #eef2ee; }
 .brand-button:hover { background: var(--surface); }
 .brand-mark { display: grid; place-items: center; width: 1.65rem; height: 1.65rem; border-radius: .45rem; background: var(--accent); color: white; }
 .api-title small { padding: .125rem .375rem; border: 1px solid var(--line); border-radius: .375rem; color: var(--muted); font-size: .72rem; }
-.layout { display: grid; flex: 1; min-height: 0; grid-template-columns: clamp(14rem, 23vw, 18rem) minmax(0, 1fr); }
+.layout {
+  --presets-width: 9rem;
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: clamp(14rem, 23vw, 18rem) var(--presets-width) minmax(0, 1fr);
+}
+.layout.presets-collapsed { --presets-width: 3rem; }
+.presets-column { min-width: 0; overflow: auto; padding: .65rem .4rem; border-right: 1px solid var(--line); }
+.presets-header { display: flex; align-items: center; justify-content: space-between; gap: .25rem; margin-bottom: .5rem; }
+.presets-header h2 { margin: 0 0 0 .35rem; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
+.presets-toggle.secondary { display: grid; flex: none; place-items: center; width: 2rem; height: 2rem; padding: 0; font-size: 1.25rem; line-height: 1; }
+.presets-list { display: grid; gap: .2rem; }
+.presets-list p { margin: .35rem; font-size: .75rem; }
+.preset-toggle {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  min-width: 0;
+  min-height: 2rem;
+  padding: .25rem .35rem;
+  border: 1px solid transparent;
+  border-radius: .4rem;
+  background: transparent;
+  color: inherit;
+  font-size: .8rem;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.preset-toggle:hover { background: var(--canvas); border-color: var(--line); }
+.preset-dot { flex: none; width: 1rem; height: 1rem; border: 3px solid var(--preset-color); border-radius: 50%; }
+.preset-toggle[aria-pressed="true"] .preset-dot { background: var(--preset-color); }
+.presets-collapsed .presets-header, .presets-collapsed .preset-toggle { justify-content: center; }
 .work-area { overflow: auto; min-width: 0; padding: 1.5rem; background: var(--canvas); scroll-padding-block: 1rem; }
 .app-message { margin: 1rem; }
 .mapping-notice { margin: 0 0 1rem; }
@@ -768,29 +841,11 @@ body { margin: 0; background: #eef2ee; }
   border-radius: .5rem;
   background: var(--accent-soft);
 }
-.endpoint-actions, .endpoint-presets { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; min-width: 0; }
-.endpoint-presets { border-left: 1px solid #b9d5c7; padding-left: .7rem; }
+.endpoint-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; min-width: 0; }
 .endpoint-action.secondary { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; color: var(--accent); }
 .endpoint-action svg { width: 1.05rem; height: 1.05rem; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.preset-bar-label { margin-right: .25rem; color: var(--accent); font-size: .75rem; font-weight: 650; }
-.preset-chip {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  max-width: 100%;
-  min-height: 1.5rem;
-  padding: .15rem .55rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: .75rem;
-  font-weight: 650;
-  text-align: left;
-  overflow-wrap: anywhere;
-}
-.preset-chip:hover { border-color: var(--accent); background: var(--surface); }
-.preset-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: white; }
+.preset-color-field { display: flex; align-items: center; gap: .5rem; }
+.preset-color-field input { width: 2.5rem; height: 1.75rem; padding: .15rem; cursor: pointer; }
 .preset-panel > label select { margin-left: .35rem; max-width: 70%; }
 .preset-panel p { margin: 0; }
 .endpoint-dialog { width: min(30rem, calc(100% - 2rem)); padding: 1.25rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); color: inherit; box-shadow: 0 1rem 3rem #202b2733; }
@@ -865,7 +920,8 @@ input:not([type="checkbox"]), select, textarea {
 @media (max-width: 760px) {
   #app { --app-gutter: .75rem; }
   .app { height: auto; min-height: calc(100dvh - 2 * var(--app-gutter)); }
-  .layout { grid-template-columns: minmax(0, 1fr); }
+  .layout { --presets-width: 7.5rem; grid-template-columns: var(--presets-width) minmax(0, 1fr); }
+  .layout > .catalog { grid-column: 1 / -1; }
   .work-area { overflow: visible; padding: 1rem; }
   .settings { overflow: auto; }
 }
