@@ -9,7 +9,7 @@ When endpoint mappings are configured, **Continue from this response** shows rel
 ## Response preview
 
 JSON responses open in **Preview**, with colors for keys, strings, numbers,
-booleans and null. **Raw** shows the original response text. Other response
+booleans and null. **Raw** shows pages of the original response text. Other response
 formats remain plain text.
 
 Objects with generated mappings to available requests have a **Select** button.
@@ -19,6 +19,37 @@ suggestions in request parameter inputs. The filled values remain editable.
 This also works with nested objects and arrays. **Clear selection** restores all values. Selection belongs
 to the response and stays when revisiting a breadcrumb; sending again replaces
 it. Preview and colors work even without endpoint mappings.
+
+## Large responses
+
+Preview pagination is local to the UI: it never adds API query parameters or
+makes another request. Arrays and objects render 25 entries per page, with
+previous/next controls and a page-number input. Array indices and selection
+paths are absolute, so selecting an item on page 4,000 fills the correct related
+request field. Nested containers at depth two start collapsed and have their
+own pagination when expanded. Long string values show 2,000 characters at a time.
+
+Raw and non-JSON text show 20,000 characters per page. **Download response** saves
+the complete original text, regardless of the visible page. JSON above one
+million characters is parsed in a Web Worker, without creating a second
+pretty-printed copy; parsed objects stay outside Vue's deep reactivity.
+
+Suggestions inspect at most 200 values per mapping to keep dropdowns bounded.
+Type another value manually, or select an object on any Preview page to use a
+value outside that initial set. The whole HTTP response and parsed JSON still
+live in browser memory: this bounds rendering, not download size or memory use.
+Worker-to-main-thread transfer can still cause a pause for very large responses.
+
+To try it, run SampleApi, open **Large invoice payload**, and set `count=100000`,
+`noteSize=1024`. This produces one response of approximately 117 MB, with
+100,000 records. Jump to page 4,000 and select the last item (`lineId=199999`),
+then send **Large invoice line**. Sample limits are 200,000 rows and 1,024 note
+characters per row; they do not implement server pagination.
+
+A headless Chromium run in the development environment rendered this example
+in about 2.2 seconds, with 886 preview DOM elements on both the first and last
+pages and one API call. The longest observed main-thread task was 307 ms.
+These are a development baseline, not a cross-device performance guarantee.
 
 ## Request presets
 

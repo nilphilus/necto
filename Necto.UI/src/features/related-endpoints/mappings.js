@@ -9,20 +9,39 @@ export function matchesPath(template, path) {
     part === null ? Number.isInteger(path[index]) : part === path[index])
 }
 
-export function readValues(response, source, selectedPath) {
-  let nodes = [{ value: response, path: [] }]
-  for (const part of sourcePath(source)) {
-    nodes = nodes.flatMap(({ value, path }) => part === null
-      ? (Array.isArray(value) ? value.map((value, index) => ({ value, path: [...path, index] })) : [])
-      : (value && Object.hasOwn(value, part) ? [{ value: value[part], path: [...path, part] }] : []))
+export const RELATED_VALUE_LIMIT = 200
+
+export function readValues(response, source, selectedPath, limit = Infinity) {
+  const template = sourcePath(source)
+  const values = []
+  function visit(value, depth) {
+    if (values.length >= limit) return
+    if (depth === template.length) {
+      // A selected descendant cannot provide values from its ancestors.
+      if (selectedPath && selectedPath.length > depth) return
+      if (source.property === null) {
+        if (value !== undefined) values.push(value)
+      } else if (value && Object.hasOwn(value, source.property)) values.push(value[source.property])
+      return
+    }
+    const part = template[depth]
+    const selected = selectedPath?.[depth]
+    if (part === null) {
+      if (!Array.isArray(value)) return
+      if (selected !== undefined) {
+        if (Number.isInteger(selected) && selected >= 0 && selected < value.length) visit(value[selected], depth + 1)
+      } else {
+        for (const item of value) {
+          visit(item, depth + 1)
+          if (values.length >= limit) break
+        }
+      }
+    } else if ((selected === undefined || selected === part) && value && Object.hasOwn(value, part)) {
+      visit(value[part], depth + 1)
+    }
   }
-  if (selectedPath !== undefined && selectedPath !== null) {
-    nodes = nodes.filter(({ path }) => path.length >= selectedPath.length &&
-      selectedPath.every((part, index) => path[index] === part))
-  }
-  return nodes.flatMap(({ value }) => source.property === null
-    ? (value === undefined ? [] : [value])
-    : (value && Object.hasOwn(value, source.property) ? [value[source.property]] : []))
+  visit(response, 0)
+  return values
 }
 
 export function useRelatedEndpoints(configuration, operations) {
@@ -70,7 +89,7 @@ export function useRelatedEndpoints(configuration, operations) {
 
   function mappedValues(link, result) {
     if (!result?.ok) return []
-    return readValues(result.json, link.source, result.selectedPath).filter(value => link.location === 'body' || value !== null)
+    return readValues(result.json, link.source, result.selectedPath, RELATED_VALUE_LIMIT).filter(value => link.location === 'body' || value !== null)
   }
 
   function targetsFor(operation, result) {

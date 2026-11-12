@@ -48,6 +48,9 @@ const choices = computed(() => fields.value.filter(field => drafts[field.key] !=
         <span>{{ field.name ?? 'body' }} <small>{{ field.location }}</small></span>
         <ValueInput v-model="drafts[field.key]" :choices="field.choices" placeholder="Type or choose a value…" />
       </label>
+      <small v-if="fields.some(field => field.choices.length >= 200)" class="suggestion-note">
+        First 200 suggestions per mapping. Type any value or select an object on any Preview page.
+      </small>
       <div class="actions">
         <button type="button" class="secondary" :aria-label="'Edit ' + target.operation.name"
           @click="emit('follow', target.operation, choices, false)">Edit</button>

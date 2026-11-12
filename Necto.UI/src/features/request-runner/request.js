@@ -175,25 +175,32 @@ export function buildRequest(operation, configuration, draft, values = new Map()
   return { url, options }
 }
 
+async function parseResponse(text) {
+  if (text.length < 1000000 || typeof Worker === 'undefined') {
+    try { return JSON.parse(text) } catch { return undefined }
+  }
+  const worker = new Worker(new URL('./json.worker.js', import.meta.url), { type: 'module' })
+  try {
+    return await new Promise((resolve, reject) => {
+      worker.onmessage = ({ data }) => resolve(data.valid ? data.json : undefined)
+      worker.onerror = () => reject(new Error('Could not parse the response in the background.'))
+      worker.postMessage(text)
+    })
+  } finally { worker.terminate() }
+}
+
 export async function sendRequest(request) {
   const response = await fetch(request.url, request.options)
   const contentType = response.headers.get('content-type') ?? ''
   const text = await response.text()
-  let json
-  if (text) {
-    try {
-      json = JSON.parse(text)
-    } catch {
-      // Preserve the raw response for text bodies and malformed JSON.
-    }
-  }
+  const json = text ? await parseResponse(text) : undefined
   return {
     ok: response.ok,
     status: response.status,
     statusText: response.statusText,
     contentType,
     rawText: text,
-    text: json === undefined ? text : formatJson(json),
+    text,
     json,
   }
 }
