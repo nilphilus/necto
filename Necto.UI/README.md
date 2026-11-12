@@ -20,6 +20,8 @@ This also works with nested objects and arrays. **Clear selection** restores all
 to the response and stays when revisiting a breadcrumb; sending again replaces
 it. Preview and colors work even without endpoint mappings.
 
+Response data is shown before continuation forms. On wide request panels, **Next request** sits alongside Preview so selecting an object and following a request stay in view together. On narrower panels it follows the response and can be collapsed. Requests without mappings use the full response width.
+
 ## Large responses
 
 Preview pagination is local to the UI: it never adds API query parameters or
