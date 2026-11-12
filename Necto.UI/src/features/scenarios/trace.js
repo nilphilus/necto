@@ -20,7 +20,7 @@ export function traceSteps(steps) {
       if (!source) {
         const origin = cards[sourceStep]
         const value = readResponseAt(origin.step.response.json, path)
-        source = { id, path, value: previewValue(value), color: colors[sources.size % colors.length] }
+        source = { id, sourceStep, path, value: previewValue(value), color: colors[sources.size % colors.length] }
         sources.set(id, source)
         origin.outputs.push(source)
       }
@@ -29,4 +29,13 @@ export function traceSteps(steps) {
     }
   }
   return cards
+}
+
+
+export function executionFocus(steps) {
+  const running = steps.findIndex(step => step.status === 'running')
+  if (running >= 0) return running
+  const interrupted = steps.findIndex(step => step.status === 'failed' || step.status === 'cancelled')
+  if (interrupted >= 0) return interrupted
+  return Math.max(0, steps.findLastIndex(step => step.status === 'completed'))
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { snapshotScenario, rememberBinding, prepareScenario, executeScenario, readResponseAt, validateScenario } from './scenario.js'
 import { applyChoice } from '../related-endpoints/mappings.js'
 import { buildRequest, resolveRequestValues } from '../request-runner/request.js'
-import { traceSteps } from './trace.js'
+import { executionFocus, traceSteps } from './trace.js'
 
 const op = (name, path, parameters = [], extra = {}) => ({ key: `GET ${path}`, apiId: 'local', id: name, name,
   method: 'GET', path, tags: ['Invoices'], parameters, resolve: schema => schema, ...extra })
@@ -107,6 +107,7 @@ test('trace captures the sent request, links mapped values, and includes HTTP er
   assert.deepEqual(source.outputs[0].path, [0, 'id'])
   assert.equal(source.outputs[0].value, '0')
   assert.equal(target.inputs[0].id, source.outputs[0].id)
+  assert.equal(target.inputs[0].sourceStep, 0)
   assert.equal(target.inputs[0].color, source.outputs[0].color)
   assert.match(target.request.url, /\/invoices\/0\/lines$/)
   assert.deepEqual(target.step.response.json, { message: 'missing' })
@@ -208,4 +209,15 @@ test('a whole-body binding can hydrate a falsy JSON value', async () => {
   const plan = prepareScenario(scenario, context({ operations: [list, target], links: [{ from: list, to: target, location: 'body', name: null, source: { eachItem: false, property: null } }] }))
   const outcome = await executeScenario(plan, { signal: new AbortController().signal, execute: async operation => operation === list ? response(false) : response({ ok: true }) })
   assert.equal(outcome.status, 'completed'); assert.equal(plan[1].session.body, 'false')
+})
+
+
+test('execution overview follows running or interrupted work instead of a later skipped step', () => {
+  const steps = statuses => statuses.map(status => ({ status }))
+  assert.equal(executionFocus([]), 0)
+  assert.equal(executionFocus(steps(['waiting', 'waiting'])), 0)
+  assert.equal(executionFocus(steps(['completed', 'running', 'waiting'])), 1)
+  assert.equal(executionFocus(steps(['completed', 'failed', 'skipped'])), 1)
+  assert.equal(executionFocus(steps(['completed', 'cancelled', 'skipped'])), 1)
+  assert.equal(executionFocus(steps(['completed', 'completed', 'completed'])), 2)
 })
