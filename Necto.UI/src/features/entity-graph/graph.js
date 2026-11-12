@@ -1,6 +1,8 @@
+import { resolveMappingLinks } from '../related-endpoints/mappings.js'
+
 const refPrefix = '#/components/schemas/'
 
-export function buildEntityGraph(spec, operations, mappings = []) {
+function readEntityGraph(spec, operations) {
   const schemas = spec?.components?.schemas ?? {}
   const nodes = new Map()
   const edges = new Map()
@@ -118,34 +120,56 @@ export function buildEntityGraph(spec, operations, mappings = []) {
     }
     return owners
   }
-  const byId = new Map()
-  for (const operation of operations) {
-    if (!operation.id) continue
-    byId.set(operation.id, byId.has(operation.id) ? null : operation)
-  }
-  for (const { source, target } of mappings) {
-    const producer = byId.get(source?.operationId), consumer = byId.get(target?.operationId)
-    if (!producer || !consumer) continue
-    const location = target.location
-    if (location === 'body' ? !consumer.requestBody : !consumer.parameters.some(parameter =>
-      parameter.name === target.name && (location === 'parameter' || parameter.in === location))) continue
-    const from = sourceOwners(roots.get(producer.key).response, source)
-    const to = roots.get(consumer.key).response.size ? roots.get(consumer.key).response : roots.get(consumer.key).request
-    for (const owner of from) {
-      for (const destination of to) edge(owner, destination, 'mapping',
-        `${source.property ?? 'value'} → ${target.name ?? 'body'}`, [producer.key, consumer.key])
-      // The consumer uses this entity even when it has no response schema.
-      const node = nodes.get(owner)
-      const endpoint = node.endpoints.get(consumer.key) ?? { operation: consumer, roles: new Set() }
-      endpoint.roles.add(`mapped input: ${target.name ?? 'body'}`)
-      node.endpoints.set(consumer.key, endpoint)
-    }
-  }
-  return {
+  return { roots, sourceOwners,
     nodes: [...nodes.values()].map(node => ({ ...node, endpoints: [...node.endpoints.values()]
       .map(endpoint => ({ ...endpoint, roles: [...endpoint.roles] })) })).sort((a, b) => a.name.localeCompare(b.name)),
     edges: [...edges.values()].map(entry => ({ ...entry, operations: [...entry.operations] })),
   }
+}
+
+export function buildEntityGraph(spec, operations, mappings = [], apis = []) {
+  const contexts = [{ id: 'local', document: spec }, ...apis]
+  const registries = new Map()
+  const nodes = new Map(), edges = new Map()
+  const scoped = (apiId, id) => apiId === 'local' ? id : JSON.stringify([apiId, id])
+  for (const api of contexts) {
+    const graph = readEntityGraph(api.document, operations.filter(operation => (operation.apiId ?? 'local') === api.id))
+    registries.set(api.id, graph)
+    for (const node of graph.nodes) {
+      const id = scoped(api.id, node.id)
+      nodes.set(id, { ...node, id, apiId: api.id,
+        name: api.id === 'local' ? node.name : `${node.name} · ${api.name} [${api.id}]`,
+        endpoints: new Map(node.endpoints.map(entry => [entry.operation.key, { ...entry, roles: new Set(entry.roles) }])) })
+    }
+    for (const edge of graph.edges) {
+      const from = scoped(api.id, edge.from), to = scoped(api.id, edge.to)
+      const id = JSON.stringify([from, to, edge.kind, edge.label])
+      edges.set(id, { ...edge, id, from, to })
+    }
+  }
+  for (const { from: producer, to: consumer, source, name } of resolveMappingLinks(operations, [{ apiId: 'local', mappings }])) {
+    const sourceApi = producer.apiId ?? 'local', targetApi = consumer.apiId ?? 'local'
+    const sourceGraph = registries.get(sourceApi), targetGraph = registries.get(targetApi)
+    const sourceRoots = sourceGraph?.roots.get(producer.key), targetRoots = targetGraph?.roots.get(consumer.key)
+    if (!sourceRoots || !targetRoots) continue
+    const targets = targetRoots.response.size ? targetRoots.response : targetRoots.request
+    for (const owner of sourceGraph.sourceOwners(sourceRoots.response, source)) {
+      const from = scoped(sourceApi, owner)
+      for (const target of targets) {
+        const to = scoped(targetApi, target), label = `${source.property ?? 'value'} → ${name ?? 'body'}`
+        const id = JSON.stringify([from, to, 'mapping', label])
+        const entry = edges.get(id) ?? { id, from, to, kind: 'mapping', label, operations: [] }
+        entry.operations = [...new Set([...entry.operations, producer.key, consumer.key])]
+        edges.set(id, entry)
+      }
+      const node = nodes.get(from)
+      const entry = node.endpoints.get(consumer.key) ?? { operation: consumer, roles: new Set() }
+      entry.roles.add(`mapped input: ${name ?? 'body'}`)
+      node.endpoints.set(consumer.key, entry)
+    }
+  }
+  return { nodes: [...nodes.values()].map(node => ({ ...node, endpoints: [...node.endpoints.values()]
+    .map(entry => ({ ...entry, roles: [...entry.roles] })) })).sort((a, b) => a.name.localeCompare(b.name)), edges: [...edges.values()] }
 }
 
 export function layoutGraph(nodes) {

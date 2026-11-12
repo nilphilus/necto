@@ -83,10 +83,10 @@ async function inspect(id) {
           </path>
           <foreignObject v-for="node in positions" :key="node.id" :x="node.x" :y="node.y" width="265" height="114">
             <button type="button" class="endpoint-node" :class="{ active: selectedId === node.id }" :aria-pressed="selectedId === node.id"
-              :aria-label="'Inspect endpoint ' + node.operation.method + ' ' + node.operation.path" @click="inspect(node.id)">
+              :aria-label="'Inspect endpoint ' + node.operation.method + ' ' + node.operation.path + (node.operation.apiId && node.operation.apiId !== 'local' ? ' [' + node.operation.apiId + ']' : '')" @click="inspect(node.id)">
               <span class="node-title"><span class="method" :data-method="node.operation.method">{{ node.operation.method }}</span><strong :title="node.operation.name">{{ node.operation.name }}</strong></span>
               <code :title="node.operation.path">{{ node.operation.path }}</code>
-              <small>{{ node.incoming }} incoming · {{ node.outgoing }} outgoing</small>
+              <small>{{ node.operation.apiId && node.operation.apiId !== 'local' ? node.operation.apiName + ' [' + node.operation.apiId + '] · ' : '' }}{{ node.incoming }} incoming · {{ node.outgoing }} outgoing</small>
             </button>
           </foreignObject>
         </svg>
@@ -95,6 +95,7 @@ async function inspect(id) {
       <aside class="endpoint-details" aria-label="Selected endpoint details">
         <template v-if="selected">
           <h3 ref="detailsTitle" tabindex="-1" aria-live="polite">{{ selected.operation.name }}</h3>
+          <p v-if="selected.operation.apiId && selected.operation.apiId !== 'local'" class="muted">{{ selected.operation.apiName }} [{{ selected.operation.apiId }}]</p>
           <div class="selected-route"><span class="method" :data-method="selected.operation.method">{{ selected.operation.method }}</span><code>{{ selected.operation.path }}</code></div>
           <p v-if="selected.operation.description" class="muted">{{ selected.operation.description }}</p>
           <button type="button" class="primary open-request" @click="$emit('open-operation', selected.operation)">Open request ↗</button>

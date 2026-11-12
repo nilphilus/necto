@@ -39,3 +39,17 @@ test('selectors preserve nested arrays and exact property names', () => {
   const positions = layoutEndpoints([operation('A'), operation('B')])
   assert.notEqual(positions[0].x, positions[1].x)
 })
+
+test('operation IDs are scoped by API and cross-service arrows retain their direction', () => {
+  const local = { ...operation('Invoices'), apiId: 'local' }
+  const external = { ...operation('Invoices', { parameters: [{ name: 'invoiceId', in: 'path' }] }),
+    apiId: 'billing', key: 'billing:GET /Invoices' }
+  const result = buildEndpointGraph([local, external], [{
+    source: { apiId: 'local', operationId: 'Invoices', property: 'id' },
+    target: { apiId: 'billing', operationId: 'Invoices', location: 'path', name: 'invoiceId' },
+  }])
+  assert.equal(result.edges.length, 1)
+  assert.equal(result.edges[0].from, local.key)
+  assert.equal(result.edges[0].to, external.key)
+  assert.equal(result.nodes[1].incoming, 1)
+})

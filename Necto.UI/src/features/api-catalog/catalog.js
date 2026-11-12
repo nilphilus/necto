@@ -1,4 +1,5 @@
 import { computed, onMounted, ref } from 'vue'
+import { useExternalApis } from '../external-apis/connections.js'
 
 const methods = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace', 'query']
 
@@ -22,7 +23,7 @@ function resolveReference(spec, value) {
   return value
 }
 
-function readOperations(spec) {
+export function readOperations(spec, api = { id: 'local' }) {
   const resolve = value => resolveReference(spec, value)
   return Object.entries(spec.paths ?? {}).flatMap(([path, pathItem]) => {
     const item = resolve(pathItem)
@@ -36,13 +37,18 @@ function readOperations(spec) {
 
       const verb = method.toUpperCase()
       return {
-        key: `${verb} ${path}`,
+        key: api.id === 'local' ? `${verb} ${path}` : JSON.stringify([api.id, verb, path]),
+        apiId: api.id,
+        apiName: api.name ?? spec.info?.title ?? 'Local API',
+        configuration: api.configuration,
+        usePresets: api.usePresets ?? false,
         path,
         method: verb,
         id: operation.operationId,
         name: operation.summary || operation.operationId || path,
         description: operation.description,
-        tags: operation.tags?.length ? [...new Set(operation.tags)] : ['Other'],
+        tags: (operation.tags?.length ? [...new Set(operation.tags)] : ['Other'])
+          .map(tag => api.id === 'local' ? tag : `${api.name} [${api.id}] · ${tag}`),
         parameters: [...parameters.values()],
         requestBody: resolve(operation.requestBody),
         responses: operation.responses ?? {},
@@ -57,7 +63,11 @@ export function useCatalog() {
   const spec = ref(null)
   const configuration = ref(null)
   const error = ref('')
-  const operations = computed(() => spec.value ? readOperations(spec.value) : [])
+  const externalApis = useExternalApis(configuration)
+  const operations = computed(() => spec.value ? [
+    ...readOperations(spec.value),
+    ...externalApis.contexts.value.flatMap(api => readOperations(api.document, api)),
+  ] : [])
   const groups = computed(() => {
     const byTag = new Map((spec.value?.tags ?? []).map(({ name }) => [name, []]))
     for (const operation of operations.value) {
@@ -83,5 +93,5 @@ export function useCatalog() {
     }
   })
 
-  return { spec, configuration, error, operations, groups }
+  return { spec, configuration, error, operations, groups, externalApis }
 }

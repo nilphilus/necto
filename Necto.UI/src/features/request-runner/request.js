@@ -121,7 +121,7 @@ function serializeParameter(parameter, value, url, path) {
 }
 
 function requestUrl(operation, configuration) {
-  const server = operation.server
+  const server = configuration.overrideServer ? undefined : operation.server
   const serverUrl = server?.url.replace(/\{([^}]+)\}/g, (_, name) => {
     const value = server.variables?.[name]?.default
     if (value === undefined) throw new Error(`The API server variable ${name} has no default.`)
@@ -135,6 +135,7 @@ function requestUrl(operation, configuration) {
 }
 
 export function buildRequest(operation, configuration, draft, values = new Map()) {
+  configuration = operation.configuration ?? configuration
   const url = requestUrl(operation, configuration)
   const headers = new Headers()
   const parameters = supportedParameters(operation)

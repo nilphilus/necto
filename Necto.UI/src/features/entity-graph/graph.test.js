@@ -73,3 +73,22 @@ test('nested Preview mapping paths connect their containing model to consumers',
   }])
   assert.ok(result.edges.some(edge => edge.kind === 'mapping' && edge.from === 'schema:Line' && edge.to === 'schema:Detail'))
 })
+
+test('external schemas with identical names stay isolated and cross-API mappings connect them explicitly', () => {
+  const spec = { components: { schemas: { Invoice: { properties: { id: { type: 'integer' } } } } } }
+  const externalSpec = { components: { schemas: { Invoice: { properties: { remoteOnly: { type: 'string' } } } } } }
+  const local = { ...operation('Invoices', ref('Invoice')), apiId: 'local' }
+  const external = { ...operation('Invoices', ref('Invoice'), { parameters: [{ name: 'invoiceId', in: 'path' }] }),
+    apiId: 'billing', apiName: 'Billing', key: 'billing:GET /Invoices' }
+  const result = buildEntityGraph(spec, [local, external], [{
+    source: { apiId: 'local', operationId: 'Invoices', property: 'id' },
+    target: { apiId: 'billing', operationId: 'Invoices', location: 'path', name: 'invoiceId' },
+  }], [{ id: 'billing', name: 'Billing', document: externalSpec }])
+  assert.equal(result.nodes.length, 2)
+  const localNode = result.nodes.find(node => node.apiId === 'local')
+  const remoteNode = result.nodes.find(node => node.apiId === 'billing')
+  assert.ok(remoteNode.schema.properties.remoteOnly)
+  assert.equal(localNode.endpoints.filter(entry => entry.roles.includes('response 200'))[0].operation.key, local.key)
+  assert.equal(remoteNode.endpoints.filter(entry => entry.roles.includes('response 200'))[0].operation.key, external.key)
+  assert.ok(result.edges.some(edge => edge.from === localNode.id && edge.to === remoteNode.id && edge.kind === 'mapping'))
+})

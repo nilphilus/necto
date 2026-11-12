@@ -6,6 +6,7 @@ export function useRequestRunner(configuration) {
 
   function createSession(operation) {
     return reactive({
+      apiId: operation.apiId ?? 'local',
       fields: {},
       body: initialBody(operation),
       result: null,
