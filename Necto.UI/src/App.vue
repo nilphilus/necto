@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import AgentPanel from './features/agents/AgentPanel.vue'
 import NectoSkeleton from './NectoSkeleton.vue'
 import { useCatalog } from './features/api-catalog/catalog.js'
 import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
@@ -535,6 +536,7 @@ function removeScenario(id) {
     <header class="hero">
       <nav v-if="spec" class="view-navigation" aria-label="Workspace views">
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="!graphView" @click="navigateView('')">API</button>
+        <button v-if="configuration?.agentUrl" type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'agent'" @click="navigateView('agent')">Bring your agent</button>
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'scenarios'" @click="navigateView('scenarios')">Scenarios</button>
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'entities'" @click="navigateView('entities')">Entity graph</button>
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'endpoints'" @click="navigateView('endpoints')">Endpoint graph</button>
@@ -596,6 +598,8 @@ function removeScenario(id) {
           </div>
         </aside>
       </Transition>
+      <p v-if="graphView === 'agent' && !configuration?.agentUrl" class="app-message">Bring your agent is not enabled on this server.</p>
+      <AgentPanel v-if="configuration?.agentUrl" v-show="graphView === 'agent'" :spec="spec" :configuration="configuration" :operations="operations" :mappings="endpointMappings" :apis="externalApis.contexts.value" :busy="mappingPending || externalPending" />
       <EntityGraph v-if="graphView === 'entities'" :spec="spec" :apis="externalApis.contexts.value" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <EndpointGraph v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
