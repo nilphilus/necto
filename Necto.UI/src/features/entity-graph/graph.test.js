@@ -1,0 +1,75 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { buildEntityGraph, layoutGraph } from './graph.js'
+const ref = name => ({ $ref: '#/components/schemas/' + name })
+const response = schema => ({ 200: { content: { 'application/json': { schema } } } })
+const operation = (id, schema, extra = {}) => ({ id, key: `GET /${id}`, path: `/${id}`, name: id,
+  method: 'GET', parameters: [], resolve: x => x, responses: response(schema), ...extra })
+
+test('schema references are direct and endpoints include nested entities', () => {
+  const spec = { components: { schemas: {
+    Invoice: { type: 'object', properties: { lines: { type: 'array', items: ref('Line') } } },
+    Line: { type: 'object', properties: { customer: ref('Customer') } },
+    Customer: { type: 'object', properties: { id: { type: 'integer' } } },
+  } } }
+  const result = buildEntityGraph(spec, [operation('Invoices', { type: 'array', items: ref('Invoice') })])
+  assert.equal(result.nodes.length, 3)
+  assert.equal(result.edges.length, 2)
+  assert.ok(result.edges.some(edge => edge.from === 'schema:Invoice' && edge.to === 'schema:Line'))
+  assert.ok(!result.edges.some(edge => edge.from === 'schema:Invoice' && edge.to === 'schema:Customer'))
+  assert.equal(result.nodes.find(node => node.name === 'Customer').endpoints[0].operation.id, 'Invoices')
+})
+
+test('Necto mappings connect entities and associate consumers without a response schema', () => {
+  const spec = { components: { schemas: {
+    Invoice: { properties: { id: { type: 'integer' } } },
+    Line: { properties: { lineId: { type: 'integer' } } },
+  } } }
+  const producer = operation('Invoices', ref('Invoice'))
+  const consumer = operation('Lines', ref('Line'), { parameters: [{ name: 'invoiceId', in: 'path' }] })
+  const noResponse = operation('Delete', null, { responses: {}, parameters: [{ name: 'invoiceId', in: 'path' }] })
+  const mapping = id => ({ source: { operationId: 'Invoices', property: 'id' }, target: { operationId: id, location: 'parameter', name: 'invoiceId' } })
+  const result = buildEntityGraph(spec, [producer, consumer, noResponse], [mapping('Lines'), mapping('Delete'), mapping('Unknown')])
+  assert.ok(result.edges.some(edge => edge.kind === 'mapping' && edge.label === 'id → invoiceId'))
+  const invoice = result.nodes.find(node => node.name === 'Invoice')
+  assert.ok(invoice.endpoints.some(entry => entry.operation.id === 'Delete' && entry.roles.includes('mapped input: invoiceId')))
+})
+
+test('recursive models, inheritance, nullable unions and primitive aliases terminate', () => {
+  const spec = { components: { schemas: {
+    Tree: { properties: { children: { type: 'array', items: ref('Tree') } } },
+    Base: { properties: { id: ref('Id') } },
+    Child: { allOf: [ref('Base'), { properties: { tree: { anyOf: [ref('Tree'), { type: 'null' }] } } }] },
+    Id: { type: 'integer' },
+  } } }
+  const result = buildEntityGraph(spec, [operation('Get', ref('Child'))])
+  assert.equal(result.nodes.length, 3)
+  assert.ok(result.edges.some(edge => edge.from === 'schema:Tree' && edge.to === 'schema:Tree'))
+  assert.ok(result.edges.some(edge => edge.from === 'schema:Child' && edge.to === 'schema:Base' && edge.label === 'allOf'))
+})
+
+test('inline objects, schema parameters, escaped names and empty catalogs', () => {
+  const spec = { components: { schemas: { 'A/B': { properties: { name: { type: 'string' } } } } } }
+  const result = buildEntityGraph(spec, [operation('Inline', { type: 'array', items: { type: 'object', properties: { name: { type: 'string' } } } },
+    { parameters: [{ in: 'query', name: 'entity', schema: ref('A~1B') }] })])
+  assert.equal(result.nodes.length, 2)
+  assert.ok(result.nodes.find(node => node.name === 'A/B').endpoints[0].roles.includes('query entity'))
+  assert.ok(result.nodes.some(node => node.id.startsWith('inline:')))
+  assert.deepEqual(buildEntityGraph({}, []), { nodes: [], edges: [] })
+  const positioned = layoutGraph(result.nodes)
+  assert.equal(new Set(positioned.map(node => `${node.x}:${node.y}`)).size, 2)
+})
+
+test('nested Preview mapping paths connect their containing model to consumers', () => {
+  const spec = { components: { schemas: {
+    Envelope: { properties: { lines: { type: 'array', items: ref('Line') } } },
+    Line: { properties: { lineId: { type: 'integer' } } },
+    Detail: { properties: { lineId: { type: 'integer' } } },
+  } } }
+  const result = buildEntityGraph(spec, [operation('List', ref('Envelope')),
+    operation('Get', ref('Detail'), { parameters: [{ name: 'lineId', in: 'path' }] })], [{
+    source: { operationId: 'List', property: 'lineId', eachItem: false, objectPath: ['lines', null] },
+    target: { operationId: 'Get', location: 'path', name: 'lineId' },
+  }])
+  assert.ok(result.edges.some(edge => edge.kind === 'mapping' && edge.from === 'schema:Line' && edge.to === 'schema:Detail'))
+})

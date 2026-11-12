@@ -127,7 +127,7 @@ export function useRelatedEndpoints(configuration, operations) {
     return links.value.filter(link => link.from.key === operation.key).map(link => sourcePath(link.source))
   }
 
-  return { error, targetsFor, choicesFor, selectablePaths }
+  return { error, targetsFor, choicesFor, selectablePaths, mappings }
 }
 
 export function applyChoice(session, location, choice) {
