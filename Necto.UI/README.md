@@ -160,7 +160,7 @@ while editing; `local` is reserved for the host API. Connection settings and the
 visibility preference are saved in browser local storage for the host OpenAPI
 URL. No server-side configuration is changed.
 
-The **Show external APIs** switch in the API workspace controls external catalog
+The **Show external APIs** switch in **Settings → External APIs** controls external catalog
 groups, related targets, and response-value suggestions. External groups and
 requests show the API name/ID. Hiding the connections returns a mixed request
 chain to its last local step. In-flight metadata loads are canceled; successful
@@ -233,7 +233,7 @@ Use **Settings → Presets** to add a named preset. Choose **Add field**, select
 | Path | `customer` | `customer-42` |
 | Query | `locale` | `pl-PL` |
 
-Check any combination of presets in the API view. For example, enable one preset for `customerId` and another for `assetId`. When multiple presets supply the same field, the most recently enabled preset wins for that field. The browser saves the presets and their activation order for this OpenAPI URL in local storage. Existing saved environments appear as presets.
+Choose presets in the API view header. The selector shows presets that can affect the current endpoint. If you switch endpoints, presets that are hidden keep their selection and activation order. When multiple presets supply the same field, the most recently enabled preset wins for that field. The browser saves the presets and their activation order for this OpenAPI URL in local storage. Existing saved environments appear as presets.
 
 Values match OpenAPI parameters by location and name. Header names are case-insensitive, and configured headers are also sent when the operation omits them from its OpenAPI parameters. Path names are case-sensitive. Query fields prefer exact names and also accept case differences when the match is unambiguous. Necto sends the query parameter name as it appears in OpenAPI. Use strings for values and JSON-encoded strings for array or object parameters. In a route like `/{customer}/Invoice/{id}`, a preset supplies `customer` and the request form supplies `id`.
 
