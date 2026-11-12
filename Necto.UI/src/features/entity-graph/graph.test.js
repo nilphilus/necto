@@ -47,6 +47,20 @@ test('schema references are direct and endpoints include nested entities', () =>
   assert.equal(result.nodes.find(node => node.name === 'Customer').endpoints[0].operation.id, 'Invoices')
 })
 
+test('schema titles are display names and references still use the original keys', () => {
+  const invoiceKey = 'SampleApiFastEndpointsInvoicesInvoice'
+  const spec = { components: { schemas: {
+    [invoiceKey]: { title: ' Invoice ', properties: { line: ref('Line') } },
+    Line: { title: ' ', type: 'object' },
+  } } }
+  const result = buildEntityGraph(spec, [operation('GetInvoice', ref(invoiceKey))])
+  const invoice = result.nodes.find(node => node.id === `schema:${invoiceKey}`)
+  assert.equal(invoice.name, 'Invoice')
+  assert.equal(invoice.endpoints[0].operation.id, 'GetInvoice')
+  assert.ok(result.edges.some(edge => edge.from === invoice.id && edge.to === 'schema:Line'))
+  assert.equal(result.nodes.find(node => node.id === 'schema:Line').name, 'Line')
+})
+
 test('Necto mappings connect entities and associate consumers without a response schema', () => {
   const spec = { components: { schemas: {
     Invoice: { properties: { id: { type: 'integer' } } },
