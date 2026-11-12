@@ -18,7 +18,7 @@ import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
 import { useScenarios } from './features/scenarios/useScenarios.js'
 import { rememberBinding } from './features/scenarios/scenario.js'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
-import { buildRequest, fieldKey, contextKey, resolveRequestValues, supportedParameters } from './features/request-runner/request.js'
+import { buildRequest, fieldKey, contextKey, hasPresetFor, migratePreset, resolveRequestValues } from './features/request-runner/request.js'
 
 const { spec, configuration, error, operations, groups, externalApis } = useCatalog()
 const { sessions, sessionFor, createSession, run } = useRequestRunner(configuration)
@@ -67,13 +67,10 @@ const current = computed(() => chain.value[currentIndex.value])
 const requestValues = computed(() => current.value ? valuesFor(current.value.operation) : new Map())
 const visiblePresetNames = computed(() => {
   if (!current.value) return []
-  const { operation } = current.value
-  const parameterKeys = new Set(supportedParameters(operation).map(contextKey))
-  return [...presets.value].filter(([, preset]) => {
-    const values = valuesFor(operation, [preset])
-    // The request runner also sends preset headers absent from the OpenAPI definition.
-    return [...values.keys()].some(key => key.startsWith('header:') || parameterKeys.has(key))
-  }).map(([name]) => name)
+  const { operation, session } = current.value
+  return [...presets.value]
+    .filter(([, preset]) => hasPresetFor(operation, session.body, valuesFor(operation, [preset])))
+    .map(([name]) => name)
 })
 
 function valuesFor(operation, layers = activePresetValues.value) {
@@ -134,7 +131,8 @@ watch(configuration, () => {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey.value))
     if (!saved) return
-    presets.value = new Map((saved.presets ?? saved.environments).map(([name, values]) => [name, new Map(values)]))
+    presets.value = new Map((saved.presets ?? saved.environments).map(([name, values]) =>
+      [name, saved.version === 2 ? new Map(values) : migratePreset(values)]))
     const active = Array.isArray(saved.active) ? saved.active : [saved.active]
     activePresetNames.value = [...new Set(active.filter(name => presets.value.has(name)))]
   } catch {
@@ -145,7 +143,7 @@ watch(configuration, () => {
 function savePresets() {
   try {
     const entries = Array.from(presets.value, ([name, values]) => [name, [...values]])
-    localStorage.setItem(storageKey.value, JSON.stringify({ active: activePresetNames.value, presets: entries }))
+    localStorage.setItem(storageKey.value, JSON.stringify({ version: 2, active: activePresetNames.value, presets: entries }))
     presetError.value = ''
   } catch {
     presetError.value = 'Could not save presets in this browser.'
