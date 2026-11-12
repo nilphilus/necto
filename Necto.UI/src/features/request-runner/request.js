@@ -27,9 +27,22 @@ function matchingPreset(name, siblings, layer) {
   if (aliases.length === 1) return layer.get(aliases[0])
 }
 
-export function resolveRequestValues(operation, ...layers) {
+const presetOrigins = new WeakMap()
+
+export function presetSource(values, key) { return presetOrigins.get(values)?.parameters.get(key) }
+
+export function resolveRequestValues(operation, ...layers) { return resolveLayers(operation, layers) }
+
+export function resolveNamedRequestValues(operation, ...layers) {
+  const available = layers.filter(entry => entry?.values)
+  return resolveLayers(operation, available.map(entry => entry.values), available.map(entry => entry.name))
+}
+
+function resolveLayers(operation, layers, sourceNames = []) {
   const parameters = supportedParameters(operation)
   const values = new Map()
+  const sources = new Map()
+  presetOrigins.set(values, { parameters: sources, bodyNames: sourceNames })
   const declared = new Set(parameters.map(contextKey))
   const namesByLocation = new Map()
   for (const { in: location, name } of parameters) {
@@ -37,14 +50,20 @@ export function resolveRequestValues(operation, ...layers) {
     namesByLocation.get(location).push(name)
   }
   const activeLayers = layers.filter(Boolean)
-  for (const layer of activeLayers) {
+  for (const [index, layer] of activeLayers.entries()) {
     for (const [name, { value, legacyHeader }] of layer) {
       const headerKey = 'header:' + name.toLowerCase()
-      if (!declared.has(headerKey) && (legacyHeader || values.has(headerKey))) values.set(headerKey, value)
+      if (!declared.has(headerKey) && (legacyHeader || values.has(headerKey))) {
+        values.set(headerKey, value)
+        sources.set(headerKey, sourceNames[index])
+      }
     }
     for (const parameter of parameters) {
       const entry = matchingPreset(parameter.name, namesByLocation.get(parameter.in), layer)
-      if (entry) values.set(contextKey(parameter), entry.value)
+      if (entry) {
+        values.set(contextKey(parameter), entry.value)
+        sources.set(contextKey(parameter), sourceNames[index])
+      }
     }
   }
   if (activeLayers.length && jsonContent(operation)) {
@@ -101,36 +120,54 @@ function bodyValue(value, example) {
 export function applyBodyPresets(operation, body, values) {
   const layers = values.get(bodyPresets)
   const matches = new Set()
-  if (!layers) return { body, matches }
+  const sources = []
+  const sourceNames = presetOrigins.get(values)?.bodyNames ?? []
+  if (!layers) return { body, matches, sources }
   let parsed
-  try { parsed = JSON.parse(body.trim() ? body : '{}') } catch { return { body, matches } }
+  try { parsed = JSON.parse(body.trim() ? body : '{}') } catch { return { body, matches, sources } }
   const shape = schemaExample(operation, jsonContent(operation)?.[1].schema, new Set(), false)
   let applied = false
-  function fill(value, example, root = false) {
-    if (Array.isArray(value)) return value.map((item, index) => fill(item, example?.[index] ?? example?.[0]))
+  function fill(value, example, root = false, path = []) {
+    if (Array.isArray(value)) return value.map((item, index) => fill(item, example?.[index] ?? example?.[0], false, [...path, index]))
     if (!value || typeof value !== 'object') return value
     if (!example || typeof example !== 'object' || Array.isArray(example)) example = {}
     const names = [...new Set([...Object.keys(value), ...Object.keys(example)])]
     const entries = []
     for (const name of names) {
-      const entry = layers.reduce((previous, layer) => matchingPreset(name, names, layer) ?? previous, undefined)
+      let source
+      const entry = layers.reduce((previous, layer, index) => {
+        const candidate = matchingPreset(name, names, layer)
+        if (candidate) source = sourceNames[index]
+        return candidate ?? previous
+      }, undefined)
       const present = Object.hasOwn(value, name)
       const sample = Object.hasOwn(example, name) ? example[name] : undefined
       if (entry) {
         applied = true
+        if (source) sources.push({ path: [...path, name], preset: source })
         if (root) matches.add(name)
         entries.push([name, bodyValue(entry.value, sample ?? (present ? value[name] : undefined))])
       } else if (present) {
-        entries.push([name, fill(value[name], sample)])
+        entries.push([name, fill(value[name], sample, false, [...path, name])])
       } else if (sample && typeof sample === 'object' && !Array.isArray(sample)) {
-        const nested = fill({}, sample)
+        const nested = fill({}, sample, false, [...path, name])
         if (Object.keys(nested).length) entries.push([name, nested])
       }
     }
     return Object.fromEntries(entries)
   }
   const filled = fill(parsed, shape, true)
-  return { body: applied ? formatJson(filled) : body, matches, applied }
+  return { body: applied ? formatJson(filled) : body, matches, applied, sources }
+}
+
+export function presetInputs(operation, body, values) {
+  const parameters = [...(presetOrigins.get(values)?.parameters ?? [])].filter(([, preset]) => preset).map(([key, preset]) => ({
+    key, label: key, preset, value: key.startsWith('header:') ? 'Header value hidden' : String(values.get(key)),
+  }))
+  const fields = applyBodyPresets(operation, body, values).sources.map(({ path, preset }) => ({
+    key: JSON.stringify(path), label: 'body ' + path.map(part => `[${JSON.stringify(part)}]`).join(''), preset,
+  }))
+  return [...parameters, ...fields]
 }
 
 export function hasPresetFor(operation, body, values) {
