@@ -6,6 +6,32 @@ Browse collapsible groups by tag and switch the sidebar between operation names 
 
 When endpoint mappings are configured, **Continue from this response** shows related operations and values. You can send a GET or HEAD directly using a mapped parameter when the active presets or call-flow supplies any other required parameters. Each related request gets its own step in the breadcrumb trail. Select an earlier step to restore its request and response and continue along another branch.
 
+## Entity graph
+
+Choose **Entity graph** in the workspace header to explore models from OpenAPI.
+Each node represents a named object schema or an inline object used by a request
+or successful response. Scalar schemas are excluded; nested models and schema
+parameters are associated with the operations that use them.
+
+Solid arrows show direct schema references (including nested properties and
+composition). Dashed arrows show response-to-request value flows described by
+Necto mappings. These are API model and value-flow connections, not inferred
+database foreign keys. Value flows use the producing response model and the
+consuming operation's response model, or its request model when no response
+model exists. Consumers also appear under their source model's mapped inputs.
+
+Click a node to inspect its connected endpoints and their request/response or
+mapped-input roles. Click an endpoint to open its request editor. Request drafts
+are preserved when switching between API and graph views. Use entity search,
+connection filters, and zoom controls to navigate. The graph overview displays
+up to 100 matching entities; refine the search for larger catalogs. Relationships
+are also listed as buttons in the details panel, and nodes support keyboard
+navigation.
+
+The graph works without endpoint mappings: OpenAPI schema references remain
+available. Only local OpenAPI schema references are resolved. Successful response
+associations use explicit 2xx response codes; error/default responses are omitted.
+
 ## Request presets
 
 Use **Settings → Presets** to add a named preset. Choose **Add field**, select its type, and enter its name and value. For example, add these rows and choose **Save values**.
