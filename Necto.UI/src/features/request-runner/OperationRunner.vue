@@ -65,6 +65,7 @@ function parameterHint(parameter) {
       </header>
 
       <div class="pane-body">
+        <slot name="samples" />
         <p v-if="!parameters.length && !operation.requestBody" class="muted empty">Ready to send. This endpoint has no inputs.</p>
 
         <div v-for="parameter in parameters" :key="fieldKey(parameter)" class="field">
