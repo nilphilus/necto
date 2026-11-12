@@ -295,6 +295,8 @@ search, replace the response, or leave the view to terminate the worker. Search
 never refetches the response or changes API pagination. Browsers without worker
 support retain Preview, Raw and download, and display a search error.
 
+The API workspace reserves a preset column only when presets match the current request. On narrow screens, matching presets are available through a **Presets** disclosure above the full-width request, rather than a permanent side column. Desktop expand/collapse remains independent of the mobile panel.
+
 ## Bring your agent
 
 When the host enables `MapNectoAgent` and configures `agentPath`, the workspace
