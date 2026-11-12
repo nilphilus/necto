@@ -38,6 +38,9 @@ const scenarioBusy = computed(() => scenarioPending.value || mappingPending.valu
 const presets = ref(new Map())
 const activePresetNames = ref([])
 const settingsOpen = ref(false)
+const skeletonWalking = ref(false)
+let stampClicks = 0
+let firstStampClick = 0
 const settingsButton = ref(null)
 const settingsCloseButton = ref(null)
 const graphView = ref('')
@@ -164,6 +167,19 @@ async function toggleSettings() {
   settingsOpen.value = true
   await nextTick()
   settingsCloseButton.value?.focus()
+}
+
+function clickBrandStamp(event) {
+  if (skeletonWalking.value) return
+  if (stampClicks === 0 || event.timeStamp - firstStampClick > 750) {
+    firstStampClick = event.timeStamp
+    stampClicks = 0
+  }
+  stampClicks += 1
+  if (stampClicks === 3) {
+    stampClicks = 0
+    skeletonWalking.value = true
+  }
 }
 
 function closeSettings() {
@@ -342,9 +358,11 @@ function removeScenario(id) {
 <template>
   <div class="brand-track">
     <div class="brand-stamp">
-      <span class="brand-mark" aria-hidden="true">N</span>
-      <span>Necto</span>
-      <NectoSkeleton />
+      <button type="button" class="brand-button" @click="clickBrandStamp">
+        <span class="brand-mark" aria-hidden="true">N</span>
+        <span>Necto</span>
+      </button>
+      <NectoSkeleton v-if="skeletonWalking" @finish="skeletonWalking = false" />
     </div>
   </div>
   <main class="app">
@@ -562,6 +580,12 @@ body { margin: 0; background: #eef2ee; }
   position: absolute;
   top: -.55rem;
   left: var(--stamp-inset);
+  pointer-events: auto;
+}
+.brand-button {
+  position: relative;
+  z-index: 1;
+  cursor: default;
   display: flex;
   align-items: center;
   gap: .45rem;
@@ -573,6 +597,7 @@ body { margin: 0; background: #eef2ee; }
   font-size: .88rem;
   font-weight: 750;
 }
+.brand-button:hover { background: var(--surface); }
 .brand-mark { display: grid; place-items: center; width: 1.65rem; height: 1.65rem; border-radius: .45rem; background: var(--accent); color: white; }
 .api-title small { padding: .125rem .375rem; border: 1px solid var(--line); border-radius: .375rem; color: var(--muted); font-size: .72rem; }
 .layout { display: grid; flex: 1; min-height: 0; grid-template-columns: clamp(14rem, 23vw, 18rem) minmax(0, 1fr); }
