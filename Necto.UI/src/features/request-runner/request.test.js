@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { buildRequest, contextKey, hasPresetFor, migratePreset, resolveRequestValues } from './request.js'
+import { applyBodyPresets, buildRequest, contextKey, hasPresetFor, migratePreset, presetInputs, presetSource, resolveNamedRequestValues, resolveRequestValues } from './request.js'
 import { applySample, readSamples } from './samples.js'
 
 const configuration = { openApiUrl: 'https://api.example/openapi/v1.json' }
@@ -154,4 +154,44 @@ test('canceling a large response parser terminates its worker', async t => {
     text: async () => '"' + 'x'.repeat(1000000) + '"' }))
   await assert.rejects(sendRequest({ url: 'https://api.test', options: { signal: controller.signal } }), { name: 'AbortError' })
   assert.equal(terminated, true)
+})
+
+
+test('named presets identify the winning field even when equal values override each other', () => {
+  const first = preset([['customer', 'acme'], ['X-Tenant', 'tenant']])
+  const last = preset([['CUSTOMER', 'acme']])
+  const values = resolveNamedRequestValues(invoice, { name: 'Base', values: first }, { name: 'Latest', values: last })
+  assert.equal(presetSource(values, 'path:customer'), 'Latest')
+  assert.equal(presetSource(values, 'header:x-tenant'), 'Base')
+  const draft = { fields: { 'path:id': '42' } }
+  const named = buildRequest(invoice, configuration, draft, values)
+  const original = buildRequest(invoice, configuration, draft, resolveRequestValues(invoice, first, last))
+  assert.equal(named.url.href, original.url.href)
+  assert.deepEqual([...named.options.headers], [...original.options.headers])
+})
+test('preset body origins follow winning nested and array fields while preserving typed values', () => {
+  const operation = { ...invoice, method: 'POST', parameters: [], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { nested: { type: 'object', properties: { id: { type: 'integer' } } }, items: { type: 'array', items: { type: 'object', properties: { id: { type: 'integer' }, active: { type: 'boolean' } } } } } } } } } }
+  const values = resolveNamedRequestValues(operation, { name: 'Base', values: preset([['id', '7'], ['active', 'false']]) }, { name: 'Override', values: preset([['ID', '0']]) })
+  const applied = applyBodyPresets(operation, '{"items":[{"id":9,"active":true}]}', values)
+  assert.deepEqual(JSON.parse(applied.body), { nested: { id: 0 }, items: [{ id: 0, active: false }] })
+  assert.deepEqual(new Map(applied.sources.map(source => [JSON.stringify(source.path), source.preset])), new Map([[JSON.stringify(['nested', 'id']), 'Override'], [JSON.stringify(['items', 0, 'id']), 'Override'], [JSON.stringify(['items', 0, 'active']), 'Base']]))
+  assert.equal(presetInputs(operation, '{"items":[{}]}', values).length, 3)
+})
+test('undeclared legacy headers retain accurate later ownership without exposing header values in summaries', () => {
+  const first = migratePreset([['header:Authorization', 'first-secret']])
+  const second = preset([['authorization', 'later-secret']])
+  const operation = { ...invoice, parameters: [] }
+  const values = resolveNamedRequestValues(operation, { name: 'Auth', values: first }, { name: 'Replacement', values: second })
+  assert.equal(values.get('header:authorization'), 'later-secret')
+  assert.equal(presetSource(values, 'header:authorization'), 'Replacement')
+  assert.equal(presetInputs(operation, '', values)[0].value, 'Header value hidden')
+  assert.equal(JSON.stringify(presetInputs(operation, '', values)).includes('secret'), false)
+  assert.equal(hasPresetFor(operation, '', values), true)
+})
+test('unmatched and ambiguous presets do not claim ownership or make an empty request match', () => {
+  const operation = { ...invoice, parameters: [{ in: 'query', name: 'id' }, { in: 'query', name: 'ID' }] }
+  const values = resolveNamedRequestValues(operation, { name: 'Ambiguous', values: preset([['Id', '7']]) })
+  assert.equal(presetSource(values, 'query:id'), undefined)
+  assert.deepEqual(presetInputs(operation, '', values), [])
+  assert.equal(Boolean(hasPresetFor(operation, '', values)), false)
 })

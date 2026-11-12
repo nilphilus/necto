@@ -2,7 +2,7 @@
 import { computed, reactive, watch } from 'vue'
 import ValueInput from './ValueInput.vue'
 const props = defineProps({ target: Object, canSend: Function })
-const emit = defineEmits(['follow'])
+const emit = defineEmits(['follow', 'edit-preset'])
 const drafts = reactive({})
 const fields = computed(() => {
   const groups = new Map()
@@ -48,6 +48,9 @@ const ready = computed(() => props.canSend(props.target.operation, choices.value
         @click="emit('follow', target.operation, choices, false)">Open request</button>
       <small v-if="target.operation.apiId && target.operation.apiId !== 'local'">{{ target.operation.apiName }} [{{ target.operation.apiId }}]</small>
     </div>
+    <ul v-if="target.presetInputs?.length" class="preset-inputs" aria-label="Preset inputs for this request">
+      <li v-for="input in target.presetInputs" :key="input.key"><code>{{ input.label }}<template v-if="input.value !== undefined"> = {{ input.value }}</template></code> · <button type="button" class="preset-link" :aria-label="'Edit preset ' + input.preset" @click="emit('edit-preset', input.preset)">{{ input.preset }}</button></li>
+    </ul>
     <form @submit.prevent="(!quickSend || ready) && emit('follow', target.operation, choices, quickSend)">
       <button v-if="!fields.length && quickSend" type="submit" class="secondary send" :disabled="!ready"
         :aria-label="'Send ' + target.operation.name">Send ↗</button>
@@ -70,6 +73,9 @@ const ready = computed(() => props.canSend(props.target.operation, choices.value
 </template>
 
 <style scoped>
+.preset-inputs { list-style: none; padding: 0; margin: .4rem 0; font-size: .76rem; overflow-wrap: anywhere; }
+.preset-inputs li { padding: .15rem 0; border: 0; }
+.preset-link { color: var(--accent); text-decoration: underline; padding: .1rem .2rem; }
 li { padding: .65rem 0; }
 li + li { border-top: 1px solid var(--line); }
 .destination-title { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; font-size: .87rem; }
