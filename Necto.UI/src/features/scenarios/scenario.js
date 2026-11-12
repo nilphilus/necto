@@ -110,6 +110,8 @@ export function prepareScenario(scenario, { operations, links, configuration, cr
   })
   if (!validateRequests) return plan
   for (const [index, step] of plan.entries()) {
+    step.bindings = step.bindings.filter(binding => binding.location === 'body' ||
+      !step.values.has(contextKey({ in: binding.location, name: binding.name })))
     const draft = { fields: { ...step.session.fields }, body: step.session.body }
     try {
       for (const binding of step.bindings) {
@@ -118,9 +120,6 @@ export function prepareScenario(scenario, { operations, links, configuration, cr
           link.location === binding.location && link.name === binding.name && matchesPath(
             [...sourcePath(link.source), ...(link.source.property === null ? [] : [link.source.property])], binding.path))
         if (!valid) throw new Error(`The mapping from step ${binding.sourceStep + 1} (${pathLabel(binding.path)}) to ${binding.location}:${binding.name ?? 'body'} is no longer available.`)
-        if (binding.location !== 'body' && step.values.has(contextKey({ in: binding.location, name: binding.name }))) {
-          throw new Error(`A preset or override replaces mapped field ${binding.location}:${binding.name}. Remove that override before replaying.`)
-        }
         applyChoice(draft, binding.location, { name: binding.name, value: placeholder(step.operation, binding) })
       }
       buildRequest(step.operation, configuration, draft, step.values)
