@@ -7,17 +7,19 @@ import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
 import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
 import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
 import RelatedTargets from './features/related-endpoints/RelatedTargets.vue'
+import EntityGraph from './features/entity-graph/EntityGraph.vue'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
 import { contextKey, resolveRequestValues, supportedParameters } from './features/request-runner/request.js'
 
 const { spec, configuration, error, operations, groups } = useCatalog()
 const { sessions, sessionFor, createSession, run } = useRequestRunner(configuration)
-const { error: mappingError, targetsFor, choicesFor } = useRelatedEndpoints(configuration, operations)
+const { error: mappingError, targetsFor, choicesFor, mappings: endpointMappings } = useRelatedEndpoints(configuration, operations)
 
 const selectedChain = ref([])
 const presets = ref(new Map())
 const activePresetNames = ref([])
 const settingsOpen = ref(false)
+const graphOpen = ref(false)
 const editedPresetName = ref('')
 const newPresetName = ref('')
 const presetError = ref('')
@@ -102,6 +104,7 @@ function togglePreset(name, enabled) {
 }
 
 function toggleSettings() {
+  graphOpen.value = false
   settingsOpen.value = !settingsOpen.value
   if (settingsOpen.value) {
     editedPresetName.value = activePresetNames.value.at(-1) ?? presets.value.keys().next().value ?? ''
@@ -180,6 +183,7 @@ function selectGroup(name) {
 }
 
 function selectOperation(operation, group) {
+  graphOpen.value = false
   flowOverrides.value = new Map()
   return showChain([{ operation, group, session: sessionFor(operation) }])
 }
@@ -229,6 +233,10 @@ function choose(session, location, choice) {
         </div>
         <p v-if="spec?.info?.description" class="muted">{{ spec.info.description }}</p>
       </div>
+      <nav v-if="spec" class="view-navigation" aria-label="Workspace views">
+        <button type="button" class="secondary" :aria-pressed="!settingsOpen && !graphOpen" @click="settingsOpen = false; graphOpen = false">API</button>
+        <button type="button" class="secondary" :aria-pressed="graphOpen" @click="settingsOpen = false; graphOpen = true">Entity graph</button>
+      </nav>
       <button v-if="spec" type="button" class="secondary settings-toggle" @click="toggleSettings">
         {{ settingsOpen ? 'Back to API' : 'Settings' }}
       </button>
@@ -258,7 +266,9 @@ function choose(session, location, choice) {
           <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
         </section>
       </section>
-      <div v-show="!settingsOpen" class="layout">
+      <EntityGraph v-if="graphOpen" :spec="spec" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
+        @open-operation="operation => selectOperation(operation, operation.tags[0])" />
+      <div v-show="!settingsOpen && !graphOpen" class="layout">
         <EndpointCatalog
           :groups="groups"
           :active-group="current?.group ?? ''"
@@ -362,7 +372,7 @@ body { margin: 0; background: #eef2ee; }
   border: 1px solid var(--line);
   border-radius: .75rem;
 }
-.hero { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--line); }
+.hero { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--line); }
 .api-info { min-width: 0; overflow-wrap: anywhere; }
 .api-title { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-height: 1.65rem; }
 .hero h1 { margin: 0; font-size: 1.05rem; letter-spacing: -.025em; }
@@ -397,7 +407,9 @@ body { margin: 0; background: #eef2ee; }
 .preset-panel > label select { margin-left: .35rem; max-width: 70%; }
 .preset-panel summary { cursor: pointer; width: fit-content; color: var(--accent); }
 .preset-panel p { margin: 0; }
-.settings-toggle { margin-left: auto; flex-shrink: 0; }
+.view-navigation { display: flex; flex-wrap: wrap; gap: .35rem; margin-left: auto; }
+.view-navigation [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.settings-toggle { margin-left: 0; flex-shrink: 0; }
 .settings { flex: 1; }
 .settings h2 { margin: 0 0 1rem; }
 .settings h3 { margin: 0; font-size: 1rem; }

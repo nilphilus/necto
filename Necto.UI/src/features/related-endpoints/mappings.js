@@ -93,7 +93,7 @@ export function useRelatedEndpoints(configuration, operations) {
     return [...choices.values()]
   }
 
-  return { error, targetsFor, choicesFor }
+  return { error, targetsFor, choicesFor, mappings }
 }
 
 export function applyChoice(session, location, choice) {
