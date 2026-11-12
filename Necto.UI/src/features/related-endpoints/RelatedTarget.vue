@@ -45,19 +45,18 @@ const choices = computed(() => fields.value.filter(field => drafts[field.key] !=
       <small v-if="target.operation.apiId && target.operation.apiId !== 'local'">{{ target.operation.apiName }} [{{ target.operation.apiId }}]</small>
     </div>
     <form @submit.prevent="canSend(target.operation, choices) && emit('follow', target.operation, choices, true)">
-      <label v-for="field in fields" :key="field.key">
-        <span>{{ field.name ?? 'body' }} <small>{{ field.location }}</small></span>
-        <ValueInput v-model="drafts[field.key]" :choices="field.choices" placeholder="Type or choose a value…" />
-      </label>
+      <button type="submit" class="secondary" :disabled="!canSend(target.operation, choices)"
+        :aria-label="'Send ' + target.operation.name">Send ↗</button>
+      <div v-if="fields.length" class="fields">
+        <div v-for="field in fields" :key="field.key" class="field">
+          <ValueInput v-model="drafts[field.key]" :choices="field.choices" dropdown placeholder="Type or choose a value…">
+            <template #label>{{ field.name ?? 'body' }} <small>{{ field.location }}</small></template>
+          </ValueInput>
+        </div>
+      </div>
       <small v-if="fields.some(field => field.choices.length >= 200)" class="suggestion-note">
         First 200 suggestions per mapping. Type any value or select an object on any Preview page.
       </small>
-      <div class="actions">
-        <button type="button" class="secondary" :aria-label="'Edit ' + target.operation.name"
-          @click="emit('follow', target.operation, choices, false)">Edit</button>
-        <button type="submit" class="secondary" :disabled="!canSend(target.operation, choices)"
-          :aria-label="'Send ' + target.operation.name">Send ↗</button>
-      </div>
     </form>
   </li>
 </template>
@@ -67,9 +66,9 @@ li { padding: .65rem 0; }
 li + li { border-top: 1px solid var(--line); }
 .destination-title { display: flex; align-items: center; gap: .4rem; font-size: .87rem; }
 form { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin-top: .45rem; }
-label { display: grid; gap: .25rem; min-width: 0; flex: 1 1 12rem; font-size: .8rem; }
-label small { color: var(--muted); }
-label :deep(input) { width: 100%; }
-.actions { display: flex; gap: .3rem; }
-.actions button { padding: .5rem .65rem; color: var(--accent); font-size: .82rem; }
+.fields { display: flex; flex: 1 1 12rem; flex-wrap: wrap; align-items: end; gap: .5rem; min-width: 0; }
+.field { min-width: min(12rem, 100%); max-width: 100%; font-size: .8rem; }
+small { color: var(--muted); }
+form > button { padding: .5rem .65rem; color: var(--accent); font-size: .8rem; }
+.suggestion-note { flex-basis: 100%; }
 </style>
