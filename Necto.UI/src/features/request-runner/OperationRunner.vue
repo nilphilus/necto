@@ -9,6 +9,7 @@ const props = defineProps({
   run: { type: Function, required: true },
   values: { type: Map, required: true },
   selectors: { type: Array, default: () => [] },
+  hasRelated: Boolean,
 })
 
 const parameters = computed(() => supportedParameters(props.operation))
@@ -162,10 +163,17 @@ function parameterHint(parameter) {
 
       <div class="pane-body">
         <template v-if="session.result">
-          <slot name="related" />
+          <div class="response-content" :class="{ 'has-related': hasRelated }">
           <div class="response-body">
             <p class="response-type">{{ session.result.contentType || 'Body' }}</p>
             <ResponsePreview :result="session.result" :selectors="selectors" />
+          </div>
+          <aside v-if="hasRelated" class="response-actions" aria-label="Next request">
+            <details open class="continuation-panel">
+              <summary>Next request</summary>
+              <slot name="related" />
+            </details>
+          </aside>
           </div>
         </template>
         <p v-else class="muted empty">
@@ -178,6 +186,7 @@ function parameterHint(parameter) {
 
 <style scoped>
 .runner {
+  container-type: inline-size;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   border: 1px solid var(--line);
@@ -220,8 +229,16 @@ function parameterHint(parameter) {
 .response-meta { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; color: var(--muted); font-size: .75rem; }
 .status { padding: .22rem .4rem; border-radius: .35rem; background: #ddf3e8; color: #125f41; }
 .status.failed { background: #ffe3e2; color: #8f2225; }
-.response-body { margin-top: .75rem; }
-.response-body:first-child { margin-top: 0; }
+.response-content { display: grid; gap: .85rem; align-items: start; }
+.response-content > * { min-width: 0; }
+.response-body { margin: 0; }
+.response-actions { min-width: 0; }
+.continuation-panel > summary { cursor: pointer; padding: .55rem .7rem; border: 1px solid var(--line); border-radius: .5rem; color: var(--accent); font-size: .82rem; font-weight: 650; background: var(--surface); }
+.continuation-panel[open] > summary { margin-bottom: .5rem; }
+@container (min-width: 48rem) {
+  .response-content.has-related { grid-template-columns: minmax(0, 1fr) 17rem; }
+  .response-actions { position: sticky; top: 1rem; max-height: calc(100dvh - 10rem); overflow: auto; }
+}
 .response-type { margin: 0 0 .35rem; color: var(--muted); font-size: .74rem; overflow-wrap: anywhere; }
 pre { overflow: auto; max-height: 28rem; margin: 0; padding: .8rem; border-radius: .45rem; background: #182420; color: #e7f3eb; }
 </style>
