@@ -40,10 +40,11 @@ public sealed class InvoiceLines : Endpoint<GetInvoiceRequest, InvoiceLineSummar
 
     public override Task HandleAsync(GetInvoiceRequest request, CancellationToken ct)
     {
-        if (!Invoice.Samples.Any(invoice => invoice.Id == request.InvoiceId))
+        var invoiceLines = Resolve<InvoiceStore>().ListLines(request.InvoiceId);
+        if (invoiceLines is null)
             return Send.NotFoundAsync(ct);
 
-        var lines = InvoiceLineSample.All.Where(line => line.InvoiceId == request.InvoiceId)
+        var lines = invoiceLines
             .Select(line => new InvoiceLineSummary(line.LineId, line.InvoiceId, line.Description))
             .ToArray();
         return Send.OkAsync(lines, ct);
@@ -69,7 +70,7 @@ public sealed class InvoiceLine : Endpoint<InvoiceLineRequest, InvoiceLineItem>
 
     public override Task HandleAsync(InvoiceLineRequest request, CancellationToken ct)
     {
-        var line = InvoiceLineSample.All.FirstOrDefault(line => line.LineId == request.LineId);
+        var line = Resolve<InvoiceStore>().FindLine(request.LineId);
         return line is null
             ? Send.NotFoundAsync(ct)
             : Send.OkAsync(new InvoiceLineItem(line.LineId, line.Description, line.Quantity, line.DetailId), ct);
@@ -95,11 +96,7 @@ public sealed class InvoiceLineDetails : Endpoint<InvoiceLineDetailsRequest, Inv
 
     public override Task HandleAsync(InvoiceLineDetailsRequest request, CancellationToken ct)
     {
-        var line = InvoiceLineSample.All.FirstOrDefault(line => line.DetailId == request.DetailId);
-        if (line is null)
-            return Send.NotFoundAsync(ct);
-
-        var currency = Invoice.Samples.Single(invoice => invoice.Id == line.InvoiceId).Currency;
-        return Send.OkAsync(new InvoiceLinePricing(line.LineId, line.Quantity, line.UnitPrice, currency), ct);
+        var pricing = Resolve<InvoiceStore>().FindPricing(request.DetailId);
+        return pricing is null ? Send.NotFoundAsync(ct) : Send.OkAsync(pricing, ct);
     }
 }

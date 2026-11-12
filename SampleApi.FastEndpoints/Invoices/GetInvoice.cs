@@ -21,7 +21,7 @@ public sealed class GetInvoice : Endpoint<GetInvoiceRequest, Invoice>
 
     public override Task HandleAsync(GetInvoiceRequest request, CancellationToken ct)
     {
-        var invoice = Invoice.Samples.FirstOrDefault(invoice => invoice.Id == request.InvoiceId);
+        var invoice = Resolve<InvoiceStore>().Find(request.InvoiceId);
 
         return invoice is null ? Send.NotFoundAsync(ct) : Send.OkAsync(invoice, ct);
     }

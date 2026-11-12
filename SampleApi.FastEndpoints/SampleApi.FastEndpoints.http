@@ -44,6 +44,34 @@ Accept: application/json
 GET {{SampleApi_HostAddress}}/invoices?customerId=7&assetId=101
 Accept: application/json
 
+### Create an invoice with its initial lines
+
+# @name createInvoice
+POST {{SampleApi_HostAddress}}/invoices
+Content-Type: application/json
+
+{
+  "customerId": 7,
+  "assetId": 101,
+  "description": "Cooling unit service",
+  "currency": "PLN",
+  "lines": [
+    { "description": "Inspection", "quantity": 2, "unitPrice": 150 }
+  ]
+}
+
+### Add a line to the newly created invoice
+
+POST {{SampleApi_HostAddress}}/invoices/{{createInvoice.response.body.$.id}}/lines
+Content-Type: application/json
+
+{ "description": "Replacement filter", "quantity": 1, "unitPrice": 75 }
+
+### List the newly created invoice's lines
+
+GET {{SampleApi_HostAddress}}/invoices/{{createInvoice.response.body.$.id}}/lines
+Accept: application/json
+
 ### Get an invoice and its customer and asset IDs
 
 GET {{SampleApi_HostAddress}}/invoices/501

@@ -2,9 +2,11 @@ using FastEndpoints;
 using FastEndpoints.OpenApi;
 using Necto;
 using SampleApi.FastEndpoints;
+using SampleApi.FastEndpoints.Invoices;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddSingleton<InvoiceStore>();
 builder.Services.AddFastEndpoints().OpenApiDocument(options =>
 {
     options.Title = "SampleApi.FastEndpoints";

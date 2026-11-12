@@ -23,7 +23,7 @@ public sealed class ListInvoices : Endpoint<ListInvoicesRequest, Invoice[]>
 
     public override Task HandleAsync(ListInvoicesRequest request, CancellationToken ct)
     {
-        var invoices = Invoice.Samples
+        var invoices = Resolve<InvoiceStore>().List()
             .Where(invoice => (request.CustomerId is null || invoice.CustomerId == request.CustomerId)
                 && (request.AssetId is null || invoice.AssetId == request.AssetId))
             .ToArray();
