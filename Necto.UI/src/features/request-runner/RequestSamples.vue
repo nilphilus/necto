@@ -147,7 +147,7 @@ function toggleDefault(sampleName) {
 </script>
 
 <template>
-  <section v-if="saved.samples.length || (error && !storeOpen)" class="preset-panel samples" aria-label="Request samples">
+  <section v-if="saved.samples.length || (error && !storeOpen)" class="samples" aria-label="Request samples">
     <div v-if="saved.samples.length" class="sample-toolbar">
       <strong>Saved requests</strong>
       <div class="sample-controls">
@@ -207,20 +207,21 @@ function toggleDefault(sampleName) {
 </template>
 
 <style scoped>
-.samples { background: var(--subtle); }
-.sample-toolbar, .sample-controls, .sample-tags { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
-.sample-toolbar { justify-content: space-between; }
+.samples, .sample-toolbar, .sample-controls, .sample-tags { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; }
+.samples { margin-bottom: .6rem; padding-bottom: .35rem; border-bottom: 1px solid var(--line); font-size: .8rem; }
+.samples p { margin: 0; }
+.sample-toolbar { min-width: 0; }
 .sample-controls { min-width: 0; }
 .sample-controls input { width: 10rem; max-width: 100%; min-width: 0; }
-.icon-button.secondary { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; color: var(--accent); }
+.icon-button.secondary { display: grid; place-items: center; width: 1.65rem; height: 1.65rem; padding: 0; color: var(--accent); }
 .icon-button svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
-.sample-tags { list-style: none; padding: 0; margin: 0; }
+.sample-tags { min-width: 0; max-width: 100%; list-style: none; padding: 0; margin: 0; }
 .sample-tag { display: flex; max-width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface); }
 .sample-tag.selected { border-color: var(--accent); background: var(--accent); color: white; }
 .sample-tag button { border: 0; background: transparent; color: inherit; font: inherit; }
 .sample-tag button:hover { text-decoration: underline; }
-.sample-tag .sample-name { min-width: 0; padding: .28rem .55rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sample-tag .sample-default { flex: none; padding: .22rem .55rem .22rem .4rem; border-left: 1px solid var(--line); border-radius: 0 1rem 1rem 0; }
+.sample-tag .sample-name { min-width: 0; padding: .18rem .45rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sample-tag .sample-default { flex: none; padding: .18rem .4rem; border-left: 1px solid var(--line); border-radius: 0 1rem 1rem 0; }
 .sample-default[aria-pressed="true"] { font-weight: 700; }
 fieldset { display: flex; flex-wrap: wrap; gap: .35rem .75rem; min-width: 0; margin: 0; }
 </style>

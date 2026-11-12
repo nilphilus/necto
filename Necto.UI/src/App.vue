@@ -647,30 +647,23 @@ function removeScenario(id) {
         <div ref="workArea" class="work-area">
           <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
           <article v-if="current && !pendingRoute" :inert="scenarioPending" aria-labelledby="endpoint-title">
-            <nav v-if="chain.length > 1" class="breadcrumbs" aria-label="Request chain">
-              <ol>
-                <li v-for="(step, index) in chain" :key="index">
-                  <span v-if="index" class="separator" aria-hidden="true">›</span>
-                  <span v-if="index === currentIndex" aria-current="step">
-                    {{ step.operation.apiId !== 'local' ? step.operation.apiName + ' [' + step.operation.apiId + '] · ' : '' }}{{ step.operation.method }} {{ step.operation.name }}
-                  </span>
-                  <button v-else type="button" @click="selectChainStep(index)">
-                    {{ step.operation.apiId !== 'local' ? step.operation.apiName + ' [' + step.operation.apiId + '] · ' : '' }}{{ step.operation.method }} {{ step.operation.name }}
-                  </button>
-                </li>
-              </ol>
-            </nav>
-            <div class="endpoint-options" role="group" aria-label="Endpoint options">
-              <div class="endpoint-actions">
-                <button class="secondary endpoint-action" type="button" aria-haspopup="dialog" aria-label="Save scenario"
-                  title="Save scenario" @click="scenarioDialog.showModal()">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l4 4v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2 0v6h9V3M7 21v-8h10v8"/></svg>
-                </button>
-                <button class="secondary endpoint-action" type="button" aria-haspopup="dialog" aria-label="Store as sample"
-                  title="Store as sample" @click="requestSamples.openStoreDialog()">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l5 5v4m-5-9v5h5m-1 7v7m-3.5-3.5h7"/></svg>
-                </button>
-              </div>
+            <div class="chain-header">
+              <nav class="breadcrumbs" aria-label="Request chain">
+                <ol>
+                  <li v-for="(step, index) in chain" :key="index">
+                    <span v-if="index" class="separator" aria-hidden="true">›</span>
+                    <span v-if="index === currentIndex" aria-current="step">
+                      {{ step.operation.apiId !== 'local' ? step.operation.apiName + ' [' + step.operation.apiId + '] · ' : '' }}{{ step.operation.method }} {{ step.operation.name }}
+                    </span>
+                    <button v-else type="button" @click="selectChainStep(index)">
+                      {{ step.operation.apiId !== 'local' ? step.operation.apiName + ' [' + step.operation.apiId + '] · ' : '' }}{{ step.operation.method }} {{ step.operation.name }}
+                    </button>
+                  </li>
+                </ol>
+              </nav>
+              <button class="secondary save-scenario" type="button" aria-haspopup="dialog" @click="scenarioDialog.showModal()">
+                Save scenario
+              </button>
             </div>
             <header class="endpoint-header">
               <p v-if="current.operation.apiId !== 'local'" class="external-api-label">{{ current.operation.apiName }} · {{ current.operation.apiId }}</p>
@@ -693,6 +686,11 @@ function removeScenario(id) {
               </form>
             </dialog>
             <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)">
+              <template #request-actions>
+                <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">
+                  Store as sample
+                </button>
+              </template>
               <template #samples>
                 <RequestSamples :key="sampleStorageKey(current.operation)" ref="requestSamples" :storage-key="sampleStorageKey(current.operation)"
                   :operation="current.operation" :session="current.session" :values="requestValues" />
@@ -830,20 +828,6 @@ body { margin: 0; background: #eef2ee; }
 .app-message { margin: 1rem; }
 .mapping-notice { margin: 0 0 1rem; }
 .preset-panel { min-width: 0; margin-inline: 0; display: grid; gap: .45rem; margin-bottom: 1rem; padding: .75rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); font-size: .85rem; }
-.endpoint-options {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: .5rem .7rem;
-  margin-bottom: 1.35rem;
-  padding: .5rem .7rem;
-  border: 1px solid #b9d5c7;
-  border-radius: .5rem;
-  background: var(--accent-soft);
-}
-.endpoint-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; min-width: 0; }
-.endpoint-action.secondary { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; color: var(--accent); }
-.endpoint-action svg { width: 1.05rem; height: 1.05rem; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .preset-color-field { display: flex; align-items: center; gap: .5rem; }
 .preset-color-field input { width: 2.5rem; height: 1.75rem; padding: .15rem; cursor: pointer; }
 .preset-panel > label select { margin-left: .35rem; max-width: 70%; }
@@ -880,7 +864,10 @@ body { margin: 0; background: #eef2ee; }
   .settings-drawer-enter-active, .settings-drawer-leave-active { transition: none; }
 }
 .preset-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .6rem; }
-.breadcrumbs ol { display: flex; flex-wrap: wrap; gap: .25rem; list-style: none; padding: 0; margin: 0 0 .85rem; }
+.chain-header { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .55rem; margin-bottom: .5rem; }
+.breadcrumbs { min-width: 0; }
+.breadcrumbs ol { display: flex; flex-wrap: wrap; gap: .25rem; list-style: none; padding: 0; margin: 0; }
+.save-scenario.secondary { padding: .25rem .5rem; font-size: .82rem; }
 .breadcrumbs li { display: flex; align-items: baseline; gap: .25rem; min-width: 0; font-size: .82rem; overflow-wrap: anywhere; }
 .breadcrumbs button { padding: .3rem .45rem; color: var(--accent); text-align: left; overflow-wrap: anywhere; }
 .breadcrumbs [aria-current] { padding: .3rem .45rem; font-weight: 650; }

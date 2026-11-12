@@ -87,13 +87,16 @@ function parameterHint(parameter) {
     <form ref="form" class="request-pane" @submit.prevent="run(operation, session)">
       <header class="pane-header">
         <h3>Request</h3>
-        <button
-          class="primary"
-          type="submit"
-          :disabled="session.pending || unsupported"
-          aria-keyshortcuts="Control+Enter Meta+Enter"
-          title="Send request (Ctrl or ⌘ + Enter)"
-        >{{ session.pending ? 'Sending…' : 'Send request' }} <span aria-hidden="true">↗</span></button>
+        <div class="request-actions">
+          <slot name="request-actions" />
+          <button
+            class="primary"
+            type="submit"
+            :disabled="session.pending || unsupported"
+            aria-keyshortcuts="Control+Enter Meta+Enter"
+            title="Send request (Ctrl or ⌘ + Enter)"
+          >{{ session.pending ? 'Sending…' : 'Send request' }} <span aria-hidden="true">↗</span></button>
+        </div>
       </header>
 
       <div class="pane-body">
@@ -194,7 +197,8 @@ function parameterHint(parameter) {
   border-bottom: 1px solid var(--line);
 }
 .pane-header h3 { margin: 0; font-size: .88rem; }
-.pane-header button { font-size: .84rem; }
+.request-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.request-actions button, .request-actions :slotted(button) { font-size: .84rem; }
 .pane-header button span { margin-left: .25rem; }
 .pane-body { padding: .85rem; }
 .empty { margin: 0; font-size: .85rem; }
