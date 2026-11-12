@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import NectoSkeleton from './NectoSkeleton.vue'
 import { useCatalog } from './features/api-catalog/catalog.js'
 import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
 import OperationRunner from './features/request-runner/OperationRunner.vue'
@@ -132,15 +133,6 @@ function savePresets() {
 function resetPresetSessions() {
   const selected = current.value
   for (const [key, session] of sessions) {
-  editedPresetName.value = activePresetNames.value.at(-1) ?? presets.value.keys().next().value ?? ''
-  settingsOpen.value = true
-  await nextTick()
-  settingsCloseButton.value?.focus()
-}
-
-function closeSettings() {
-  settingsOpen.value = false
-  settingsButton.value?.focus()
     sessions.set(key, { ...session, result: null, pending: false, error: '' })
   }
   if (selected) {
@@ -163,6 +155,15 @@ async function toggleSettings() {
     closeSettings()
     return
   }
+  editedPresetName.value = activePresetNames.value.at(-1) ?? presets.value.keys().next().value ?? ''
+  settingsOpen.value = true
+  await nextTick()
+  settingsCloseButton.value?.focus()
+}
+
+function closeSettings() {
+  settingsOpen.value = false
+  settingsButton.value?.focus()
 }
 
 function addPreset() {
@@ -300,10 +301,6 @@ async function replayScenario(scenario) {
     async (steps, index) => {
       selectedChain.value = steps
       inspectedScenarioStep.value = index
-  <div class="brand-stamp">
-    <span class="brand-mark" aria-hidden="true">N</span>
-    <span>Necto</span>
-  </div>
       await nextTick()
       scenarioPanel.value?.showProgress()
     })
@@ -327,6 +324,13 @@ function removeScenario(id) {
 </script>
 
 <template>
+  <div class="brand-track">
+    <div class="brand-stamp">
+      <span class="brand-mark" aria-hidden="true">N</span>
+      <span>Necto</span>
+      <NectoSkeleton />
+    </div>
+  </div>
   <main class="app">
     <header class="hero">
       <nav v-if="spec" class="view-navigation" aria-label="Workspace views">
@@ -474,10 +478,6 @@ function removeScenario(id) {
                   @follow="follow"
                 />
               </template>
-  position: relative;
-  margin: var(--app-gutter);
-}
-.app {
             </OperationRunner>
           </article>
           <p v-else class="mapping-notice muted">No endpoints in this document.</p>
@@ -505,6 +505,10 @@ function removeScenario(id) {
 body { margin: 0; background: #eef2ee; }
 #app {
   --app-gutter: 1rem;
+  position: relative;
+  margin: var(--app-gutter);
+}
+.app {
   display: flex;
   flex-direction: column;
   height: calc(100dvh - 2 * var(--app-gutter));
@@ -519,10 +523,18 @@ body { margin: 0; background: #eef2ee; }
 .api-title { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .5rem; min-height: 1.65rem; }
 .hero h1 { margin: 0; font-size: 1.05rem; letter-spacing: -.025em; }
 .hero p { margin: .25rem 0 0; font-size: .82rem; }
+.brand-track {
+  position: absolute;
+  z-index: 1;
+  inset: 0 0 auto;
+  container-type: inline-size;
+  pointer-events: none;
+}
 .brand-stamp {
+  --stamp-inset: .8rem;
   position: absolute;
   top: -.55rem;
-  left: .8rem;
+  left: var(--stamp-inset);
   display: flex;
   align-items: center;
   gap: .45rem;
@@ -533,6 +545,7 @@ body { margin: 0; background: #eef2ee; }
   color: var(--accent);
   font-size: .88rem;
   font-weight: 750;
+  pointer-events: auto;
 }
 .brand-mark { display: grid; place-items: center; width: 1.65rem; height: 1.65rem; border-radius: .45rem; background: var(--accent); color: white; }
 .api-title small { padding: .125rem .375rem; border: 1px solid var(--line); border-radius: .375rem; color: var(--muted); font-size: .72rem; }
@@ -562,11 +575,6 @@ body { margin: 0; background: #eef2ee; }
 .preset-chip[aria-pressed="true"]:hover { background: #104737; }
 .preset-panel > label select { margin-left: .35rem; max-width: 70%; }
 .preset-panel summary { cursor: pointer; width: fit-content; color: var(--accent); }
-.settings-drawer-enter-active, .settings-drawer-leave-active { transition: transform 180ms ease-out; }
-.settings-drawer-enter-from, .settings-drawer-leave-to { transform: translateX(calc(100% + var(--app-gutter))); }
-@media (prefers-reduced-motion: reduce) {
-  .settings-drawer-enter-active, .settings-drawer-leave-active { transition: none; }
-}
 .preset-panel p { margin: 0; }
 .external-toggle label { display: flex; gap: .5rem; align-items: center; font-weight: 650; }
 .external-toggle input[role="switch"] { appearance: none; position: relative; width: 2.25rem; height: 1.3rem; margin: 0; border: 1px solid #9bad9f; border-radius: 999px; background: #cbd8cf; cursor: pointer; flex-shrink: 0; }
@@ -595,6 +603,11 @@ body { margin: 0; background: #eef2ee; }
 .settings h3 { margin: 0; font-size: 1rem; }
 .settings .preset-panel { max-width: 48rem; gap: .85rem; justify-items: start; }
 .settings .preset-panel > label { width: 100%; }
+.settings-drawer-enter-active, .settings-drawer-leave-active { transition: transform 180ms ease-out; }
+.settings-drawer-enter-from, .settings-drawer-leave-to { transform: translateX(calc(100% + var(--app-gutter))); }
+@media (prefers-reduced-motion: reduce) {
+  .settings-drawer-enter-active, .settings-drawer-leave-active { transition: none; }
+}
 .preset-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .6rem; }
 .breadcrumbs ol { display: flex; flex-wrap: wrap; gap: .25rem; list-style: none; padding: 0; margin: 0 0 .85rem; }
 .breadcrumbs li { display: flex; align-items: baseline; gap: .25rem; min-width: 0; font-size: .82rem; overflow-wrap: anywhere; }
@@ -610,7 +623,6 @@ body { margin: 0; background: #eef2ee; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { border: 0; border-radius: .45rem; background: transparent; cursor: pointer; }
 button:hover { background: var(--accent-soft); }
-  .settings { overflow: auto; }
 button:disabled { cursor: default; opacity: .65; }
 :focus-visible { outline: 2px solid #257f67; outline-offset: 2px; }
 input:not([type="checkbox"]), select, textarea {
@@ -639,5 +651,6 @@ input:not([type="checkbox"]), select, textarea {
   .app { height: auto; min-height: calc(100dvh - 2 * var(--app-gutter)); }
   .layout { grid-template-columns: minmax(0, 1fr); }
   .work-area { overflow: visible; padding: 1rem; }
+  .settings { overflow: auto; }
 }
 </style>
