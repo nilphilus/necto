@@ -30,6 +30,10 @@ const inspectedScenarioStep = ref(null)
 const scenarioPanel = ref(null)
 const scenarioStore = useScenarios(configuration)
 const { scenarios, state: scenarioState, pending: scenarioPending, error: scenarioError } = scenarioStore
+const scenarioName = ref('')
+const editingScenarioId = ref('')
+const overwriteScenario = computed(() => scenarios.value.find(scenario =>
+  scenario.id === editingScenarioId.value && scenario.name === scenarioName.value.trim()))
 const scenarioBusy = computed(() => scenarioPending.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
 const presets = ref(new Map())
 const activePresetNames = ref([])
@@ -57,11 +61,11 @@ const currentIndex = computed(() => inspectedScenarioStep.value === null ? chain
 const current = computed(() => chain.value[currentIndex.value])
 const requestValues = computed(() => current.value ? valuesFor(current.value.operation) : new Map())
 
-function valuesFor(operation) {
+function valuesFor(operation, layers) {
   if (operation.apiId && operation.apiId !== 'local') {
-    return operation.usePresets ? resolveRequestValues(operation, ...activePresetValues.value) : new Map()
+    return operation.usePresets ? resolveRequestValues(operation, ...(layers ?? activePresetValues.value)) : new Map()
   }
-  return resolveRequestValues(operation, ...activePresetValues.value, flowOverrides.value)
+  return resolveRequestValues(operation, ...(layers ?? [...activePresetValues.value, flowOverrides.value]))
 }
 
 watch(operations, available => {
@@ -137,6 +141,7 @@ function resetPresetSessions() {
   }
   if (selected) {
     flowOverrides.value = new Map()
+    editingScenarioId.value = ''
     const { operation, group } = selected
     selectedChain.value = [{ operation, group, session: sessionFor(operation) }]
   }
@@ -246,6 +251,8 @@ function selectGroup(name) {
 function selectOperation(operation, group) {
   graphView.value = ''
   flowOverrides.value = new Map()
+  editingScenarioId.value = ''
+  scenarioName.value = ''
   return showChain([{ operation, group, session: sessionFor(operation) }])
 }
 
@@ -282,28 +289,34 @@ function choose(session, location, choice, sourceIndex) {
     session.error = cause.message
   }
 }
-function scenarioContext() {
+function scenarioContext(requestValuesFor = valuesFor) {
   return { operations: operations.value, links: mappingLinks.value, configuration: configuration.value,
-    createSession, valuesFor }
+    createSession, valuesFor: requestValuesFor }
 }
-function saveScenario(name, id) {
-  try { scenarioStore.save(chain.value, name, id, valuesFor) }
+function saveScenario() {
+  try {
+    const saved = scenarioStore.save(chain.value, scenarioName.value, overwriteScenario.value?.id, valuesFor)
+    editingScenarioId.value = saved.id
+    scenarioName.value = saved.name
+  }
   catch (cause) { scenarioError.value = cause.message }
 }
 function openScenario(scenario) {
   const steps = scenarioStore.open(scenario, scenarioContext())
-  if (steps) void showChain(steps, 0)
+  if (!steps) return
+  editingScenarioId.value = scenario.id
+  scenarioName.value = scenario.name
+  graphView.value = ''
+  void showChain(steps, 0)
 }
-async function replayScenario(scenario) {
+async function replayScenario(scenario, presetNames) {
   if (scenarioBusy.value) return
-  await scenarioStore.run(scenario, scenarioContext(),
-    (operation, session, values, signal) => run(operation, session, values, { signal }),
-    async (steps, index) => {
-      selectedChain.value = steps
-      inspectedScenarioStep.value = index
-      await nextTick()
-      scenarioPanel.value?.showProgress()
-    })
+  const layers = presetNames.map(name => presets.value.get(name))
+  const replay = scenarioStore.run(scenario, scenarioContext(operation => valuesFor(operation, layers)),
+    (operation, session, values, signal) => run(operation, session, values, { signal }))
+  await nextTick()
+  scenarioPanel.value?.showProgress()
+  await replay
 }
 function inspectScenario(index) {
   const byKey = new Map(operations.value.map(operation => [operation.key, operation]))
@@ -314,6 +327,9 @@ function inspectScenario(index) {
     return
   }
   scenarioError.value = ''
+  editingScenarioId.value = scenarioState.id
+  scenarioName.value = scenarioState.name
+  graphView.value = ''
   void showChain(visible.map(step => ({ ...step, operation: byKey.get(step.operation.key) })), index)
 }
 function removeScenario(id) {
@@ -335,6 +351,7 @@ function removeScenario(id) {
     <header class="hero">
       <nav v-if="spec" class="view-navigation" aria-label="Workspace views">
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="!graphView" @click="graphView = ''">API</button>
+        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'scenarios'" @click="graphView = 'scenarios'">Scenarios</button>
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'entities'" @click="graphView = 'entities'">Entity graph</button>
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'endpoints'" @click="graphView = 'endpoints'">Endpoint graph</button>
       </nav>
@@ -392,6 +409,10 @@ function removeScenario(id) {
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <EndpointGraph v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
+      <ScenarioPanel v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState"
+        :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
+        :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"
+        @remove="removeScenario" @stop="scenarioStore.stop" @inspect="inspectScenario" />
       <div v-show="!graphView" class="layout">
         <EndpointCatalog :inert="scenarioPending"
           :groups="groups"
@@ -426,9 +447,6 @@ function removeScenario(id) {
             <p v-else class="muted">Add presets in Settings.</p>
             <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
           </fieldset>
-          <ScenarioPanel ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :pending="scenarioPending" :busy="scenarioBusy"
-            :chain-length="chain.length" :error="scenarioError" @save="saveScenario" @open="openScenario" @run="replayScenario"
-            @remove="removeScenario" @stop="scenarioStore.stop" @inspect="inspectScenario" />
           <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
           <article v-if="current" :inert="scenarioPending" aria-labelledby="endpoint-title">
             <nav v-if="chain.length > 1" class="breadcrumbs" aria-label="Request chain">
@@ -453,6 +471,15 @@ function removeScenario(id) {
               </div>
               <p v-if="current.operation.description" class="muted">{{ current.operation.description }}</p>
             </header>
+            <details class="preset-panel scenario-save">
+              <summary>Save scenario</summary>
+              <form @submit.prevent="saveScenario">
+                <label>Scenario name <input v-model="scenarioName" required maxlength="120" placeholder="Invoice details"></label>
+                <button class="secondary" type="submit" :disabled="scenarioBusy">{{ overwriteScenario ? 'Update scenario' : 'Save current chain' }} ({{ chain.length }} steps)</button>
+              </form>
+              <p v-if="scenarioError" class="error" role="alert">{{ scenarioError }}</p>
+              <p v-else-if="overwriteScenario && scenarioState.status === 'saved' && scenarioState.id === overwriteScenario.id" role="status">Scenario saved.</p>
+            </details>
             <details v-if="current.operation.apiId === 'local'" class="preset-panel">
               <summary>Call-flow overrides<span v-if="flowOverrides.size"> ({{ flowOverrides.size }})</span></summary>
               <ValuesEditor :values="flowOverrides" label="Values for this call-flow" @save="flowOverrides = $event" />
@@ -545,7 +572,6 @@ body { margin: 0; background: #eef2ee; }
   color: var(--accent);
   font-size: .88rem;
   font-weight: 750;
-  pointer-events: auto;
 }
 .brand-mark { display: grid; place-items: center; width: 1.65rem; height: 1.65rem; border-radius: .45rem; background: var(--accent); color: white; }
 .api-title small { padding: .125rem .375rem; border: 1px solid var(--line); border-radius: .375rem; color: var(--muted); font-size: .72rem; }
@@ -576,6 +602,10 @@ body { margin: 0; background: #eef2ee; }
 .preset-panel > label select { margin-left: .35rem; max-width: 70%; }
 .preset-panel summary { cursor: pointer; width: fit-content; color: var(--accent); }
 .preset-panel p { margin: 0; }
+.scenario-save summary { cursor: pointer; font-weight: 650; }
+.scenario-save form { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin-block: .65rem; }
+.scenario-save label { display: grid; gap: .3rem; flex: 1 1 14rem; }
+.scenario-save input { width: 100%; min-width: 0; }
 .external-toggle label { display: flex; gap: .5rem; align-items: center; font-weight: 650; }
 .external-toggle input[role="switch"] { appearance: none; position: relative; width: 2.25rem; height: 1.3rem; margin: 0; border: 1px solid #9bad9f; border-radius: 999px; background: #cbd8cf; cursor: pointer; flex-shrink: 0; }
 .external-toggle input[role="switch"]::before { content: ''; position: absolute; top: .12rem; left: .13rem; width: .94rem; height: .94rem; border-radius: 50%; background: white; box-shadow: 0 1px 3px #0003; }

@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { snapshotScenario, rememberBinding, prepareScenario, executeScenario, readResponseAt, validateScenario } from './scenario.js'
 import { applyChoice } from '../related-endpoints/mappings.js'
+import { buildRequest } from '../request-runner/request.js'
 
 const op = (name, path, parameters = [], extra = {}) => ({ key: `GET ${path}`, apiId: 'local', id: name, name,
   method: 'GET', path, tags: ['Invoices'], parameters, resolve: schema => schema, ...extra })
@@ -56,13 +57,33 @@ test('replay uses fresh IDs from each new response and retains the selected arra
   }
 })
 
-test('all steps are preflighted before execution; hidden APIs, changed mappings, and preset conflicts are rejected', () => {
+test('all steps are preflighted before execution; hidden APIs and changed mappings are rejected', () => {
   const scenario = snapshotScenario(captured(), 'Invoice flow', 'scenario-1')
   assert.throws(() => prepareScenario(scenario, context({ operations: [list, lines] })), /unavailable/)
   assert.throws(() => prepareScenario(scenario, context({ links: [] })), /no longer available/)
-  assert.throws(() => prepareScenario(scenario, context({ valuesFor: () => new Map([['path:lineId', 'old']]) })), /replaces mapped field/)
   const broken = structuredClone(scenario); broken.steps[2].bindings = []
   assert.throws(() => prepareScenario(broken, context()), /lineId is required/)
+})
+
+test('run presets override saved literals and response bindings without changing the saved scenario', async () => {
+  const chain = captured()
+  chain[2].session.fields['path:lineId'] = '18'
+  chain[2].session.bindings = []
+  const scenario = snapshotScenario(chain, 'Invoice flow', 'scenario-1')
+  const saved = structuredClone(scenario)
+  const runContext = context({ valuesFor: () => new Map([['path:invoiceId', '70'], ['path:lineId', '90']]) })
+  const plan = prepareScenario(scenario, runContext)
+  const paths = []
+  const result = await executeScenario(plan, { signal: new AbortController().signal,
+    execute: async (operation, session, values) => {
+      paths.push(buildRequest(operation, runContext.configuration, session, values).url.pathname)
+      return response([])
+    } })
+
+  assert.equal(result.status, 'completed')
+  assert.deepEqual(paths, ['/invoices', '/invoices/70/lines', '/lines/90'])
+  assert.deepEqual(scenario, saved)
+  assert.deepEqual(prepareScenario(scenario, context())[1].bindings, saved.steps[1].bindings)
 })
 
 test('missing values and HTTP failures stop the chain without stale fallback IDs', async () => {

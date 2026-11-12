@@ -54,8 +54,8 @@ These are a development baseline, not a cross-device performance guarantee.
 ## Saved scenarios
 
 Build a request chain using **Continue from this response**, then open
-**Scenarios** in the API workspace, enter a name, and choose **Save current
-chain**. Scenarios are stored locally in the browser, scoped to the host OpenAPI
+**Save scenario** on the request, enter a name, and choose **Save current
+chain**. Browse saved chains in the **Scenarios** workspace. Scenarios are stored locally in the browser, scoped to the host OpenAPI
 URL. A scenario can contain up to 100 steps.
 
 Values selected through related requests or response suggestions from an earlier
@@ -75,16 +75,17 @@ name to save a separate copy. Response-bound inputs in a newly opened scenario
 remain empty until the scenario runs. Editing a scenario does not automatically
 change its saved definition: save changes before pressing **Run scenario**.
 
-Runs use the current presets and request context, frozen at the beginning of
-the run. Preset-controlled inputs, values recorded as response bindings, and response
+Choose **Run…** in the scenario list to select presets for that run. The active
+request presets are preselected and you can clear or change the selection.
+Selected presets override matching saved inputs and response bindings for that
+run. The last selected preset wins when values overlap. Preset-controlled inputs, values recorded as response bindings, and response
 bodies are not copied into scenario storage. Manually entered request inputs, including
 JSON bodies, are stored as supplied; request presets are suitable for reusable
 authentication values. External API preset opt-in rules still apply.
 
 Before any request is sent, Necto checks operation availability, configured
 bindings, required inputs and JSON body syntax. Actual response values are
-resolved when the source step finishes. A preset or override replacing a mapped input is reported
-as a conflict. External API steps require a visible, loaded connection. Invalid
+resolved when the source step finishes. External API steps require a visible, loaded connection. Invalid
 or removed mappings stop preflight; no requests are sent in that case. API-side
 validation and business rules still apply when the request executes.
 

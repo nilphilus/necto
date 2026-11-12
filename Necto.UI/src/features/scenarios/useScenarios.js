@@ -55,7 +55,7 @@ export function useScenarios(configuration) {
       return null
     }
   }
-  async function run(scenario, context, execute, onStep) {
+  async function run(scenario, context, execute) {
     if (pending.value) return
     state.error = ''; error.value = ''
     let plan
@@ -68,8 +68,7 @@ export function useScenarios(configuration) {
     pending.value = true
     Object.assign(state, { id: scenario.id, name: scenario.name, status: 'running', steps: plan, error: '' })
     try {
-      const outcome = await executeScenario(state.steps, { execute, signal: controller.signal,
-        onStep: index => onStep(state.steps, index) })
+      const outcome = await executeScenario(state.steps, { execute, signal: controller.signal })
       Object.assign(state, outcome)
     } finally { pending.value = false; controller = undefined }
   }

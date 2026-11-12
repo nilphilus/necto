@@ -1,25 +1,28 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { ref } from 'vue'
 import { pathLabel } from './scenario.js'
-const props = defineProps({ scenarios: Array, state: Object, pending: Boolean, busy: Boolean, chainLength: Number, error: String })
-const emit = defineEmits(['save', 'open', 'run', 'remove', 'stop', 'inspect'])
-const name = ref('')
-const opened = ref(false)
+const props = defineProps({ scenarios: Array, state: Object, pending: Boolean, busy: Boolean, error: String,
+  presetNames: Array, activePresetNames: Array })
+const emit = defineEmits(['open', 'run', 'remove', 'stop', 'inspect'])
+const runId = ref('')
+const selectedPresets = ref([])
 const progressTitle = ref(null)
 defineExpose({ showProgress: () => progressTitle.value?.scrollIntoView({ block: 'nearest', behavior: 'instant' }) })
-const active = computed(() => props.scenarios.find(item => item.id === props.state.id))
-const overwriting = computed(() => active.value && active.value.name === name.value.trim())
-watch(() => props.state.id, () => { name.value = active.value?.name ?? '' })
+
+function configureRun(scenario) {
+  selectedPresets.value = [...props.activePresetNames]
+  runId.value = scenario.id
+}
+
+function runScenario(scenario) {
+  if (props.busy) return
+  emit('run', scenario, selectedPresets.value.filter(name => props.presetNames.includes(name)))
+  runId.value = ''
+}
 </script>
 <template>
-  <details class="scenario-panel preset-panel" :open="opened || pending" @toggle="opened = $event.target.open">
-    <summary>Scenarios <span v-if="scenarios.length">({{ scenarios.length }})</span><span v-if="pending"> · Running…</span></summary>
-    <p class="muted">Save a request chain and replay it with fresh response values. Runs use your current request presets and context. Open to edit inputs, then save changes before running again.</p>
-    <form class="save-scenario" @submit.prevent="emit('save', name, overwriting ? active.id : undefined)">
-      <label>Scenario name <input v-model="name" required maxlength="120" placeholder="Invoice details" :disabled="pending"></label>
-      <button class="secondary" type="submit" :disabled="busy || !chainLength">{{ overwriting ? 'Update scenario' : 'Save current chain' }} ({{ chainLength }} steps)</button>
-    </form>
-    <small class="muted">Stores request inputs and response selectors locally for this API. Response bodies and values supplied by presets are not stored. Array selections replay by index.</small>
+  <section class="scenario-panel work-area" aria-labelledby="scenarios-title">
+    <h2 id="scenarios-title">Scenarios</h2>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <ul class="saved-list">
       <li v-for="scenario in scenarios" :key="scenario.id">
@@ -29,18 +32,36 @@ watch(() => props.state.id, () => { name.value = active.value?.name ?? '' })
             <li v-for="(step, index) in scenario.steps" :key="index">
               <span class="method" :data-method="step.method">{{ step.method }}</span> <code>{{ step.path }}</code><small>{{ step.apiId }}</small>
               <p v-for="binding in step.bindings" :key="JSON.stringify([binding.location, binding.name])" class="binding-note">Step {{ binding.sourceStep + 1 }} <code>{{ pathLabel(binding.path) }}</code> → {{ binding.name ?? 'body' }}</p>
-              <small v-if="!step.bindings.length">Saved inputs / current presets</small>
             </li>
           </ol>
         </details>
         <div class="actions">
           <button type="button" class="secondary" :disabled="busy" :aria-label="'Open scenario ' + scenario.name" @click="emit('open', scenario)">Open</button>
-          <button type="button" class="primary" :disabled="busy" :aria-label="'Run scenario ' + scenario.name" @click="emit('run', scenario)">Run scenario ↗</button>
+          <button type="button" class="primary" :disabled="busy" :aria-expanded="runId === scenario.id"
+            :aria-label="'Configure run for ' + scenario.name" @click="configureRun(scenario)">Run…</button>
           <button type="button" class="secondary" :disabled="pending" :aria-label="'Delete scenario ' + scenario.name" @click="emit('remove', scenario.id)">Delete</button>
         </div>
+        <form v-if="runId === scenario.id" class="run-form" @submit.prevent="runScenario(scenario)">
+          <fieldset v-if="presetNames.length" :disabled="busy">
+            <legend>Presets for this run</legend>
+            <div class="preset-options">
+              <label v-for="name in presetNames" :key="name">
+                <input v-model="selectedPresets" type="checkbox" :value="name">
+                {{ name }}
+              </label>
+            </div>
+            <p class="muted">Selected presets override matching scenario inputs. The last selected preset wins when values overlap.</p>
+            <p v-if="selectedPresets.length" class="muted">Applied in order: {{ selectedPresets.join(' → ') }}</p>
+          </fieldset>
+          <p v-else class="muted">This run will use saved inputs and response bindings.</p>
+          <div class="actions">
+            <button type="submit" class="primary" :disabled="busy">Run scenario</button>
+            <button type="button" class="secondary" @click="runId = ''">Cancel</button>
+          </div>
+        </form>
       </li>
     </ul>
-    <p v-if="!scenarios.length" class="muted">Build a chain using related requests, then save it here.</p>
+    <p v-if="!scenarios.length" class="muted">Save a request chain from the API view to see it here.</p>
     <section v-if="state.id" class="run-status" aria-label="Scenario execution">
       <div ref="progressTitle" class="saved-title"><strong>{{ state.name }}</strong><span role="status" aria-live="polite">{{ state.status }}</span><button v-if="pending" type="button" class="secondary" @click="emit('stop')">Stop scenario</button></div>
       <p v-if="state.error" class="error" role="alert">{{ state.error }}</p>
@@ -55,13 +76,16 @@ watch(() => props.state.id, () => { name.value = active.value?.name ?? '' })
       </ol>
       <small v-if="pending" class="muted">Stop prevents later steps. A request already received by the API may still finish.</small>
     </section>
-  </details>
+  </section>
 </template>
 <style scoped>
-.scenario-panel { gap: .7rem; }
-.scenario-panel > summary { font-weight: 650; }
+.scenario-panel { flex: 1; min-height: 0; }
+.scenario-panel h2 { margin: 0 0 1rem; }
 .scenario-panel p { margin: 0; font-size: .8rem; }
-.save-scenario { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; }.save-scenario label { display: grid; gap: .3rem; flex: 1 1 14rem; }.save-scenario input { min-width: 0; width: 100%; }.save-scenario button { padding: .5rem .7rem; }
+.run-form { margin-top: .75rem; }
+.run-form fieldset { min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: .45rem; }
+.run-form label { display: flex; align-items: center; gap: .25rem; overflow-wrap: anywhere; }
+.run-form p { margin-top: .4rem; }
 ul { list-style: none; margin: 0; padding: 0; }.saved-list > li { border-top: 1px solid var(--line); padding: .7rem 0; }.saved-title { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }.saved-title span { font-size: .75rem; }
 .actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }.actions button { font-size: .8rem; }
 .review { margin-top: .4rem; font-size: .78rem; }.review summary { color: var(--muted); }.review ol, .run-status ol { padding-left: 1.3rem; margin: .5rem 0; }.review li { padding: .3rem 0; overflow-wrap: anywhere; }.review small { display: block; color: var(--muted); }.review .binding-note { font-size: .72rem; margin: .2rem 0; color: var(--accent); }
