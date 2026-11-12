@@ -32,6 +32,8 @@ const scenarioPanel = ref(null)
 const scenarioStore = useScenarios(configuration)
 const { scenarios, state: scenarioState, runs: scenarioRuns, pending: scenarioPending, error: scenarioError } = scenarioStore
 const scenarioName = ref('')
+const scenarioDialog = ref(null)
+const requestSamples = ref(null)
 const editingScenarioId = ref('')
 const overwriteScenario = computed(() => scenarios.value.find(scenario =>
   scenario.id === editingScenarioId.value && scenario.name === scenarioName.value.trim()))
@@ -329,6 +331,7 @@ function saveScenario() {
     const saved = scenarioStore.save(chain.value, scenarioName.value, overwriteScenario.value?.id, valuesFor)
     editingScenarioId.value = saved.id
     scenarioName.value = saved.name
+    scenarioDialog.value?.close()
   }
   catch (cause) { scenarioError.value = cause.message }
 }
@@ -471,16 +474,28 @@ function removeScenario(id) {
                 </li>
               </ol>
             </nav>
-            <div v-if="visiblePresetNames.length" class="preset-bar" role="group" aria-label="Presets">
-              <span class="preset-bar-label" aria-hidden="true">Presets</span>
-              <button
-                v-for="name in visiblePresetNames"
-                :key="name"
-                type="button"
-                class="preset-chip"
-                :aria-pressed="activePresetNames.includes(name)"
-                @click="togglePreset(name, !activePresetNames.includes(name))"
-              >{{ name }}</button>
+            <div class="endpoint-options" role="group" aria-label="Endpoint options">
+              <div class="endpoint-actions">
+                <button class="secondary endpoint-action" type="button" aria-haspopup="dialog" aria-label="Save scenario"
+                  title="Save scenario" @click="scenarioDialog.showModal()">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l4 4v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2 0v6h9V3M7 21v-8h10v8"/></svg>
+                </button>
+                <button class="secondary endpoint-action" type="button" aria-haspopup="dialog" aria-label="Store as sample"
+                  title="Store as sample" @click="requestSamples.openStoreDialog()">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l5 5v4m-5-9v5h5m-1 7v7m-3.5-3.5h7"/></svg>
+                </button>
+              </div>
+              <div v-if="visiblePresetNames.length" class="endpoint-presets" role="group" aria-label="Presets">
+                <span class="preset-bar-label" aria-hidden="true">Presets:</span>
+                <button
+                  v-for="name in visiblePresetNames"
+                  :key="name"
+                  type="button"
+                  class="preset-chip"
+                  :aria-pressed="activePresetNames.includes(name)"
+                  @click="togglePreset(name, !activePresetNames.includes(name))"
+                >{{ name }}</button>
+              </div>
             </div>
             <header class="endpoint-header">
               <p v-if="current.operation.apiId !== 'local'" class="external-api-label">{{ current.operation.apiName }} · {{ current.operation.apiId }}</p>
@@ -491,16 +506,18 @@ function removeScenario(id) {
               </div>
               <p v-if="current.operation.description" class="muted">{{ current.operation.description }}</p>
             </header>
-            <details class="preset-panel scenario-save">
-              <summary>Save scenario</summary>
+            <dialog :key="current.operation.key" ref="scenarioDialog" class="endpoint-dialog" aria-labelledby="save-scenario-title">
+              <h3 id="save-scenario-title">Save scenario</h3>
               <form @submit.prevent="saveScenario">
-                <label>Scenario name <input v-model="scenarioName" required maxlength="120" placeholder="Invoice details"></label>
-                <button class="secondary" type="submit" :disabled="scenarioBusy">{{ overwriteScenario ? 'Update scenario' : 'Save current chain' }} ({{ chain.length }} steps)</button>
+                <label class="dialog-field">Scenario name <input v-model="scenarioName" required autofocus maxlength="120" placeholder="Invoice details"></label>
+                <p v-if="scenarioError" class="error" role="alert">{{ scenarioError }}</p>
+                <div class="dialog-actions">
+                  <button class="secondary" type="button" @click="scenarioDialog.close()">Cancel</button>
+                  <button class="primary" type="submit" :disabled="scenarioBusy">{{ overwriteScenario ? 'Update scenario' : 'Save current chain' }} ({{ chain.length }} steps)</button>
+                </div>
               </form>
-              <p v-if="scenarioError" class="error" role="alert">{{ scenarioError }}</p>
-              <p v-else-if="overwriteScenario && scenarioState.status === 'saved' && scenarioState.id === overwriteScenario.id" role="status">Scenario saved.</p>
-            </details>
-            <RequestSamples :key="sampleStorageKey(current.operation)" :storage-key="sampleStorageKey(current.operation)"
+            </dialog>
+            <RequestSamples :key="sampleStorageKey(current.operation)" ref="requestSamples" :storage-key="sampleStorageKey(current.operation)"
               :operation="current.operation" :session="current.session" :values="requestValues" />
             <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)">
               <template #parameter-input="{ parameter, hint }">
@@ -604,8 +621,22 @@ body { margin: 0; background: #eef2ee; }
 .app-message { margin: 1rem; }
 .mapping-notice { margin: 0 0 1rem; }
 .preset-panel { min-width: 0; margin-inline: 0; display: grid; gap: .45rem; margin-bottom: 1rem; padding: .75rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); font-size: .85rem; }
-.preset-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-bottom: .85rem; padding-bottom: .55rem; border-bottom: 1px solid var(--line); }
-.preset-bar-label { margin-right: .2rem; color: var(--muted); font-size: .75rem; font-weight: 650; }
+.endpoint-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem .7rem;
+  margin-bottom: 1.35rem;
+  padding: .5rem .7rem;
+  border: 1px solid #b9d5c7;
+  border-radius: .5rem;
+  background: var(--accent-soft);
+}
+.endpoint-actions, .endpoint-presets { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; min-width: 0; }
+.endpoint-presets { border-left: 1px solid #b9d5c7; padding-left: .7rem; }
+.endpoint-action.secondary { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; color: var(--accent); }
+.endpoint-action svg { width: 1.05rem; height: 1.05rem; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.preset-bar-label { margin-right: .25rem; color: var(--accent); font-size: .75rem; font-weight: 650; }
 .preset-chip {
   display: inline-flex;
   align-items: center;
@@ -622,14 +653,16 @@ body { margin: 0; background: #eef2ee; }
   text-align: left;
   overflow-wrap: anywhere;
 }
-.preset-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
-.preset-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.preset-chip:hover { border-color: var(--accent); background: var(--surface); }
+.preset-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: white; }
 .preset-panel > label select { margin-left: .35rem; max-width: 70%; }
 .preset-panel p { margin: 0; }
-.scenario-save summary { cursor: pointer; font-weight: 650; }
-.scenario-save form { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin-block: .65rem; }
-.scenario-save label { display: grid; gap: .3rem; flex: 1 1 14rem; }
-.scenario-save input { width: 100%; min-width: 0; }
+.endpoint-dialog { width: min(30rem, calc(100% - 2rem)); padding: 1.25rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); color: inherit; box-shadow: 0 1rem 3rem #202b2733; }
+.endpoint-dialog::backdrop { background: #202b2766; }
+.endpoint-dialog h3 { margin: 0 0 1rem; }
+.endpoint-dialog form, .dialog-field { display: grid; gap: .65rem; }
+.dialog-field input { width: 100%; min-width: 0; }
+.dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; margin-top: .35rem; }
 .external-api-label { color: var(--accent); font-weight: 650; }
 .view-navigation { display: flex; flex-wrap: wrap; gap: .35rem; }
 .view-navigation [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }

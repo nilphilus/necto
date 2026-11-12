@@ -14,7 +14,8 @@ const saved = ref({ samples: [], defaultName: '' })
 const name = ref('')
 const selectedFields = ref([])
 const makeDefault = ref(false)
-const details = ref(null)
+const storeDialog = ref(null)
+const storeOpen = ref(false)
 const error = ref('')
 const fields = computed(() => supportedParameters(props.operation).map(parameter => {
   const key = fieldKey(parameter)
@@ -38,8 +39,16 @@ function resetForm() {
 }
 
 watch(() => props.session, () => {
-  if (details.value) details.value.open = false
+  storeDialog.value?.close()
 })
+
+function openStoreDialog() {
+  resetForm()
+  storeDialog.value.showModal()
+  storeOpen.value = true
+}
+
+defineExpose({ openStoreDialog })
 
 function persist(update) {
   try {
@@ -77,7 +86,7 @@ function storeSample() {
     }
   })) {
     props.session.sampleName = sampleName
-    details.value.open = false
+    storeDialog.value.close()
   }
 }
 
@@ -88,7 +97,6 @@ function loadSample(sampleName) {
   props.session.result = null
   props.session.error = ''
   error.value = ''
-  if (details.value.open) resetForm()
 }
 
 function toggleDefault() {
@@ -101,7 +109,7 @@ function toggleDefault() {
 </script>
 
 <template>
-  <section class="preset-panel samples" aria-label="Request samples">
+  <section v-if="saved.samples.length || (error && !storeOpen)" class="preset-panel samples" aria-label="Request samples">
     <div v-if="saved.samples.length" class="sample-actions">
       <label>
         Request sample
@@ -119,30 +127,32 @@ function toggleDefault() {
         {{ selectedName === saved.defaultName ? 'Clear default' : 'Set as default' }}
       </button>
     </div>
-    <details ref="details" @toggle="details?.open && resetForm()">
-      <summary>Store as Sample</summary>
-      <form @submit.prevent="storeSample">
-        <label>Sample name <input v-model="name" required maxlength="120"></label>
-        <fieldset v-if="fields.length">
-          <legend>Fields to store</legend>
-          <label v-for="field in fields" :key="field.key">
-            <input v-model="selectedFields" type="checkbox" :value="field.key">
-            <code>{{ field.parameter.name }}</code> · {{ field.parameter.in }}<template v-if="field.fromPreset"> · preset</template>
-          </label>
-        </fieldset>
-        <label><input v-model="makeDefault" type="checkbox"> Set as default</label>
-        <button class="secondary" type="submit">Save sample</button>
-      </form>
-    </details>
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
+    <p v-if="error && !storeOpen" class="error" role="alert">{{ error }}</p>
   </section>
+  <dialog ref="storeDialog" class="endpoint-dialog" aria-labelledby="store-sample-title" @close="storeOpen = false">
+    <h3 id="store-sample-title">Store as sample</h3>
+    <form @submit.prevent="storeSample">
+      <label class="dialog-field">Sample name <input v-model="name" required autofocus maxlength="120"></label>
+      <fieldset v-if="fields.length">
+        <legend>Fields to store</legend>
+        <label v-for="field in fields" :key="field.key">
+          <input v-model="selectedFields" type="checkbox" :value="field.key">
+          <code>{{ field.parameter.name }}</code> · {{ field.parameter.in }}<template v-if="field.fromPreset"> · preset</template>
+        </label>
+      </fieldset>
+      <label><input v-model="makeDefault" type="checkbox"> Set as default</label>
+      <p v-if="error" class="error" role="alert">{{ error }}</p>
+      <div class="dialog-actions">
+        <button class="secondary" type="button" @click="storeDialog.close()">Cancel</button>
+        <button class="primary" type="submit">Save sample</button>
+      </div>
+    </form>
+  </dialog>
 </template>
 
 <style scoped>
-.sample-actions, form { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; }
+.sample-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; }
 .sample-actions label { min-width: 0; }
 select { max-width: 100%; }
-summary { cursor: pointer; font-weight: 650; }
-form { margin-top: .65rem; }
-fieldset { display: flex; flex-wrap: wrap; gap: .35rem .75rem; flex-basis: 100%; min-width: 0; }
+fieldset { display: flex; flex-wrap: wrap; gap: .35rem .75rem; min-width: 0; margin: 0; }
 </style>
