@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import ResponsePreview from './ResponsePreview.vue'
 import { contextKey, fieldKey, jsonContent, supportedParameters } from './request.js'
 
 const props = defineProps({
@@ -7,6 +8,7 @@ const props = defineProps({
   session: { type: Object, required: true },
   run: { type: Function, required: true },
   values: { type: Map, required: true },
+  selectors: { type: Array, default: () => [] },
 })
 
 const parameters = computed(() => supportedParameters(props.operation))
@@ -71,13 +73,10 @@ function parameterHint(parameter) {
               readonly
               spellcheck="false"
             >
-            <input
-              v-else
-              v-model="session.fields[fieldKey(parameter)]"
-              :required="parameter.required || parameter.in === 'path'"
-              :placeholder="parameterHint(parameter)"
-              spellcheck="false"
-            >
+            <slot v-else name="parameter-input" :parameter="parameter" :hint="parameterHint(parameter)">
+              <input v-model="session.fields[fieldKey(parameter)]" :required="parameter.required || parameter.in === 'path'"
+                :placeholder="parameterHint(parameter)" spellcheck="false">
+            </slot>
           </label>
           <p v-if="parameter.description" class="muted">{{ parameter.description }}</p>
           <p v-if="values.has(contextKey(parameter))" class="muted">Set by the environment or call-flow.</p>
@@ -116,8 +115,7 @@ function parameterHint(parameter) {
           <slot name="related" />
           <div class="response-body">
             <p class="response-type">{{ session.result.contentType || 'Body' }}</p>
-            <pre v-if="session.result.text" tabindex="0"><code>{{ session.result.text }}</code></pre>
-            <p v-else class="muted empty">Empty response body.</p>
+            <ResponsePreview :result="session.result" :selectors="selectors" />
           </div>
         </template>
         <p v-else class="muted empty">

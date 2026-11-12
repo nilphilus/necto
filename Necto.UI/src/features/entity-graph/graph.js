@@ -96,6 +96,28 @@ export function buildEntityGraph(spec, operations, mappings = []) {
       for (const target of references(schema, 'inline')) edge(node.id, target, 'schema', property)
     }
   }
+  function sourceOwners(rootIds, source) {
+    const owners = new Set()
+    let path = source.objectPath ?? []
+    // Response roots already represent the items of a root array.
+    if (source.eachItem && path[0] === null) path = path.slice(1)
+    for (const root of rootIds) {
+      let candidates = [{ schema: nodes.get(root).schema, owner: root }]
+      for (const part of path) {
+        candidates = candidates.flatMap(({ schema, owner }) => {
+          const resolved = resolve(schema) ?? schema
+          const child = part === null ? resolved?.items : properties(resolved)[part]
+          if (!child) return []
+          const named = [...references(child)]
+          return [{ schema: child, owner: named[0] ?? owner }]
+        })
+      }
+      for (const { schema, owner } of candidates) {
+        if (source.property === null || Object.hasOwn(properties(schema), source.property)) owners.add(owner)
+      }
+    }
+    return owners
+  }
   const byId = new Map()
   for (const operation of operations) {
     if (!operation.id) continue
@@ -107,10 +129,9 @@ export function buildEntityGraph(spec, operations, mappings = []) {
     const location = target.location
     if (location === 'body' ? !consumer.requestBody : !consumer.parameters.some(parameter =>
       parameter.name === target.name && (location === 'parameter' || parameter.in === location))) continue
-    const from = roots.get(producer.key).response
+    const from = sourceOwners(roots.get(producer.key).response, source)
     const to = roots.get(consumer.key).response.size ? roots.get(consumer.key).response : roots.get(consumer.key).request
     for (const owner of from) {
-      if (source.property !== null && !Object.hasOwn(properties(nodes.get(owner).schema), source.property)) continue
       for (const destination of to) edge(owner, destination, 'mapping',
         `${source.property ?? 'value'} → ${target.name ?? 'body'}`, [producer.key, consumer.key])
       // The consumer uses this entity even when it has no response schema.

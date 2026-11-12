@@ -1,4 +1,4 @@
-import { reactive } from 'vue'
+import { markRaw, reactive } from 'vue'
 import { buildRequest, initialBody, sendRequest } from './request.js'
 
 export function useRequestRunner(configuration) {
@@ -29,6 +29,7 @@ export function useRequestRunner(configuration) {
       const request = buildRequest(operation, configuration.value, session, values)
       const started = performance.now()
       const result = await sendRequest(request)
+      if (result.json && typeof result.json === 'object') markRaw(result.json)
       session.result = { ...result, elapsed: Math.round(performance.now() - started) }
     } catch (cause) {
       session.error = cause.message
