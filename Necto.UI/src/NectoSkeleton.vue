@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 
 const skeleton = ref(null)
 const patrolDuration = ref(null)
+const emit = defineEmits(['finish'])
 let trackObserver
 
 onMounted(() => {
@@ -14,7 +15,8 @@ onMounted(() => {
     const styles = getComputedStyle(sprite)
     const stepDuration = Number.parseFloat(styles.getPropertyValue('--step-cycle'))
     const endGap = Number.parseFloat(styles.getPropertyValue('--end-gap'))
-    const distance = track.clientWidth - stamp.offsetLeft - stamp.offsetWidth - sprite.offsetWidth - endGap + 1
+    const startOverlap = Number.parseFloat(styles.getPropertyValue('--start-overlap'))
+    const distance = track.clientWidth - stamp.offsetLeft - stamp.offsetWidth - sprite.offsetWidth - endGap + startOverlap
     // The foot travels about 10px per step. Each direction uses half the cycle.
     const steps = Math.max(1, Math.round(distance / 10))
     patrolDuration.value = (2 * steps * stepDuration) + 's'
@@ -27,7 +29,7 @@ onUnmounted(() => trackObserver?.disconnect())
 </script>
 
 <template>
-  <span ref="skeleton" class="skeleton" :style="{ '--cycle': patrolDuration }" aria-hidden="true">
+  <span ref="skeleton" class="skeleton" :style="{ '--cycle': patrolDuration }" aria-hidden="true" @animationend.self="emit('finish')">
     <span class="skull"><span class="jaw"></span></span>
     <span class="spine"></span>
     <span class="ribs"></span>
@@ -47,18 +49,19 @@ onUnmounted(() => trackObserver?.disconnect())
   --cycle: 60s;
   --step-cycle: .46s;
   --sprite-width: 28px;
+  --start-overlap: 31px;
   --end-gap: 8px;
   --far-edge: calc(100cqw - var(--stamp-inset) - var(--sprite-width) - var(--end-gap));
   position: absolute;
   bottom: 0;
-  left: calc(100% - 1px);
+  left: calc(100% - var(--start-overlap));
   width: var(--sprite-width);
   height: 39px;
   color: var(--ink);
   pointer-events: none;
   transform: rotate(-8deg);
   transform-origin: 50% 95%;
-  animation: patrol var(--cycle) linear infinite, turn var(--cycle) linear infinite;
+  animation: patrol var(--cycle) linear both, turn var(--cycle) linear infinite;
 }
 .skeleton > span { position: absolute; }
 .skull {
@@ -191,7 +194,13 @@ onUnmounted(() => trackObserver?.disconnect())
 }
 
 @keyframes patrol {
-  0%, 100% { left: calc(100% - 1px); }
+  0%, 100% {
+    left: calc(100% - var(--start-overlap));
+    clip-path: inset(0 0 calc(100% - 6px));
+    translate: 0 1px;
+  }
+  0.7% { translate: 0 -3px; }
+  2%, 98% { clip-path: inset(-4px -4px -4px); translate: 0 0; }
   50% { left: var(--far-edge); }
 }
 @keyframes turn {
@@ -223,5 +232,7 @@ onUnmounted(() => trackObserver?.disconnect())
 }
 @media (prefers-reduced-motion: reduce) {
   .skeleton, .skeleton span, .skull::before { animation: none; }
+  .skeleton { left: calc(100% - 1px); animation: still 3s; }
 }
+@keyframes still { from, to { opacity: 1; } }
 </style>
