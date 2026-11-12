@@ -80,3 +80,19 @@ test('active presets combine independent fields and the latest preset wins a sha
   assert.equal(request.url.searchParams.get('assetId'), '42')
   assert.equal(resolveRequestValues(assets, cantoso, assetType).get('query:customerId'), '7')
 })
+
+test('canceling a large response parser terminates its worker', async t => {
+  const { sendRequest } = await import('./request.js')
+  const controller = new AbortController()
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'Worker')
+  let terminated = false
+  Object.defineProperty(globalThis, 'Worker', { configurable: true, value: class {
+    postMessage() { controller.abort() }
+    terminate() { terminated = true }
+  } })
+  t.after(() => { if (descriptor) Object.defineProperty(globalThis, 'Worker', descriptor); else delete globalThis.Worker })
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, headers: new Headers({ 'content-type': 'application/json' }),
+    text: async () => '"' + 'x'.repeat(1000000) + '"' }))
+  await assert.rejects(sendRequest({ url: 'https://api.test', options: { signal: controller.signal } }), { name: 'AbortError' })
+  assert.equal(terminated, true)
+})

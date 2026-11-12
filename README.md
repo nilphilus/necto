@@ -39,6 +39,15 @@ for a single response above 100 MB. Preview pages contain 25 entries and retain
 absolute indices for selecting objects; changing pages does not call the API.
 See the [UI guide](Necto.UI/README.md#large-responses) for limits and measurements.
 
+## Saved request scenarios
+
+Save a request chain from the **Scenarios** panel and run it again with values
+from fresh responses. Selections keep their JSON paths, so a chosen line item's
+new ID flows into the next request. Review and edit steps, inspect run results,
+or stop a running scenario. Scenarios are stored in your browser; current request
+presets and external API connections apply when replaying. See the
+[scenario guide](Necto.UI/README.md#saved-scenarios).
+
 ## External API connections
 
 Configure additional OpenAPI documents and Necto mappings in **Settings → External
