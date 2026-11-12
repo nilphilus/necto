@@ -15,6 +15,23 @@ public sealed class EndpointMappingsTests : IClassFixture<WebApplicationFactory<
         });
     }
 
+    [Theory]
+    [InlineData("/necto/api")]
+    [InlineData("/necto/api/endpoint/GET%20%2Finvoices%2F%7BinvoiceId%7D%2Flines")]
+    [InlineData("/necto/scenarios")]
+    [InlineData("/necto/scenarios/saved-scenario/steps/2")]
+    [InlineData("/necto/entities")]
+    [InlineData("/necto/endpoints")]
+    public async Task WorkspaceDeepLinksServeTheUiWithAssetsRelativeToItsMountPoint(string path)
+    {
+        var html = await client.GetStringAsync(path);
+        Assert.Contains("<base href=\"/necto/\">", html);
+        var script = System.Text.RegularExpressions.Regex.Match(html, "src=\"(\\./assets/[^\"]+)\"");
+        Assert.True(script.Success);
+        using var asset = await client.GetAsync("/necto/" + script.Groups[1].Value[2..]);
+        asset.EnsureSuccessStatusCode();
+    }
+
     [Fact]
     public void OptionalApiIdsRoundTripWithoutChangingExistingMappingJson()
     {

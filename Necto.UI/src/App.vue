@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import NectoSkeleton from './NectoSkeleton.vue'
 import { useCatalog } from './features/api-catalog/catalog.js'
 import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
@@ -17,6 +17,7 @@ import EntityGraph from './features/entity-graph/EntityGraph.vue'
 import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
 import { useScenarios } from './features/scenarios/useScenarios.js'
 import { rememberBinding } from './features/scenarios/scenario.js'
+import { readRoute, routePath } from './features/routing/routes.js'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
 import { buildRequest, fieldKey, contextKey, hasPresetFor, migratePreset, resolveRequestValues } from './features/request-runner/request.js'
 
@@ -47,6 +48,11 @@ let firstStampClick = 0
 const settingsButton = ref(null)
 const settingsCloseButton = ref(null)
 const graphView = ref('')
+const basePath = new URL(document.baseURI).pathname
+const historyEntries = new Map()
+const pendingRoute = shallowRef(null)
+const routeError = ref('')
+let activeRoute
 const editedPresetName = ref('')
 const newPresetName = ref('')
 const presetError = ref('')
@@ -101,30 +107,33 @@ function draftFor(operation) {
   return sessionFor(operation, createDraft)
 }
 
-watch(operations, available => {
-  if (!selectedChain.value.length) return
+function availableChain(steps, available = operations.value) {
   const byKey = new Map(available.map(operation => [operation.key, operation]))
-  const missing = selectedChain.value.findIndex(step => !byKey.has(step.operation.key))
-  const valid = missing < 0 ? selectedChain.value : selectedChain.value.slice(0, missing)
-  selectedChain.value = valid.map(step => {
+  const missing = steps.findIndex(step => !byKey.has(step.operation.key))
+  return (missing < 0 ? steps : steps.slice(0, missing)).map(step => {
     const operation = byKey.get(step.operation.key)
     return { ...step, operation, group: operation.tags.includes(step.group) ? step.group : operation.tags[0] }
   })
+}
+
+watch(operations, available => {
+  if (!selectedChain.value.length) return
+  const valid = availableChain(selectedChain.value, available)
+  if (valid.length === selectedChain.value.length) selectedChain.value = valid
+  else resetChain(valid)
 })
 
-watch(showExternalApis, visible => {
-  if (visible) return
-  const firstExternal = chain.value.findIndex(step => step.operation.apiId !== 'local')
-  if (firstExternal >= 0) selectedChain.value = chain.value.slice(0, firstExternal)
-})
 watch(externalApis.revision, () => {
   const id = externalApis.changedApiId.value
   for (const [key, session] of sessions) if (session.apiId === id) sessions.delete(key)
+  for (const [key, entry] of historyEntries) {
+    if (entry.steps.some(step => step.operation.apiId === id)) historyEntries.delete(key)
+  }
   if (scenarioState.steps.some(step => step.operation.apiId === id)) {
     scenarioState.steps = []; scenarioState.status = scenarioState.id ? 'saved' : 'idle'; scenarioState.error = ''
   }
   const index = chain.value.findIndex(step => step.operation.apiId === id)
-  if (index >= 0) selectedChain.value = chain.value.slice(0, index)
+  if (index >= 0) resetChain(chain.value.slice(0, index))
 })
 
 watch(configuration, () => {
@@ -157,12 +166,11 @@ function resetPresetSessions() {
     sessions.set(key, { ...session, result: null, pending: false, error: '' })
   }
   if (selected) {
-    editingScenarioId.value = ''
     const { operation, group, session } = selected
     const draft = separateDraft
       ? { ...session, bindings: [], result: null, pending: false, error: '' }
       : draftFor(operation)
-    selectedChain.value = [{ operation, group, session: draft }]
+    resetChain([{ operation, group, session: draft }])
   }
 }
 
@@ -266,14 +274,148 @@ const relatedTargets = computed(() => {
   })
 })
 
-async function showChain(steps, inspectIndex = null) {
-  selectedChain.value = steps
-  inspectedScenarioStep.value = inspectIndex
+async function focusEndpoint() {
   await nextTick()
   if (workArea.value) workArea.value.scrollTop = 0
   endpointHeading.value?.scrollIntoView({ block: 'nearest' })
   endpointHeading.value?.focus({ preventScroll: true })
 }
+
+function chainRoute(steps = selectedChain.value) {
+  return { view: '', operationKey: steps.at(-1)?.operation.key }
+}
+
+function writeRoute(route, { replace = false, preserveUrl = false } = {}) {
+  const entry = Math.random().toString(36)
+  historyEntries.set(entry, {
+    steps: selectedChain.value, index: inspectedScenarioStep.value,
+    scenarioId: editingScenarioId.value, name: scenarioName.value,
+  })
+  const state = { nectoEntry: entry, scenarioStep: route.index }
+  if (replace) {
+    historyEntries.delete(history.state?.nectoEntry)
+    history.replaceState(state, '', preserveUrl ? window.location.href : routePath(route, basePath))
+  } else history.pushState(state, '', routePath(route, basePath))
+  activeRoute = route
+  pendingRoute.value = null
+  routeError.value = ''
+  graphView.value = route.view
+}
+
+function showChain(steps, route = chainRoute(steps), options) {
+  selectedChain.value = steps
+  inspectedScenarioStep.value = route.index ?? null
+  writeRoute(route, options)
+  return focusEndpoint()
+}
+
+function resetChain(steps) {
+  selectedChain.value = steps
+  inspectedScenarioStep.value = null
+  editingScenarioId.value = ''
+  scenarioName.value = ''
+  if (activeRoute && !graphView.value && !pendingRoute.value) writeRoute(chainRoute(), { replace: true })
+}
+
+function navigateView(view) {
+  if (view === graphView.value && !routeError.value && !pendingRoute.value) return
+  if (!view && inspectedScenarioStep.value !== null && editingScenarioId.value) {
+    enterScenario(selectedChain.value, editingScenarioId.value, scenarioName.value, inspectedScenarioStep.value)
+  } else if (!view && selectedChain.value.length > 1) {
+    const steps = selectedChain.value
+    for (let count = 1; count < steps.length; count++) {
+      selectedChain.value = steps.slice(0, count)
+      writeRoute(chainRoute())
+    }
+    void showChain(steps)
+  } else writeRoute(view ? { view } : chainRoute())
+}
+
+function enterScenario(steps, id, name, index, replace = false) {
+  selectedChain.value = steps
+  editingScenarioId.value = id
+  scenarioName.value = name
+  // Entering at a later step also adds the preceding steps to browser history.
+  for (let step = 0; step < index; step++) {
+    inspectedScenarioStep.value = step
+    writeRoute({ view: '', scenarioId: id, index: step }, { replace: replace && step === 0 })
+  }
+  void showChain(steps, { view: '', scenarioId: id, index }, { replace: replace && index === 0 })
+}
+
+function selectChainStep(index) {
+  if (!activeRoute?.scenarioId || inspectedScenarioStep.value === null) {
+    void showChain(chain.value.slice(0, index + 1))
+    return
+  }
+  if (index < currentIndex.value) {
+    history.go(index - currentIndex.value)
+    return
+  }
+  const route = { ...activeRoute }
+  for (let step = currentIndex.value + 1; step <= index; step++) {
+    inspectedScenarioStep.value = step
+    writeRoute({ ...route, index: step })
+  }
+  void focusEndpoint()
+}
+
+function restoreRoute() {
+  const route = readRoute(window.location.pathname, basePath)
+  activeRoute = route
+  graphView.value = route.view
+  routeError.value = ''
+  pendingRoute.value = route
+}
+
+function resolveRoute() {
+  const route = pendingRoute.value
+  if (!route || !spec.value) return
+  const entry = historyEntries.get(history.state?.nectoEntry)
+  const steps = entry && availableChain(entry.steps)
+  if (entry && steps.length === entry.steps.length) {
+    selectedChain.value = steps
+    inspectedScenarioStep.value = entry.index
+    editingScenarioId.value = entry.scenarioId
+    scenarioName.value = entry.name
+    pendingRoute.value = null
+    if (!route.view && steps.length) void focusEndpoint()
+    return
+  }
+
+  resetChain([])
+  if (route.operationKey) {
+    const operation = operations.value.find(item => item.key === route.operationKey)
+    if (operation) {
+      void showChain([{ operation, group: operation.tags[0], session: draftFor(operation) }], route,
+        { replace: true, preserveUrl: true })
+      return
+    }
+    if (!externalPending.value) routeError.value = 'This endpoint is unavailable. Check API visibility and connections.'
+  } else if (route.scenarioId) {
+    if (externalPending.value || scenarioPending.value) return
+    const scenario = scenarios.value.find(item => item.id === route.scenarioId)
+    const plan = scenario?.steps[route.index] && scenarioStore.open(scenario, scenarioContext())
+    if (plan) {
+      if (history.state?.scenarioStep === route.index) {
+        editingScenarioId.value = scenario.id
+        scenarioName.value = scenario.name
+        void showChain(plan, route, { replace: true, preserveUrl: true })
+      } else enterScenario(plan, scenario.id, scenario.name, route.index, true)
+      return
+    }
+    graphView.value = 'scenarios'
+    routeError.value = scenario?.steps[route.index] ? scenarioState.error : 'This saved scenario step is unavailable.'
+  } else if (route.invalid) routeError.value = 'This workspace address is invalid.'
+  else writeRoute(route, { replace: true, preserveUrl: true })
+}
+
+watch([pendingRoute, spec, operations, scenarios, externalPending, scenarioPending], resolveRoute)
+onMounted(() => {
+  window.addEventListener('popstate', restoreRoute)
+  restoreRoute()
+})
+onUnmounted(() => window.removeEventListener('popstate', restoreRoute))
 
 function selectGroup(name) {
   const operation = groups.value.find(group => group.name === name)?.operations[0]
@@ -281,7 +423,6 @@ function selectGroup(name) {
 }
 
 function selectOperation(operation, group) {
-  graphView.value = ''
   editingScenarioId.value = ''
   scenarioName.value = ''
   return showChain([{ operation, group, session: draftFor(operation) }])
@@ -329,6 +470,7 @@ function saveScenario() {
     const saved = scenarioStore.save(chain.value, scenarioName.value, overwriteScenario.value?.id, valuesFor)
     editingScenarioId.value = saved.id
     scenarioName.value = saved.name
+    writeRoute(activeRoute, { replace: true, preserveUrl: true })
     scenarioDialog.value?.close()
   }
   catch (cause) { scenarioError.value = cause.message }
@@ -336,10 +478,7 @@ function saveScenario() {
 function openScenario(scenario) {
   const steps = scenarioStore.open(scenario, scenarioContext())
   if (!steps) return
-  editingScenarioId.value = scenario.id
-  scenarioName.value = scenario.name
-  graphView.value = ''
-  void showChain(steps, 0)
+  enterScenario(steps, scenario.id, scenario.name, 0)
 }
 async function replayScenario(scenario, presetNames) {
   if (scenarioBusy.value) return
@@ -351,18 +490,13 @@ async function replayScenario(scenario, presetNames) {
   await replay
 }
 function inspectScenario(index, execution) {
-  const byKey = new Map(operations.value.map(operation => [operation.key, operation]))
-  const missing = execution.steps.findIndex(step => !byKey.has(step.operation.key))
-  const visible = missing < 0 ? execution.steps : execution.steps.slice(0, missing)
+  const visible = availableChain(execution.steps)
   if (!visible[index]) {
     scenarioError.value = 'This scenario step is unavailable. Enable its API connection before inspecting it.'
     return
   }
   scenarioError.value = ''
-  editingScenarioId.value = execution.id
-  scenarioName.value = execution.name
-  graphView.value = ''
-  void showChain(visible.map(step => ({ ...step, operation: byKey.get(step.operation.key) })), index)
+  enterScenario(visible, execution.id, execution.name, index)
 }
 function removeScenario(id) {
   try { scenarioStore.remove(id) }
@@ -384,10 +518,10 @@ function removeScenario(id) {
   <main class="app">
     <header class="hero">
       <nav v-if="spec" class="view-navigation" aria-label="Workspace views">
-        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="!graphView" @click="graphView = ''">API</button>
-        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'scenarios'" @click="graphView = 'scenarios'">Scenarios</button>
-        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'entities'" @click="graphView = 'entities'">Entity graph</button>
-        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'endpoints'" @click="graphView = 'endpoints'">Endpoint graph</button>
+        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="!graphView" @click="navigateView('')">API</button>
+        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'scenarios'" @click="navigateView('scenarios')">Scenarios</button>
+        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'entities'" @click="navigateView('entities')">Entity graph</button>
+        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'endpoints'" @click="navigateView('endpoints')">Endpoint graph</button>
       </nav>
       <div class="api-identity">
         <div class="api-info">
@@ -407,6 +541,8 @@ function removeScenario(id) {
     <p v-if="error" class="app-message error" role="alert">{{ error }}</p>
     <p v-else-if="!spec" class="app-message" role="status">Loading API documentation…</p>
     <template v-else>
+      <p v-if="routeError" class="app-message error" role="alert">{{ routeError }}</p>
+      <p v-else-if="pendingRoute" class="app-message" role="status">Loading workspace view…</p>
       <Transition name="settings-drawer">
         <aside v-if="settingsOpen" id="settings-panel" class="work-area settings" aria-labelledby="settings-title" @keydown.esc.stop="closeSettings">
           <div class="settings-header">
@@ -458,7 +594,7 @@ function removeScenario(id) {
 
         <div ref="workArea" class="work-area">
           <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
-          <article v-if="current" :inert="scenarioPending" aria-labelledby="endpoint-title">
+          <article v-if="current && !pendingRoute" :inert="scenarioPending" aria-labelledby="endpoint-title">
             <nav v-if="chain.length > 1" class="breadcrumbs" aria-label="Request chain">
               <ol>
                 <li v-for="(step, index) in chain" :key="index">
@@ -466,7 +602,7 @@ function removeScenario(id) {
                   <span v-if="index === currentIndex" aria-current="step">
                     {{ step.operation.apiId !== 'local' ? step.operation.apiName + ' [' + step.operation.apiId + '] · ' : '' }}{{ step.operation.method }} {{ step.operation.name }}
                   </span>
-                  <button v-else type="button" @click="inspectedScenarioStep === null ? showChain(chain.slice(0, index + 1)) : showChain(chain, index)">
+                  <button v-else type="button" @click="selectChainStep(index)">
                     {{ step.operation.apiId !== 'local' ? step.operation.apiName + ' [' + step.operation.apiId + '] · ' : '' }}{{ step.operation.method }} {{ step.operation.name }}
                   </button>
                 </li>
