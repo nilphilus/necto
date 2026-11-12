@@ -23,12 +23,24 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-Invoice[] invoices = [new(42, 210.00m, 781)];
+Invoice[] invoices = Enumerable.Range(42, 12)
+    .Select(id => new Invoice(id, 0m, 781 + id - 42)).ToArray();
 InvoiceLineSample[] invoiceLines =
 [
     new(17, 42, "Consulting", 2, 117, 75m, "PLN"),
     new(18, 42, "Support", 1, 118, 60m, "PLN")
 ];
+invoiceLines = invoiceLines.Concat(Enumerable.Range(19, 10)
+    .Select(id => new InvoiceLineSample(id, 42, $"Service item {id}", 1, id + 100, 30m, "PLN")))
+    .Concat(invoices.Skip(1).SelectMany(invoice => Enumerable.Range(1, 6)
+        .Select(index => new InvoiceLineSample(invoice.Id * 100 + index, invoice.Id,
+            $"Invoice {invoice.Id} service {index}", index, invoice.Id * 1000 + index, 30m, "PLN"))))
+    .ToArray();
+
+invoices = invoices.Select(invoice => invoice with
+{
+    Total = invoiceLines.Where(line => line.InvoiceId == invoice.Id).Sum(line => line.Quantity * line.UnitPrice)
+}).ToArray();
 
 var summaries = new[]
 {
@@ -51,6 +63,13 @@ app.MapGet("/weatherforecast", () =>
 .WithTags("Weather")
 .WithSummary("Weather forecast")
 .WithDescription("Get a five-day forecast with daily temperatures.");
+
+app.MapGet("/invoices/preview", () => new InvoicePreview(
+        invoiceLines.Where(line => line.InvoiceId == 42)
+            .Select(line => new InvoiceLine(line.LineId, line.InvoiceId, line.Description)).ToArray()))
+    .WithName("InvoicePreview")
+    .WithTags("Invoices")
+    .WithSummary("Nested invoice lines preview");
 
 app.MapGet("/invoices", () => invoices)
     .WithName("Invoices")
@@ -87,7 +106,7 @@ app.MapGet("/invoices/line-details/{detailId:int}", Results<Ok<InvoiceLineDetail
     .WithDescription("Get unit price, quantity, net amount and currency for a line item.");
 
 app.MapGet("/invoices/by-legacy-number", ([EndpointValue("LegacyInvoice")] int number) =>
-        new Invoice(42, 210.00m, number))
+        invoices.FirstOrDefault(invoice => invoice.LegacyNumber == number))
     .WithName("InvoiceByLegacyNumber")
     .WithTags("Invoices")
     .WithSummary("Invoice by legacy number")
@@ -122,6 +141,7 @@ record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
 
 record Invoice(int Id, decimal Total, [property: EndpointValue("LegacyInvoice")] int LegacyNumber);
 record InvoiceLineSample(int LineId, int InvoiceId, string Description, int Quantity, int DetailId, decimal UnitPrice, string Currency);
+record InvoicePreview([property: System.Text.Json.Serialization.JsonPropertyName("invoice-lines")] InvoiceLine[] Lines);
 record InvoiceLine(int LineId, int InvoiceId, string Description);
 record InvoiceLineItem(int LineId, string Description, int Quantity, int DetailId);
 record InvoiceLineDetails(int LineId, int Quantity, decimal UnitPrice, string Currency)
