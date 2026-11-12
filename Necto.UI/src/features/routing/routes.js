@@ -1,4 +1,4 @@
-const views = ['api', 'scenarios', 'entities', 'endpoints']
+const views = ['api', 'scenarios', 'entities', 'endpoints', 'agent']
 
 export function readRoute(pathname, basePath) {
   const path = pathname.slice(basePath.length).replace(/\/$/, '')
