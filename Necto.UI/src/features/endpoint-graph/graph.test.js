@@ -5,6 +5,23 @@ const operation = (id, extra = {}) => ({ id, key: `GET /${id}`, method: 'GET', p
 const mapping = (from, to, property = 'id', name = 'invoiceId') => ({ source: { operationId: from, eachItem: true, property },
   target: { operationId: to, location: 'parameter', name }, match: 'name' })
 
+test('endpoint focus places producers on the left and consumers on the right', () => {
+  const nodes = ['consumer', 'focus', 'mutual', 'producer'].map(id => ({ id }))
+  const edges = [
+    { from: 'producer', to: 'focus' },
+    { from: 'focus', to: 'consumer' },
+    { from: 'mutual', to: 'focus' },
+    { from: 'focus', to: 'mutual' },
+    { from: 'focus', to: 'focus' },
+  ]
+  const positions = new Map(layoutEndpoints(nodes, edges, 'focus').map(node => [node.id, node]))
+  assert.equal(positions.size, nodes.length)
+  assert.ok(positions.get('producer').x < positions.get('focus').x)
+  assert.ok(positions.get('consumer').x > positions.get('focus').x)
+  assert.equal(positions.get('mutual').x, positions.get('consumer').x)
+  assert.notEqual(positions.get('mutual').y, positions.get('consumer').y)
+})
+
 test('directed endpoint edges bundle fields and preserve isolated nodes', () => {
   const operations = [operation('Invoices'), operation('Lines', { parameters: [{ name: 'invoiceId', in: 'path' }, { name: 'tenantId', in: 'query' }] }), operation('Weather')]
   const result = buildEndpointGraph(operations, [mapping('Invoices', 'Lines'), mapping('Invoices', 'Lines'), mapping('Invoices', 'Lines', 'tenantId', 'tenantId')])

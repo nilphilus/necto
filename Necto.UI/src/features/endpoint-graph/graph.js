@@ -1,4 +1,5 @@
 import { resolveMappingLinks } from '../related-endpoints/mappings.js'
+import { layoutConnections } from '../graph-layout.js'
 
 export function responseSelector(source) {
   const path = source.objectPath ?? (source.eachItem ? [null] : [])
@@ -25,7 +26,26 @@ export function buildEndpointGraph(operations, mappings = []) {
   return { nodes, edges }
 }
 
-export function layoutEndpoints(nodes) {
-  const columns = Math.max(1, Math.ceil(Math.sqrt(nodes.length)))
-  return nodes.map((node, index) => ({ ...node, x: 40 + (index % columns) * 315, y: 40 + Math.floor(index / columns) * 175 }))
+export const endpointSize = { width: 265, height: 110 }
+
+export function layoutEndpoints(nodes, edges = [], focusId = '') {
+  const focus = nodes.find(node => node.id === focusId)
+  if (!focus) return layoutConnections(nodes, edges, endpointSize)
+
+  const producers = new Set(edges.filter(edge => edge.to === focusId).map(edge => edge.from))
+  const consumers = new Set(edges.filter(edge => edge.from === focusId).map(edge => edge.to))
+  const peers = nodes.filter(node => node.id !== focusId)
+  const columns = [
+    peers.filter(node => producers.has(node.id) && !consumers.has(node.id)),
+    [focus],
+    peers.filter(node => consumers.has(node.id)),
+  ].filter(column => column.length)
+  const rows = Math.max(...columns.map(column => column.length))
+  return columns.flatMap((column, index) => {
+    const offset = Math.min(2, (rows - column.length) / 2)
+    return column.map((node, row) => ({ ...node,
+      x: 36 + index * (endpointSize.width + 100),
+      y: 44 + (row + offset) * (endpointSize.height + 36),
+    }))
+  })
 }

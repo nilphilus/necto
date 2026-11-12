@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, ref, useId, watch } from 'vue'
-import { buildEndpointGraph, layoutEndpoints } from './graph.js'
+import { routeConnection } from '../graph-layout.js'
+import { buildEndpointGraph, endpointSize, layoutEndpoints } from './graph.js'
 const props = defineProps({ operations: Array, mappings: Array, mappingError: String })
 defineEmits(['open-operation'])
 const search = ref('')
@@ -8,6 +9,8 @@ const selectedId = ref('')
 const zoom = ref(1)
 const direction = ref('all')
 const connectedOnly = ref(false)
+const focused = ref(false)
+const canvas = ref(null)
 const detailsTitle = ref(null)
 const markerId = useId()
 const graph = computed(() => buildEndpointGraph(props.operations, props.mappings))
@@ -18,34 +21,55 @@ const filtered = computed(() => graph.value.nodes.filter(node => {
     `${operation.name} ${operation.method} ${operation.path} ${operation.id ?? ''} ${operation.tags.join(' ')}`
       .toLowerCase().includes(search.value.trim().toLowerCase())
 }))
-const positions = computed(() => layoutEndpoints(filtered.value.slice(0, 100)))
-const positioned = computed(() => new Map(positions.value.map(node => [node.id, node])))
 const selected = computed(() => byId.value.get(selectedId.value))
 const incoming = computed(() => graph.value.edges.filter(edge => edge.to === selectedId.value))
 const outgoing = computed(() => graph.value.edges.filter(edge => edge.from === selectedId.value))
-const edges = computed(() => graph.value.edges.filter(edge => positioned.value.has(edge.from) && positioned.value.has(edge.to) &&
+const matchingEdges = computed(() => graph.value.edges.filter(edge =>
   (!selectedId.value || direction.value === 'all' ||
-    (direction.value === 'incoming' ? edge.to : edge.from) === selectedId.value)))
-const width = computed(() => Math.max(650, ...positions.value.map(node => node.x + 320)))
+    (direction.value === 'incoming' ? edge.to : edge.from) === selectedId.value) &&
+  (!focused.value || connected(edge))))
+const visibleNodes = computed(() => {
+  if (!focused.value || !selected.value) return filtered.value
+  const ids = new Set(matchingEdges.value.flatMap(edge => [edge.from, edge.to]))
+  return [selected.value, ...graph.value.nodes.filter(node => node.id !== selectedId.value && ids.has(node.id))]
+})
+const shownNodes = computed(() => visibleNodes.value.slice(0, 100))
+const edges = computed(() => {
+  const ids = new Set(shownNodes.value.map(node => node.id))
+  return matchingEdges.value.filter(edge => ids.has(edge.from) && ids.has(edge.to))
+})
+const positions = computed(() => layoutEndpoints(shownNodes.value, edges.value, focused.value ? selectedId.value : ''))
+const positioned = computed(() => new Map(positions.value.map(node => [node.id, node])))
+const edgeIds = computed(() => new Set(edges.value.map(edge => edge.id)))
+const width = computed(() => Math.max(650, ...positions.value.map(node => node.x + endpointSize.width + 90)))
 const height = computed(() => Math.max(400, ...positions.value.map(node => node.y + 145)))
-watch(() => props.operations, () => { if (!byId.value.has(selectedId.value)) selectedId.value = '' })
+watch(selected, value => {
+  if (!value) {
+    selectedId.value = ''
+    focused.value = false
+    direction.value = 'all'
+  }
+})
+watch([search, connectedOnly], () => { focused.value = false })
+watch([focused, search, direction, connectedOnly], resetCanvas, { flush: 'post' })
 function curve(edge) {
   const from = positioned.value.get(edge.from), to = positioned.value.get(edge.to)
-  if (from.id === to.id) return `M ${from.x + 265} ${from.y + 30} C ${from.x + 330} ${from.y - 25}, ${from.x + 330} ${from.y + 135}, ${from.x + 265} ${from.y + 75}`
-  const forward = to.x > from.x || (to.x === from.x && to.y > from.y)
-  const x1 = from.x + (forward ? 265 : 0), y1 = from.y + 55
-  const x2 = to.x + (forward ? 0 : 265), y2 = to.y + 55
-  return `M ${x1} ${y1} C ${x1 + (forward ? 75 : -75)} ${y1}, ${x2 + (forward ? -75 : 75)} ${y2}, ${x2} ${y2}`
+  const reciprocal = from.id !== to.id && edgeIds.value.has(JSON.stringify([edge.to, edge.from]))
+  const lane = reciprocal ? (from.id < to.id ? -9 : 9) : 0
+  return routeConnection(from, to, endpointSize, lane)
 }
 function connected(edge) { return !selectedId.value || edge.from === selectedId.value || edge.to === selectedId.value }
+function resetCanvas() {
+  if (!canvas.value) return
+  const node = focused.value && positioned.value.get(selectedId.value)
+  const left = node ? (node.x + endpointSize.width / 2) * zoom.value - canvas.value.clientWidth / 2 : 0
+  canvas.value.scrollTo(Math.max(0, left), 0)
+}
 async function inspect(id) {
-  if (!positioned.value.has(id)) {
-    const operation = byId.value.get(id)?.operation
-    search.value = operation?.key ?? ''
-    connectedOnly.value = false
-  }
+  if (!positioned.value.has(id)) focused.value = true
   selectedId.value = id
   await nextTick()
+  if (focused.value) resetCanvas()
   if (window.matchMedia('(max-width: 800px)').matches) {
     detailsTitle.value?.scrollIntoView({ block: 'start', behavior: 'instant' })
     detailsTitle.value?.focus({ preventScroll: true })
@@ -64,6 +88,7 @@ async function inspect(id) {
         <option value="all">All connections</option><option value="incoming">Incoming to selection</option><option value="outgoing">Outgoing from selection</option>
       </select></label>
       <label class="check"><input v-model="connectedOnly" type="checkbox"> Connected endpoints only</label>
+      <button type="button" class="secondary" :disabled="!selected" :aria-pressed="focused" @click="focused = !focused">Focus on selected endpoint</button>
       <div class="zoom" role="group" aria-label="Endpoint graph zoom">
         <button type="button" class="secondary" :disabled="zoom <= .5" aria-label="Zoom out" @click="zoom = Math.max(.5, zoom - .25)">−</button>
         <button type="button" class="secondary" aria-label="Reset zoom" @click="zoom = 1">{{ Math.round(zoom * 100) }}%</button>
@@ -73,15 +98,15 @@ async function inspect(id) {
     <p class="legend">Response → Request · Arrows show Necto value mappings, independently of shared entity schemas.</p>
     <p v-if="mappingError" class="muted" role="status">{{ mappingError }} Endpoints are shown without unavailable connections.</p>
     <p v-else-if="!graph.edges.length" class="muted" role="status">No valid endpoint mappings are available. Endpoints remain visible; shared schemas alone do not create arrows.</p>
-    <p v-if="filtered.length > 100" class="muted" role="status">Showing the first 100 of {{ filtered.length }} matching endpoints. Refine the search to see others.</p>
+    <p v-if="visibleNodes.length > 100" class="muted" role="status">Showing 100 of {{ visibleNodes.length }} endpoints. {{ focused ? 'All direct connections are listed in the details.' : 'Refine the search to see others.' }}</p>
     <div class="graph-workspace">
-      <div class="graph-canvas" tabindex="0" aria-label="Scrollable endpoint graph">
+      <div ref="canvas" class="graph-canvas" tabindex="0" aria-label="Scrollable endpoint graph">
         <svg v-if="positions.length" :width="width * zoom" :height="height * zoom" :viewBox="`0 0 ${width} ${height}`" role="group" aria-label="Endpoint relationships">
           <defs><marker :id="markerId" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#759b8a" /></marker></defs>
           <path v-for="edge in edges" :key="edge.id" :d="curve(edge)" fill="none" stroke="#759b8a" :stroke-width="selectedId && connected(edge) ? 3 : 1.5" :opacity="connected(edge) ? .95 : .15" :marker-end="`url(#${markerId})`">
             <title>{{ byId.get(edge.from).operation.name }} → {{ byId.get(edge.to).operation.name }} · {{ edge.values.length }} mapped fields</title>
           </path>
-          <foreignObject v-for="node in positions" :key="node.id" :x="node.x" :y="node.y" width="265" height="114">
+          <foreignObject v-for="node in positions" :key="node.id" :x="node.x" :y="node.y" :width="endpointSize.width" :height="endpointSize.height + 4">
             <button type="button" class="endpoint-node" :class="{ active: selectedId === node.id }" :aria-pressed="selectedId === node.id"
               :aria-label="'Inspect endpoint ' + node.operation.method + ' ' + node.operation.path + (node.operation.apiId && node.operation.apiId !== 'local' ? ' [' + node.operation.apiId + ']' : '')" @click="inspect(node.id)">
               <span class="node-title"><span class="method" :data-method="node.operation.method">{{ node.operation.method }}</span><strong :title="node.operation.name">{{ node.operation.name }}</strong></span>
@@ -131,6 +156,7 @@ h2 { margin: 0; font-size: 1.75rem; letter-spacing: -.035em; } header p { margin
 .counts { color: var(--muted); font-size: .85rem; }
 .graph-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
 .graph-controls label { display: grid; gap: .3rem; font-size: .8rem; }.graph-controls .check { display: flex; align-items: center; min-height: 2.5rem; }
+.graph-controls button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .zoom { display: flex; gap: .25rem; margin-left: auto; }.legend { color: var(--muted); font-size: .8rem; }
 .graph-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem); border: 1px solid var(--line); border-radius: .75rem; overflow: hidden; background: var(--surface); }
 .graph-canvas { min-width: 0; height: 65vh; min-height: 26rem; overflow: auto; background-color: #f6f9f7; background-image: radial-gradient(#d4ded8 1px, transparent 1px); background-size: 18px 18px; }
