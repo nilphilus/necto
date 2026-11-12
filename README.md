@@ -53,6 +53,14 @@ or stop a running scenario. Scenarios are stored in your browser; current reques
 presets and external API connections apply when replaying. See the
 [scenario guide](Necto.UI/README.md#saved-scenarios).
 
+## Bring your agent
+
+Write a prompt in Necto and let your own MCP-capable agent discover endpoints,
+types and request relationships, then report its progress and result. Your agent
+uses its own model, HTTP tools and credentials. The opt-in MCP bridge connects
+the workspace to your agent without a model API key in Necto. See the
+[setup and workflow](docs/bring-your-agent/README.md).
+
 ## External API connections
 
 Configure additional OpenAPI documents and Necto mappings in **Settings → External

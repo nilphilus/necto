@@ -4,7 +4,7 @@ Necto UI is a Vue application for browsing and running the operations in an Open
 
 Browse collapsible groups by tag and switch the sidebar between operation names and paths. Selecting an endpoint in the sidebar opens its request and response page and starts a separate chain. Send with the button or with Ctrl+Enter (⌘+Enter on macOS) while focused in the operation's workspace. Drafts and responses from direct sidebar visits stay available when you revisit those endpoints.
 
-When endpoint mappings are configured, **Continue from this response** shows related operations and values. Each related request has editable fields with dropdown suggestions from the response. Type to filter the suggestions, choose a value, or enter a value that is not listed. Use **Send** for GET/HEAD requests with complete valid inputs, or **Edit** to open the request form. Request parameter inputs offer the same suggestions. Each related request gets its own step in the breadcrumb trail. Select an earlier step to restore its request and response and continue along another branch.
+When endpoint mappings are configured, **Continue from this response** shows related operations and values. Each related request has editable fields with dropdown suggestions from the response. Type to filter the suggestions, choose a value, or enter a value that is not listed. Use **Send** for GET/HEAD requests with complete valid inputs. **Open request** is always available, including POST/PUT/PATCH/DELETE and incomplete requests; it opens an editable form with the selected values without sending a request. Request parameter inputs offer the same suggestions. Each related request gets its own step in the breadcrumb trail. Select an earlier step to restore its request and response and continue along another branch.
 
 ## Response preview
 
@@ -19,6 +19,8 @@ suggestions in request parameter inputs. The filled values remain editable.
 This also works with nested objects and arrays. **Clear selection** restores all values. Selection belongs
 to the response and stays when revisiting a breadcrumb; sending again replaces
 it. Preview and colors work even without endpoint mappings.
+
+Response data is shown before continuation forms. On wide request panels, **Next request** sits alongside Preview so selecting an object and following a request stay in view together. On narrower panels it follows the response and can be collapsed. Requests without mappings use the full response width.
 
 ## Large responses
 
@@ -294,3 +296,13 @@ never refetches the response or changes API pagination. Browsers without worker
 support retain Preview, Raw and download, and display a search error.
 
 The API workspace reserves a preset column only when presets match the current request. On narrow screens, matching presets are available through a **Presets** disclosure above the full-width request, rather than a permanent side column. Desktop expand/collapse remains independent of the mobile panel.
+
+## Bring your agent
+
+When the host enables `MapNectoAgent` and configures `agentPath`, the workspace
+includes **Bring your agent**. Create a connection, add its Streamable HTTP MCP
+configuration to your agent, give the agent the displayed polling instructions,
+and queue a prompt. Progress and results appear in the task panel. Your agent
+uses its own HTTP tools and credentials; Necto supplies API metadata and task
+coordination. See the [full guide](../docs/bring-your-agent/README.md) for host
+configuration, client setup, tools, capability lifetime and execution limits.
