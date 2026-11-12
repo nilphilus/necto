@@ -32,6 +32,26 @@ The graph works without endpoint mappings: OpenAPI schema references remain
 available. Only local OpenAPI schema references are resolved. Successful response
 associations use explicit 2xx response codes; error/default responses are omitted.
 
+## Endpoint graph
+
+Choose **Endpoint graph** to inspect request-to-request connections separately
+from the entity view. Every OpenAPI operation is a node, identified by its HTTP
+method and path. Arrows point from the operation producing a response value to
+the operation consuming it. Multiple mapped fields between the same pair of
+operations share one arrow; the details panel lists every response selector,
+resolved target location, target name, and match rule.
+
+Select a node to inspect incoming and outgoing mappings, follow a connected
+endpoint in the graph, or choose **Open request** to edit it. Search by name,
+method, path, operation ID, or tag; filter to connected endpoints or to incoming
+or outgoing connections for the selection. Zoom and keyboard navigation work
+independently of the entity view. The overview displays up to 100 matching nodes.
+
+Connections require valid Necto mappings resolved against available operations
+and inputs. Shared schemas alone do not create endpoint connections. Without
+mappings, operations remain visible as isolated nodes. Missing or ambiguous
+operation IDs and unsupported target fields are skipped.
+
 ## Request presets
 
 Use **Settings → Presets** to add a named preset. Choose **Add field**, select its type, and enter its name and value. For example, add these rows and choose **Save values**.
