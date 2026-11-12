@@ -204,8 +204,7 @@ operations and the target input must be present in the visible catalogs.
 
 Active presets are not applied to external requests by default. A connection can
 explicitly opt into **Apply active request presets**, including their headers.
-Local call-flow overrides do not propagate to external services. Metadata
-requests always omit cookies and request presets; metadata endpoints must be
+Metadata requests always omit cookies and request presets; metadata endpoints must be
 accessible without those credentials. Requests use the browser's normal fetch
 credentials behavior, rather than forwarding host cookies to another origin.
 
@@ -238,7 +237,7 @@ Check any combination of presets in the API view. For example, enable one preset
 
 Values match OpenAPI parameters by location and name. Header names are case-insensitive, and configured headers are also sent when the operation omits them from its OpenAPI parameters. Path names are case-sensitive. Query fields prefer exact names and also accept case differences when the match is unambiguous. Necto sends the query parameter name as it appears in OpenAPI. Use strings for values and JSON-encoded strings for array or object parameters. In a route like `/{customer}/Invoice/{id}`, a preset supplies `customer` and the request form supplies `id`.
 
-Use the same field editor under **Call-flow overrides** to set values that take precedence over the active presets. Both take precedence over the request form and values selected from a related response. Overrides apply to the current request and all steps reached through related endpoints, including when navigating through the breadcrumbs. On reload, Necto restores the starting endpoint and saved overrides from local storage. Choosing an endpoint in the sidebar or changing the active presets starts a new call-flow and clears its saved overrides.
+Active presets take precedence over the request form and values selected from a related response.
 
 ## ASP.NET Core
 

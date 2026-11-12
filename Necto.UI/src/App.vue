@@ -47,7 +47,6 @@ const graphView = ref('')
 const editedPresetName = ref('')
 const newPresetName = ref('')
 const presetError = ref('')
-const flowOverrides = ref(new Map())
 const activePresetValues = computed(() => activePresetNames.value.map(name => presets.value.get(name)))
 const editedPresetValues = computed(() => presets.value.get(editedPresetName.value))
 // Keep the original storage key so saved environments carry over to presets.
@@ -64,11 +63,9 @@ const currentIndex = computed(() => inspectedScenarioStep.value === null ? chain
 const current = computed(() => chain.value[currentIndex.value])
 const requestValues = computed(() => current.value ? valuesFor(current.value.operation) : new Map())
 
-function valuesFor(operation, layers) {
-  if (operation.apiId && operation.apiId !== 'local') {
-    return operation.usePresets ? resolveRequestValues(operation, ...(layers ?? activePresetValues.value)) : new Map()
-  }
-  return resolveRequestValues(operation, ...(layers ?? [...activePresetValues.value, flowOverrides.value]))
+function valuesFor(operation, layers = activePresetValues.value) {
+  if (operation.apiId && operation.apiId !== 'local' && !operation.usePresets) return new Map()
+  return resolveRequestValues(operation, ...layers)
 }
 
 watch(operations, available => {
@@ -104,33 +101,15 @@ watch(configuration, () => {
     presets.value = new Map((saved.presets ?? saved.environments).map(([name, values]) => [name, new Map(values)]))
     const active = Array.isArray(saved.active) ? saved.active : [saved.active]
     activePresetNames.value = [...new Set(active.filter(name => presets.value.has(name)))]
-    const flow = saved.flow
-    if (!flow) return
-    const flowPresets = flow.presets ?? (flow.environment ? [flow.environment] : [])
-    if (JSON.stringify(flowPresets) !== JSON.stringify(activePresetNames.value)) return
-    const operation = operations.value.find(operation => operation.key === flow.operation)
-    if (!operation) return
-    const group = operation.tags.includes(flow.group) ? flow.group : operation.tags[0]
-    selectedChain.value = [{ operation, group, session: sessionFor(operation) }]
-    flowOverrides.value = new Map(flow.values)
   } catch {
     presetError.value = 'Could not load saved presets in this browser.'
   }
 })
 
-watch(flowOverrides, savePresets)
-
 function savePresets() {
   try {
     const entries = Array.from(presets.value, ([name, values]) => [name, [...values]])
-    const root = chain.value[0]
-    const flow = root && flowOverrides.value.size ? {
-      operation: root.operation.key,
-      group: root.group,
-      presets: activePresetNames.value,
-      values: [...flowOverrides.value],
-    } : undefined
-    localStorage.setItem(storageKey.value, JSON.stringify({ active: activePresetNames.value, presets: entries, flow }))
+    localStorage.setItem(storageKey.value, JSON.stringify({ active: activePresetNames.value, presets: entries }))
     presetError.value = ''
   } catch {
     presetError.value = 'Could not save presets in this browser.'
@@ -143,7 +122,6 @@ function resetPresetSessions() {
     sessions.set(key, { ...session, result: null, pending: false, error: '' })
   }
   if (selected) {
-    flowOverrides.value = new Map()
     editingScenarioId.value = ''
     const { operation, group } = selected
     selectedChain.value = [{ operation, group, session: sessionFor(operation) }]
@@ -266,7 +244,6 @@ function selectGroup(name) {
 
 function selectOperation(operation, group) {
   graphView.value = ''
-  flowOverrides.value = new Map()
   editingScenarioId.value = ''
   scenarioName.value = ''
   return showChain([{ operation, group, session: sessionFor(operation) }])
@@ -498,10 +475,6 @@ function removeScenario(id) {
               <p v-if="scenarioError" class="error" role="alert">{{ scenarioError }}</p>
               <p v-else-if="overwriteScenario && scenarioState.status === 'saved' && scenarioState.id === overwriteScenario.id" role="status">Scenario saved.</p>
             </details>
-            <details v-if="current.operation.apiId === 'local'" class="preset-panel">
-              <summary>Call-flow overrides<span v-if="flowOverrides.size"> ({{ flowOverrides.size }})</span></summary>
-              <ValuesEditor :values="flowOverrides" label="Values for this call-flow" @save="flowOverrides = $event" />
-            </details>
             <p v-if="current.operation.apiId !== 'local'" class="muted external-context-note">{{ current.operation.usePresets ? 'Active request presets are applied to this API.' : 'Active request presets are not applied to this API.' }}</p>
             <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)">
               <template #parameter-input="{ parameter, hint }">
@@ -625,7 +598,6 @@ body { margin: 0; background: #eef2ee; }
 .preset-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: white; }
 .preset-chip[aria-pressed="true"]:hover { background: #104737; }
 .preset-panel > label select { margin-left: .35rem; max-width: 70%; }
-.preset-panel summary { cursor: pointer; width: fit-content; color: var(--accent); }
 .preset-panel p { margin: 0; }
 .scenario-save summary { cursor: pointer; font-weight: 650; }
 .scenario-save form { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin-block: .65rem; }
