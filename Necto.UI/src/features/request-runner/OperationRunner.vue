@@ -79,7 +79,7 @@ function parameterHint(parameter) {
             </slot>
           </label>
           <p v-if="parameter.description" class="muted">{{ parameter.description }}</p>
-          <p v-if="values.has(contextKey(parameter))" class="muted">Set by the environment or call-flow.</p>
+          <p v-if="values.has(contextKey(parameter))" class="muted">Set by an active request preset.</p>
           <slot v-else name="choices" :location="parameter.in" :parameter-name="parameter.name" />
         </div>
 

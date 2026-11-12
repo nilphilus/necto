@@ -30,34 +30,32 @@ test('environment values override request fields by location and name', () => {
   assert.equal(request.options.headers.get('X-Region'), 'eu')
 })
 
-test('context values satisfy required fields and flow overrides take precedence', () => {
-  const environment = new Map([['header:x-tenant', 'env-tenant'], ['path:customer', 'env-customer']])
-  const overrides = new Map([['path:customer', 'flow-customer']])
-  const values = new Map([...environment, ...overrides])
+test('preset values satisfy required fields', () => {
+  const values = new Map([['header:x-tenant', 'preset-tenant'], ['path:customer', 'preset-customer']])
   const draft = { fields: { 'path:id': '123' } }
 
   const request = buildRequest(invoice, configuration, draft, values)
-  assert.equal(request.url.pathname, '/flow-customer/Invoice/123')
-  assert.equal(request.options.headers.get('X-Tenant'), 'env-tenant')
+  assert.equal(request.url.pathname, '/preset-customer/Invoice/123')
+  assert.equal(request.options.headers.get('X-Tenant'), 'preset-tenant')
   assert.throws(() => buildRequest(invoice, configuration, { fields: {} }, values), /id is required/)
   assert.throws(() => buildRequest(invoice, configuration, draft), /X-Tenant is required/)
 })
 
-test('query aliases use the OpenAPI spelling and respect call-flow precedence', () => {
+test('query aliases use the OpenAPI spelling and respect preset precedence', () => {
   const assets = {
     ...invoice,
     path: '/assets',
     parameters: [{ in: 'query', name: 'customerId' }],
   }
-  const environment = new Map([['query:customerId', '7']])
-  const overrides = new Map([['query:CustomerId', '12']])
-  const values = resolveRequestValues(assets, environment, overrides)
+  const firstPreset = new Map([['query:customerId', '7']])
+  const secondPreset = new Map([['query:CustomerId', '12']])
+  const values = resolveRequestValues(assets, firstPreset, secondPreset)
   assert.equal(values.get('query:customerId'), '12')
   const request = buildRequest(assets, configuration, { fields: { 'query:customerId': '3' } }, values)
   assert.equal(request.url.search, '?customerId=12')
 
   assets.parameters.push({ in: 'query', name: 'CustomerId' })
-  const distinct = resolveRequestValues(assets, environment, overrides, new Map([['query:CUSTOMERID', '99']]))
+  const distinct = resolveRequestValues(assets, firstPreset, secondPreset, new Map([['query:CUSTOMERID', '99']]))
   assert.deepEqual([...distinct], [['query:customerId', '7'], ['query:CustomerId', '12']])
 })
 
