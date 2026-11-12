@@ -20,6 +20,7 @@ public sealed class EndpointMappingsTests : IClassFixture<WebApplicationFactory<
     [InlineData("/necto/api/endpoint/GET%20%2Finvoices%2F%7BinvoiceId%7D%2Flines")]
     [InlineData("/necto/scenarios")]
     [InlineData("/necto/scenarios/saved-scenario/steps/2")]
+    [InlineData("/necto/agent")]
     [InlineData("/necto/entities")]
     [InlineData("/necto/endpoints")]
     public async Task WorkspaceDeepLinksServeTheUiWithAssetsRelativeToItsMountPoint(string path)

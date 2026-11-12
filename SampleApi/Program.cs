@@ -18,7 +18,8 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
     app.MapScalarApiReference();
     app.MapNectoEndpointMappings();
-    app.UseNectoUI(endpointMappingsPath: "/necto/endpoint-mappings");
+    app.MapNectoAgent();
+    app.UseNectoUI(endpointMappingsPath: "/necto/endpoint-mappings", agentPath: "/necto/agent");
 }
 
 app.UseHttpsRedirection();
