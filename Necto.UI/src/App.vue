@@ -33,6 +33,8 @@ const scenarioBusy = computed(() => scenarioPending.value || mappingPending.valu
 const presets = ref(new Map())
 const activePresetNames = ref([])
 const settingsOpen = ref(false)
+const settingsButton = ref(null)
+const settingsCloseButton = ref(null)
 const graphView = ref('')
 const editedPresetName = ref('')
 const newPresetName = ref('')
@@ -130,6 +132,15 @@ function savePresets() {
 function resetPresetSessions() {
   const selected = current.value
   for (const [key, session] of sessions) {
+  editedPresetName.value = activePresetNames.value.at(-1) ?? presets.value.keys().next().value ?? ''
+  settingsOpen.value = true
+  await nextTick()
+  settingsCloseButton.value?.focus()
+}
+
+function closeSettings() {
+  settingsOpen.value = false
+  settingsButton.value?.focus()
     sessions.set(key, { ...session, result: null, pending: false, error: '' })
   }
   if (selected) {
@@ -147,11 +158,10 @@ function togglePreset(name, enabled) {
   savePresets()
 }
 
-function toggleSettings() {
-  graphView.value = ''
-  settingsOpen.value = !settingsOpen.value
+async function toggleSettings() {
   if (settingsOpen.value) {
-    editedPresetName.value = activePresetNames.value.at(-1) ?? presets.value.keys().next().value ?? ''
+    closeSettings()
+    return
   }
 }
 
@@ -290,6 +300,10 @@ async function replayScenario(scenario) {
     async (steps, index) => {
       selectedChain.value = steps
       inspectedScenarioStep.value = index
+  <div class="brand-stamp">
+    <span class="brand-mark" aria-hidden="true">N</span>
+    <span>Necto</span>
+  </div>
       await nextTick()
       scenarioPanel.value?.showProgress()
     })
@@ -315,58 +329,66 @@ function removeScenario(id) {
 <template>
   <main class="app">
     <header class="hero">
-      <div class="eyebrow">
-        <span class="brand-mark" aria-hidden="true">N</span>
-        <span>Necto</span>
-      </div>
-      <div class="api-info">
-        <div class="api-title">
-          <h1>{{ spec?.info?.title ?? 'API documentation' }}</h1>
-          <small v-if="spec?.info?.version">Version {{ spec.info.version }}</small>
-        </div>
-        <p v-if="spec?.info?.description" class="muted">{{ spec.info.description }}</p>
-      </div>
       <nav v-if="spec" class="view-navigation" aria-label="Workspace views">
-        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="!settingsOpen && !graphView" @click="settingsOpen = false; graphView = ''">API</button>
-        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'entities'" @click="settingsOpen = false; graphView = 'entities'">Entity graph</button>
-        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'endpoints'" @click="settingsOpen = false; graphView = 'endpoints'">Endpoint graph</button>
+        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="!graphView" @click="graphView = ''">API</button>
+        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'entities'" @click="graphView = 'entities'">Entity graph</button>
+        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'endpoints'" @click="graphView = 'endpoints'">Endpoint graph</button>
       </nav>
-      <button v-if="spec" type="button" class="secondary settings-toggle" :disabled="scenarioPending" @click="toggleSettings">
-        {{ settingsOpen ? 'Back to API' : 'Settings' }}
-      </button>
+      <div class="api-identity">
+        <div class="api-info">
+          <div class="api-title">
+            <h1>{{ spec?.info?.title ?? 'API documentation' }}</h1>
+            <small v-if="spec?.info?.version">Version {{ spec.info.version }}</small>
+          </div>
+          <p v-if="spec?.info?.description" class="muted">{{ spec.info.description }}</p>
+        </div>
+        <button v-if="spec" ref="settingsButton" type="button" class="secondary settings-icon" :disabled="scenarioPending"
+          aria-label="Settings" title="Settings" :aria-expanded="settingsOpen" :aria-controls="settingsOpen ? 'settings-panel' : undefined" @click="toggleSettings">
+          <span aria-hidden="true">⚙︎</span>
+        </button>
+      </div>
     </header>
 
     <p v-if="error" class="app-message error" role="alert">{{ error }}</p>
     <p v-else-if="!spec" class="app-message" role="status">Loading API documentation…</p>
     <template v-else>
-      <section v-if="settingsOpen" class="work-area settings" aria-labelledby="settings-title">
-        <h2 id="settings-title">Settings</h2>
-        <section class="preset-panel" aria-labelledby="presets-title">
-          <h3 id="presets-title">Presets</h3>
-          <form class="preset-actions" @submit.prevent="addPreset">
-            <label>New preset <input v-model="newPresetName" required></label>
-            <button type="submit" class="secondary">Add</button>
-          </form>
-          <template v-if="presets.size">
-            <label>
-              Edit preset
-              <select v-model="editedPresetName">
-                <option v-for="name in presets.keys()" :key="name" :value="name">{{ name }}</option>
-              </select>
-            </label>
-            <ValuesEditor v-if="editedPresetValues" :values="editedPresetValues" label="Preset values" @save="savePresetValues" />
-            <button type="button" class="secondary" @click="removePreset">Delete {{ editedPresetName }}</button>
-          </template>
-          <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
-        </section>
-        <ExternalApiSettings :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
-          :save="externalApis.saveConnection" :remove="externalApis.removeConnection" :test="externalApis.testConnection" />
-      </section>
+      <Transition name="settings-drawer">
+        <aside v-if="settingsOpen" id="settings-panel" class="work-area settings" aria-labelledby="settings-title" @keydown.esc.stop="closeSettings">
+          <div class="settings-header">
+            <h2 id="settings-title">Settings</h2>
+            <button ref="settingsCloseButton" type="button" class="secondary settings-icon" aria-label="Close settings" @click="closeSettings">
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
+          <div :inert="scenarioPending">
+            <section class="preset-panel" aria-labelledby="presets-title">
+              <h3 id="presets-title">Presets</h3>
+              <form class="preset-actions" @submit.prevent="addPreset">
+                <label>New preset <input v-model="newPresetName" required></label>
+                <button type="submit" class="secondary">Add</button>
+              </form>
+              <template v-if="presets.size">
+                <label>
+                  Edit preset
+                  <select v-model="editedPresetName">
+                    <option v-for="name in presets.keys()" :key="name" :value="name">{{ name }}</option>
+                  </select>
+                </label>
+                <ValuesEditor v-if="editedPresetValues" :values="editedPresetValues" label="Preset values" @save="savePresetValues" />
+                <button type="button" class="secondary" @click="removePreset">Delete {{ editedPresetName }}</button>
+              </template>
+              <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
+            </section>
+            <ExternalApiSettings :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
+              :save="externalApis.saveConnection" :remove="externalApis.removeConnection" :test="externalApis.testConnection" />
+          </div>
+        </aside>
+      </Transition>
       <EntityGraph v-if="graphView === 'entities'" :spec="spec" :apis="externalApis.contexts.value" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <EndpointGraph v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
-      <div v-show="!settingsOpen && !graphView" class="layout">
+      <div v-show="!graphView" class="layout">
         <EndpointCatalog :inert="scenarioPending"
           :groups="groups"
           :active-group="current?.group ?? ''"
@@ -452,6 +474,10 @@ function removeScenario(id) {
                   @follow="follow"
                 />
               </template>
+  position: relative;
+  margin: var(--app-gutter);
+}
+.app {
             </OperationRunner>
           </article>
           <p v-else class="mapping-notice muted">No endpoints in this document.</p>
@@ -477,23 +503,37 @@ function removeScenario(id) {
 }
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; background: #eef2ee; }
-.app {
+#app {
   --app-gutter: 1rem;
   display: flex;
   flex-direction: column;
   height: calc(100dvh - 2 * var(--app-gutter));
-  margin: var(--app-gutter);
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: .75rem;
 }
-.hero { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--line); }
-.api-info { min-width: 0; overflow-wrap: anywhere; }
-.api-title { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-height: 1.65rem; }
+.hero { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1rem; padding: 2.125rem 1rem 1rem; border-bottom: 1px solid var(--line); }
+.api-identity { display: flex; flex: 1 1 16rem; justify-content: flex-end; align-items: center; gap: .75rem; min-width: 0; }
+.api-info { min-width: 0; overflow-wrap: anywhere; text-align: right; }
+.api-title { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .5rem; min-height: 1.65rem; }
 .hero h1 { margin: 0; font-size: 1.05rem; letter-spacing: -.025em; }
 .hero p { margin: .25rem 0 0; font-size: .82rem; }
-.eyebrow { display: flex; align-items: center; gap: .5rem; padding-right: 1rem; border-right: 1px solid var(--line); color: var(--accent); font-size: .88rem; font-weight: 750; }
+.brand-stamp {
+  position: absolute;
+  top: -.55rem;
+  left: .8rem;
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .25rem .55rem .25rem .3rem;
+  border: 1px solid var(--line);
+  border-radius: .55rem;
+  background: var(--surface);
+  color: var(--accent);
+  font-size: .88rem;
+  font-weight: 750;
+}
 .brand-mark { display: grid; place-items: center; width: 1.65rem; height: 1.65rem; border-radius: .45rem; background: var(--accent); color: white; }
 .api-title small { padding: .125rem .375rem; border: 1px solid var(--line); border-radius: .375rem; color: var(--muted); font-size: .72rem; }
 .layout { display: grid; flex: 1; min-height: 0; grid-template-columns: clamp(14rem, 23vw, 18rem) minmax(0, 1fr); }
@@ -522,6 +562,11 @@ body { margin: 0; background: #eef2ee; }
 .preset-chip[aria-pressed="true"]:hover { background: #104737; }
 .preset-panel > label select { margin-left: .35rem; max-width: 70%; }
 .preset-panel summary { cursor: pointer; width: fit-content; color: var(--accent); }
+.settings-drawer-enter-active, .settings-drawer-leave-active { transition: transform 180ms ease-out; }
+.settings-drawer-enter-from, .settings-drawer-leave-to { transform: translateX(calc(100% + var(--app-gutter))); }
+@media (prefers-reduced-motion: reduce) {
+  .settings-drawer-enter-active, .settings-drawer-leave-active { transition: none; }
+}
 .preset-panel p { margin: 0; }
 .external-toggle label { display: flex; gap: .5rem; align-items: center; font-weight: 650; }
 .external-toggle input[role="switch"] { appearance: none; position: relative; width: 2.25rem; height: 1.3rem; margin: 0; border: 1px solid #9bad9f; border-radius: 999px; background: #cbd8cf; cursor: pointer; flex-shrink: 0; }
@@ -531,11 +576,22 @@ body { margin: 0; background: #eef2ee; }
 .external-toggle span, .external-toggle p { font-size: .78rem; }
 .external-api-label { color: var(--accent); font-weight: 650; }
 .external-context-note { font-size: .8rem; }
-.view-navigation { display: flex; flex-wrap: wrap; gap: .35rem; margin-left: auto; }
+.view-navigation { display: flex; flex-wrap: wrap; gap: .35rem; }
 .view-navigation [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
-.settings-toggle { margin-left: 0; flex-shrink: 0; }
-.settings { flex: 1; }
-.settings h2 { margin: 0 0 1rem; }
+.settings-icon.secondary { display: grid; flex: none; place-items: center; width: 2rem; height: 2rem; padding: 0; font-size: 1.2rem; line-height: 1; }
+.settings {
+  position: fixed;
+  z-index: 2;
+  inset: var(--app-gutter) var(--app-gutter) var(--app-gutter) auto;
+  width: min(28rem, calc(100% - 2 * var(--app-gutter)));
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: .75rem;
+  box-shadow: -.5rem 0 1.5rem #202b2729;
+  overscroll-behavior: contain;
+}
+.settings-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.settings h2 { margin: 0; }
 .settings h3 { margin: 0; font-size: 1rem; }
 .settings .preset-panel { max-width: 48rem; gap: .85rem; justify-items: start; }
 .settings .preset-panel > label { width: 100%; }
@@ -554,6 +610,7 @@ body { margin: 0; background: #eef2ee; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { border: 0; border-radius: .45rem; background: transparent; cursor: pointer; }
 button:hover { background: var(--accent-soft); }
+  .settings { overflow: auto; }
 button:disabled { cursor: default; opacity: .65; }
 :focus-visible { outline: 2px solid #257f67; outline-offset: 2px; }
 input:not([type="checkbox"]), select, textarea {
@@ -578,7 +635,8 @@ input:not([type="checkbox"]), select, textarea {
 .method[data-method="PUT"], .method[data-method="PATCH"] { background: #f9efd9; color: #755018; }
 .method[data-method="DELETE"] { background: #ffe3e2; color: #8f2225; }
 @media (max-width: 760px) {
-  .app { --app-gutter: .5rem; height: auto; min-height: calc(100dvh - 2 * var(--app-gutter)); }
+  #app { --app-gutter: .75rem; }
+  .app { height: auto; min-height: calc(100dvh - 2 * var(--app-gutter)); }
   .layout { grid-template-columns: minmax(0, 1fr); }
   .work-area { overflow: visible; padding: 1rem; }
 }
