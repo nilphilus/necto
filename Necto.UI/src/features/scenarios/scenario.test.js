@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { snapshotScenario, rememberBinding, prepareScenario, executeScenario, readResponseAt, validateScenario } from './scenario.js'
 import { applyChoice } from '../related-endpoints/mappings.js'
-import { buildRequest } from '../request-runner/request.js'
+import { buildRequest, resolveRequestValues } from '../request-runner/request.js'
 import { traceSteps } from './trace.js'
 
 const op = (name, path, parameters = [], extra = {}) => ({ key: `GET ${path}`, apiId: 'local', id: name, name,
@@ -156,6 +156,25 @@ test('body bindings remove derived fields from storage and hydrate fresh values'
   const plan = prepareScenario(scenario, context({ operations: [list, target], links: [{ from: list, to: target, location: 'body', name: 'invoice', source: { eachItem: true, property: null } }] }))
   const result = await executeScenario(plan, { signal: new AbortController().signal, execute: async operation => operation === list ? response([{ id: 142 }]) : response({ created: true }) })
   assert.equal(result.status, 'completed'); assert.deepEqual(JSON.parse(plan[1].session.body), { description: 'keep', invoice: { id: 142 } })
+})
+
+test('a preset fills a declared JSON field without requiring its saved response binding', () => {
+  const target = op('Create', '/create', [], {
+    method: 'POST', key: 'POST /create',
+    requestBody: { required: true, content: { 'application/json': {
+      schema: { properties: { invoiceId: { type: 'integer' } } },
+    } } },
+  })
+  const chain = [{ operation: list, session: createSession() }, { operation: target, session: createSession() }]
+  chain[1].session.body = '{"invoiceId":42}'
+  rememberBinding(chain[1].session, { location: 'body', name: 'invoiceId', value: 42, binding: { path: ['id'] } }, 0)
+  const scenario = snapshotScenario(chain, 'Create invoice', 'create')
+  const options = context({ operations: [list, target], links: [], valuesFor: operation =>
+    resolveRequestValues(operation, new Map([['invoiceId', { value: '7' }]])) })
+  const [, step] = prepareScenario(scenario, options)
+  assert.equal(scenario.steps[1].bindings.length, 1)
+  assert.deepEqual(step.bindings, [])
+  assert.deepEqual(JSON.parse(buildRequest(target, options.configuration, step.session, step.values).options.body), { invoiceId: 7 })
 })
 
 test('invalid, forward and overlapping bindings are rejected; path reading preserves falsy values', () => {

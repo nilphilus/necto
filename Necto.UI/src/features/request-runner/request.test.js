@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { buildRequest, contextKey, resolveRequestValues } from './request.js'
+import { buildRequest, contextKey, hasPresetFor, migratePreset, resolveRequestValues } from './request.js'
 import { applySample, readSamples } from './samples.js'
 
 const configuration = { openApiUrl: 'https://api.example/openapi/v1.json' }
+const preset = entries => new Map(entries.map(([name, value]) => [name, { value }]))
 const tenant = { in: 'header', name: 'X-Tenant', required: true }
 const invoice = {
   method: 'GET',
@@ -74,15 +75,15 @@ test('query aliases use the OpenAPI spelling and respect preset precedence', () 
     path: '/assets',
     parameters: [{ in: 'query', name: 'customerId' }],
   }
-  const firstPreset = new Map([['query:customerId', '7']])
-  const secondPreset = new Map([['query:CustomerId', '12']])
+  const firstPreset = preset([['customerId', '7']])
+  const secondPreset = preset([['CustomerId', '12']])
   const values = resolveRequestValues(assets, firstPreset, secondPreset)
   assert.equal(values.get('query:customerId'), '12')
   const request = buildRequest(assets, configuration, { fields: { 'query:customerId': '3' } }, values)
   assert.equal(request.url.search, '?customerId=12')
 
   assets.parameters.push({ in: 'query', name: 'CustomerId' })
-  const distinct = resolveRequestValues(assets, firstPreset, secondPreset, new Map([['query:CUSTOMERID', '99']]))
+  const distinct = resolveRequestValues(assets, firstPreset, secondPreset, preset([['CUSTOMERID', '99']]))
   assert.deepEqual([...distinct], [['query:customerId', '7'], ['query:CustomerId', '12']])
 })
 
@@ -95,15 +96,48 @@ test('active presets combine independent fields and the latest preset wins a sha
       { in: 'query', name: 'assetId' },
     ],
   }
-  const cantoso = new Map([['query:customerId', '7']])
-  const assetType = new Map([['query:assetId', '42']])
-  const otherCustomer = new Map([['query:CustomerId', '12']])
+  const cantoso = preset([['customerId', '7']])
+  const assetType = preset([['assetId', '42']])
+  const otherCustomer = preset([['CustomerId', '12']])
 
   const values = resolveRequestValues(assets, cantoso, assetType, otherCustomer)
   const request = buildRequest(assets, configuration, { fields: {} }, values)
   assert.equal(request.url.searchParams.get('customerId'), '12')
   assert.equal(request.url.searchParams.get('assetId'), '42')
   assert.equal(resolveRequestValues(assets, cantoso, assetType).get('query:customerId'), '7')
+})
+
+test('one preset name fills route, query, header and nested JSON fields', () => {
+  const operation = {
+    ...invoice,
+    method: 'POST',
+    path: '/{id}',
+    parameters: [{ in: 'path', name: 'id' }, { in: 'query', name: 'id' }, { in: 'header', name: 'ID' }],
+    requestBody: { content: { 'application/json': { schema: {
+      properties: { id: { type: 'integer' }, nested: { properties: { id: { type: 'string' } } } },
+    } } } },
+  }
+  const values = resolveRequestValues(operation, preset([['id', '7'], ['unmatched', 'no']]), preset([['ID', '42']]))
+  const draft = { fields: {}, body: '{"items":[{"id":1}],"other":true}' }
+  const { url, options } = buildRequest(operation, configuration, draft, values)
+  assert.equal(url.href, 'https://api.example/42?id=42')
+  assert.equal(options.headers.get('id'), '42')
+  assert.equal(options.headers.has('unmatched'), false)
+  assert.deepEqual(JSON.parse(options.body), { items: [{ id: 42 }], other: true, id: 42, nested: { id: '42' } })
+  assert.equal(draft.body, '{"items":[{"id":1}],"other":true}')
+
+  const bodyOnly = { ...operation, parameters: [], path: '/body' }
+  const bodyValues = resolveRequestValues(bodyOnly, preset([['id', '7']]))
+  assert.equal(hasPresetFor(bodyOnly, '', bodyValues), true)
+  assert.deepEqual(JSON.parse(buildRequest(bodyOnly, configuration, { fields: {}, body: '' }, bodyValues).options.body),
+    { id: 7, nested: { id: '7' } })
+})
+
+test('migrated header presets still send undeclared headers and match other fields by name', () => {
+  const values = resolveRequestValues(invoice, migratePreset([['header:authorization', 'token'], ['query:customer', 'acme']]))
+  const { url, options } = buildRequest(invoice, configuration, { fields: { 'path:id': '123', 'header:X-Tenant': 'acme' } }, values)
+  assert.equal(url.pathname, '/acme/Invoice/123')
+  assert.equal(options.headers.get('Authorization'), 'token')
 })
 
 test('canceling a large response parser terminates its worker', async t => {

@@ -225,17 +225,17 @@ external endpoints. No proxy is introduced by Necto.
 
 ## Request presets
 
-Use **Settings → Presets** to add a named preset. Choose **Add field**, select its type, and enter its name and value. For example, add these rows and choose **Save values**.
+Use **Settings → Presets** to add a named preset. Choose **Add field**, enter its name and value, and choose **Save values**.
 
-| Type | Name | Value |
-| --- | --- | --- |
-| Header | `X-Tenant` | `acme` |
-| Path | `customer` | `customer-42` |
-| Query | `locale` | `pl-PL` |
+| Name | Value |
+| --- | --- |
+| `X-Tenant` | `acme` |
+| `customer` | `customer-42` |
+| `locale` | `pl-PL` |
 
 Choose presets above the endpoint title in the API view. The selector shows presets that can affect the current endpoint. If you switch endpoints, presets that are hidden keep their selection and activation order. When multiple presets supply the same field, the most recently enabled preset wins for that field. The browser saves the presets and their activation order for this OpenAPI URL in local storage. Existing saved environments appear as presets.
 
-Values match OpenAPI parameters by location and name. Header names are case-insensitive, and configured headers are also sent when the operation omits them from its OpenAPI parameters. Path names are case-sensitive. Query fields prefer exact names and also accept case differences when the match is unambiguous. Necto sends the query parameter name as it appears in OpenAPI. Use strings for values and JSON-encoded strings for array or object parameters. In a route like `/{customer}/Invoice/{id}`, a preset supplies `customer` and the request form supplies `id`.
+Each entry fills matching header, query, route, and JSON body fields. Exact names take precedence within a preset. Case differences are accepted when the match is unambiguous. Necto keeps the endpoint's parameter spelling. Use JSON text for array or object values. For example, a `customer` entry can fill both `/{customer}/Invoice/{id}` and a JSON property named `customer` in the same request. Previously saved header entries still send their headers when OpenAPI omits them.
 
 Active presets take precedence over the request form and values selected from a related response.
 

@@ -1,5 +1,5 @@
 import { applyChoice, matchesPath, sourcePath } from '../related-endpoints/mappings.js'
-import { buildRequest, contextKey } from '../request-runner/request.js'
+import { applyBodyPresets, buildRequest, contextKey } from '../request-runner/request.js'
 
 export const pathLabel = path => '$' + path.map(part => `[${JSON.stringify(part)}]`).join('')
 const targetKey = binding => JSON.stringify([binding.location, binding.name])
@@ -110,8 +110,10 @@ export function prepareScenario(scenario, { operations, links, configuration, cr
   })
   if (!validateRequests) return plan
   for (const [index, step] of plan.entries()) {
-    step.bindings = step.bindings.filter(binding => binding.location === 'body' ||
-      !step.values.has(contextKey({ in: binding.location, name: binding.name })))
+    const { matches } = applyBodyPresets(step.operation, step.session.body, step.values)
+    step.bindings = step.bindings.filter(binding => binding.location === 'body'
+      ? !matches.has(binding.name)
+      : !step.values.has(contextKey({ in: binding.location, name: binding.name })))
     const draft = { fields: { ...step.session.fields }, body: step.session.body }
     try {
       for (const binding of step.bindings) {

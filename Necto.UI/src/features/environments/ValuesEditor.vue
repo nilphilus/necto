@@ -12,15 +12,14 @@ const error = ref('')
 let nextId = 0
 
 watch(() => props.values, values => {
-  rows.value = Array.from(values, ([key, value]) => {
-    const colon = key.indexOf(':')
-    return { id: nextId++, location: key.slice(0, colon), name: key.slice(colon + 1), value }
-  })
+  rows.value = Array.from(values, ([name, { value, legacyHeader }]) => ({
+    id: nextId++, name, value, legacyHeader,
+  }))
   error.value = ''
 }, { immediate: true })
 
 async function addRow() {
-  rows.value.push({ id: nextId++, location: 'header', name: '', value: '' })
+  rows.value.push({ id: nextId++, name: '', value: '' })
   await nextTick()
   form.value?.querySelector('.value-row:last-child .field-name')?.focus()
 }
@@ -28,18 +27,17 @@ async function addRow() {
 function save() {
   try {
     const values = new Map()
-    for (const { location, name, value } of rows.value) {
+    for (const { name, value, legacyHeader } of rows.value) {
       if (!name) throw new Error('Enter a name for each field.')
-      if (location === 'header') {
+      if (legacyHeader) {
         try {
           new Headers([[name, value]])
         } catch {
           throw new Error(`Check the name and value of the "${name}" header.`)
         }
       }
-      const key = location + ':' + (location === 'header' ? name.toLowerCase() : name)
-      if (values.has(key)) throw new Error(`"${name}" is already listed as a ${location} field.`)
-      values.set(key, value)
+      if (values.has(name)) throw new Error(`"${name}" is already listed.`)
+      values.set(name, { value, legacyHeader })
     }
     error.value = ''
     emit('save', values)
@@ -53,14 +51,6 @@ function save() {
   <form ref="form" class="values-editor" :aria-label="label" @submit.prevent="save">
     <div v-if="rows.length" class="value-rows">
       <div v-for="(row, index) in rows" :key="row.id" class="value-row">
-        <label>
-          Type
-          <select v-model="row.location">
-            <option value="header">Header</option>
-            <option value="path">Path</option>
-            <option value="query">Query</option>
-          </select>
-        </label>
         <label>
           Name
           <input v-model.trim="row.name" class="field-name" required spellcheck="false">
@@ -90,7 +80,7 @@ function save() {
 .values-editor { max-width: 46rem; margin-block: .6rem; }
 .value-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(0, 2fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
   align-items: end;
   gap: .5rem;
 }

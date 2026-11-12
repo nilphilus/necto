@@ -8,23 +8,47 @@ export function contextKey(parameter) {
   return parameter.in === 'header' ? fieldKey(parameter).toLowerCase() : fieldKey(parameter)
 }
 
+export function migratePreset(entries) {
+  const preset = new Map()
+  for (const [key, value] of entries) {
+    const [location, name] = key.match(/^(header|path|query):(.*)$/)?.slice(1) ?? ['', key]
+    preset.set(name, { value, legacyHeader: location === 'header' || preset.get(name)?.legacyHeader })
+  }
+  return preset
+}
+
+const bodyPresets = Symbol('body presets')
+
+function matchingPreset(name, siblings, layer) {
+  if (layer.has(name)) return layer.get(name)
+  const lower = name.toLowerCase()
+  if (siblings.filter(sibling => sibling.toLowerCase() === lower).length !== 1) return
+  const aliases = [...layer.keys()].filter(candidate => candidate.toLowerCase() === lower)
+  if (aliases.length === 1) return layer.get(aliases[0])
+}
+
 export function resolveRequestValues(operation, ...layers) {
-  const queryKeys = supportedParameters(operation)
-    .filter(parameter => parameter.in === 'query')
-    .map(contextKey)
+  const parameters = supportedParameters(operation)
   const values = new Map()
-  for (const layer of layers) {
-    for (const [key, value] of layer) {
-      if (!key.startsWith('query:') || queryKeys.includes(key)) {
-        values.set(key, value)
-        continue
-      }
-      const normalized = key.toLowerCase()
-      const matches = queryKeys.filter(queryKey => queryKey.toLowerCase() === normalized)
-      if (matches.length !== 1 || layer.has(matches[0])) continue
-      const aliases = [...layer.keys()].filter(alias => alias.toLowerCase() === normalized)
-      if (aliases.length === 1) values.set(matches[0], value)
+  const declared = new Set(parameters.map(contextKey))
+  const namesByLocation = new Map()
+  for (const { in: location, name } of parameters) {
+    if (!namesByLocation.has(location)) namesByLocation.set(location, [])
+    namesByLocation.get(location).push(name)
+  }
+  const activeLayers = layers.filter(Boolean)
+  for (const layer of activeLayers) {
+    for (const [name, { value, legacyHeader }] of layer) {
+      const headerKey = 'header:' + name.toLowerCase()
+      if (!declared.has(headerKey) && (legacyHeader || values.has(headerKey))) values.set(headerKey, value)
     }
+    for (const parameter of parameters) {
+      const entry = matchingPreset(parameter.name, namesByLocation.get(parameter.in), layer)
+      if (entry) values.set(contextKey(parameter), entry.value)
+    }
+  }
+  if (activeLayers.length && jsonContent(operation)) {
+    values.set(bodyPresets, activeLayers.map(layer => new Map(layer)))
   }
   return values
 }
@@ -35,23 +59,23 @@ export function jsonContent(operation) {
   )
 }
 
-function schemaExample(operation, schema, ancestors = new Set()) {
+function schemaExample(operation, schema, ancestors = new Set(), useExamples = true) {
   schema = operation.resolve(schema)
   if (!schema || ancestors.has(schema)) return null
   const nested = new Set(ancestors).add(schema)
   const example = schema.examples?.[0] ?? schema.enum?.[0] ?? schema.const ?? schema.default
-  if (Object.hasOwn(schema, 'example')) return schema.example
-  if (example !== undefined) return example
-  if (schema.oneOf || schema.anyOf) return schemaExample(operation, (schema.oneOf ?? schema.anyOf)[0], nested)
-  if (schema.allOf) return Object.assign({}, ...schema.allOf.map(part => schemaExample(operation, part, nested)))
+  if (useExamples && Object.hasOwn(schema, 'example')) return schema.example
+  if (useExamples && example !== undefined) return example
+  if (schema.oneOf || schema.anyOf) return schemaExample(operation, (schema.oneOf ?? schema.anyOf)[0], nested, useExamples)
+  if (schema.allOf) return Object.assign({}, ...schema.allOf.map(part => schemaExample(operation, part, nested, useExamples)))
 
   const type = Array.isArray(schema.type) ? schema.type.find(type => type !== 'null') : schema.type
   if (type === 'object' || schema.properties) {
     return Object.fromEntries(Object.entries(schema.properties ?? {})
       .filter(([, property]) => !operation.resolve(property)?.readOnly)
-      .map(([name, property]) => [name, schemaExample(operation, property, nested)]))
+      .map(([name, property]) => [name, schemaExample(operation, property, nested, useExamples)]))
   }
-  if (type === 'array') return schema.items ? [schemaExample(operation, schema.items, nested)] : []
+  if (type === 'array') return schema.items ? [schemaExample(operation, schema.items, nested, useExamples)] : []
   if (type === 'boolean') return false
   if (type === 'integer' || type === 'number') return schema.minimum ?? 0
   if (type === 'string') return 'string'
@@ -67,6 +91,50 @@ export function initialBody(operation) {
     if (example && Object.hasOwn(example, 'value')) return formatJson(example.value)
   }
   return formatJson(content.schema ? schemaExample(operation, content.schema) : {})
+}
+
+function bodyValue(value, example) {
+  if (typeof example === 'string') return value
+  try { return JSON.parse(value) } catch { return value }
+}
+
+export function applyBodyPresets(operation, body, values) {
+  const layers = values.get(bodyPresets)
+  const matches = new Set()
+  if (!layers) return { body, matches }
+  let parsed
+  try { parsed = JSON.parse(body.trim() ? body : '{}') } catch { return { body, matches } }
+  const shape = schemaExample(operation, jsonContent(operation)?.[1].schema, new Set(), false)
+  let applied = false
+  function fill(value, example, root = false) {
+    if (Array.isArray(value)) return value.map((item, index) => fill(item, example?.[index] ?? example?.[0]))
+    if (!value || typeof value !== 'object') return value
+    if (!example || typeof example !== 'object' || Array.isArray(example)) example = {}
+    const names = [...new Set([...Object.keys(value), ...Object.keys(example)])]
+    const entries = []
+    for (const name of names) {
+      const entry = layers.reduce((previous, layer) => matchingPreset(name, names, layer) ?? previous, undefined)
+      const present = Object.hasOwn(value, name)
+      const sample = Object.hasOwn(example, name) ? example[name] : undefined
+      if (entry) {
+        applied = true
+        if (root) matches.add(name)
+        entries.push([name, bodyValue(entry.value, sample ?? (present ? value[name] : undefined))])
+      } else if (present) {
+        entries.push([name, fill(value[name], sample)])
+      } else if (sample && typeof sample === 'object' && !Array.isArray(sample)) {
+        const nested = fill({}, sample)
+        if (Object.keys(nested).length) entries.push([name, nested])
+      }
+    }
+    return Object.fromEntries(entries)
+  }
+  const filled = fill(parsed, shape, true)
+  return { body: applied ? formatJson(filled) : body, matches, applied }
+}
+
+export function hasPresetFor(operation, body, values) {
+  return [...values.keys()].some(key => key !== bodyPresets) || applyBodyPresets(operation, body, values).applied
 }
 
 function parameterValue(operation, parameter, input) {
@@ -160,18 +228,19 @@ export function buildRequest(operation, configuration, draft, values = new Map()
   if (operation.requestBody) {
     const content = jsonContent(operation)
     if (!content) throw new Error('This request needs a body format other than JSON.')
-    if (draft.body.trim() || operation.requestBody.required) {
+    const { body } = applyBodyPresets(operation, draft.body, values)
+    if (body.trim() || operation.requestBody.required) {
       try {
-        JSON.parse(draft.body)
+        JSON.parse(body)
       } catch {
         throw new Error('Enter a valid JSON request body.')
       }
-      options.body = draft.body
+      options.body = body
       if (!values.has('header:content-type')) headers.set('Content-Type', content[0])
     }
   }
   for (const [key, value] of values) {
-    if (key.startsWith('header:') && !declared.has(key)) headers.set(key.slice(7), value)
+    if (typeof key === 'string' && key.startsWith('header:') && !declared.has(key)) headers.set(key.slice(7), value)
   }
   return { url, options }
 }
