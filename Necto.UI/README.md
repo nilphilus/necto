@@ -292,3 +292,13 @@ not make arbitrarily large payloads free to hold in memory. Clear or cancel the
 search, replace the response, or leave the view to terminate the worker. Search
 never refetches the response or changes API pagination. Browsers without worker
 support retain Preview, Raw and download, and display a search error.
+
+## Bring your agent
+
+When the host enables `MapNectoAgent` and configures `agentPath`, the workspace
+includes **Bring your agent**. Create a connection, add its Streamable HTTP MCP
+configuration to your agent, give the agent the displayed polling instructions,
+and queue a prompt. Progress and results appear in the task panel. Your agent
+uses its own HTTP tools and credentials; Necto supplies API metadata and task
+coordination. See the [full guide](../docs/bring-your-agent/README.md) for host
+configuration, client setup, tools, capability lifetime and execution limits.
