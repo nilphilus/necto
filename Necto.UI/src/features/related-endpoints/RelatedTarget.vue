@@ -35,6 +35,7 @@ const choices = computed(() => fields.value.filter(field => drafts[field.key] !=
   }
   return { location: field.location, name: field.name, value, binding: match?.binding, sourceResult: match?.sourceResult }
 }))
+const ready = computed(() => props.canSend(props.target.operation, choices.value))
 </script>
 
 <template>
@@ -44,13 +45,17 @@ const choices = computed(() => fields.value.filter(field => drafts[field.key] !=
       <strong>{{ target.operation.name }}</strong>
       <small v-if="target.operation.apiId && target.operation.apiId !== 'local'">{{ target.operation.apiName }} [{{ target.operation.apiId }}]</small>
     </div>
-    <form @submit.prevent="canSend(target.operation, choices) && emit('follow', target.operation, choices, true)">
-      <button type="submit" class="secondary" :disabled="!canSend(target.operation, choices)"
+    <form @submit.prevent="ready && emit('follow', target.operation, choices, true)">
+      <button v-if="!fields.length" type="submit" class="secondary send" :disabled="!ready"
         :aria-label="'Send ' + target.operation.name">Send ↗</button>
       <div v-if="fields.length" class="fields">
-        <div v-for="field in fields" :key="field.key" class="field">
+        <div v-for="(field, index) in fields" :key="field.key" class="field">
           <ValueInput v-model="drafts[field.key]" :choices="field.choices" dropdown placeholder="Type or choose a value…">
             <template #label>{{ field.name ?? 'body' }} <small>{{ field.location }}</small></template>
+            <template v-if="index === 0" #leading>
+              <button type="submit" class="send send-joined" :disabled="!ready"
+                :aria-label="'Send ' + target.operation.name">Send ↗</button>
+            </template>
           </ValueInput>
         </div>
       </div>
@@ -68,7 +73,9 @@ li + li { border-top: 1px solid var(--line); }
 form { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin-top: .45rem; }
 .fields { display: flex; flex: 1 1 12rem; flex-wrap: wrap; align-items: end; gap: .5rem; min-width: 0; }
 .field { min-width: min(12rem, 100%); max-width: 100%; font-size: .8rem; }
+.field:first-child { min-width: min(16rem, 100%); }
 small { color: var(--muted); }
-form > button { padding: .5rem .65rem; color: var(--accent); font-size: .8rem; }
+.send { padding: .5rem .65rem; color: var(--accent); font-size: .8rem; white-space: nowrap; }
+.send-joined { border-inline-end: 1px solid var(--line); border-radius: .45rem 0 0 .45rem; }
 .suggestion-note { flex-basis: 100%; }
 </style>

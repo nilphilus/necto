@@ -71,19 +71,26 @@ async function navigate(event) {
   <div v-if="dropdown" class="dropdown">
     <label :for="id"><slot name="label" /></label>
     <div class="control">
-      <span v-for="value in options" :key="value" class="measure" aria-hidden="true">{{ value }}</span>
-      <input v-bind="$attrs" :id="id" ref="input" :value="modelValue" role="combobox" autocomplete="off" spellcheck="false"
-        aria-autocomplete="list" :aria-expanded="open" :aria-controls="open ? id + '-list' : undefined"
-        :aria-activedescendant="open && activeValue !== undefined ? optionId(active) : undefined"
-        @input="search" @click="open = true" @blur="close" @keydown="navigate">
-      <button type="button" class="toggle" tabindex="-1" :aria-label="open ? 'Hide suggestions' : 'Show suggestions'"
-        @pointerdown.prevent @click="toggle"><span aria-hidden="true">▾</span></button>
-      <div v-if="open" class="popup">
-        <ul :id="id + '-list'" role="listbox" aria-label="Suggested values">
-          <li v-for="(value, index) in matches" :id="optionId(index)" :key="value" role="option"
-            :aria-selected="active === index" @mousedown.prevent @click="select(value)">{{ value }}</li>
-        </ul>
-        <p v-if="!matches.length" role="status">No matching suggestions</p>
+      <slot name="leading" />
+      <div class="picker">
+        <span class="search-icon" aria-hidden="true"></span>
+        <span v-for="value in options" :key="value" class="measure" aria-hidden="true">{{ value }}</span>
+        <input v-bind="$attrs" :id="id" ref="input" :value="modelValue" role="combobox" autocomplete="off" spellcheck="false"
+          aria-autocomplete="list" :aria-expanded="open" :aria-controls="open ? id + '-list' : undefined"
+          :aria-activedescendant="open && activeValue !== undefined ? optionId(active) : undefined"
+          @input="search" @click="open = true" @blur="close" @keydown="navigate">
+        <button type="button" class="toggle" tabindex="-1" :aria-label="open ? 'Hide suggestions' : 'Show suggestions'"
+          @pointerdown.prevent @click="toggle"><span aria-hidden="true">▾</span></button>
+        <div v-if="open" class="popup">
+          <ul :id="id + '-list'" role="listbox" aria-label="Suggested values">
+            <li v-for="(value, index) in matches" :id="optionId(index)" :key="value" role="option"
+              :aria-selected="active === index" @mousedown.prevent @click="select(value)">
+              <span>{{ value }}</span>
+              <span v-if="value === modelValue" class="check" aria-hidden="true">✓</span>
+            </li>
+          </ul>
+          <p v-if="!matches.length" role="status">No matching suggestions</p>
+        </div>
       </div>
     </div>
   </div>
@@ -98,10 +105,31 @@ async function navigate(event) {
 
 <style scoped>
 .dropdown { display: grid; gap: .25rem; min-width: 0; }
-.control { position: relative; display: grid; min-width: 0; }
-.control > input, .measure { grid-area: 1 / 1; }
-.control > input { width: 0; min-width: 100%; padding-right: 2rem; }
-.measure { visibility: hidden; white-space: nowrap; padding-inline: .65rem 2.05rem; overflow: hidden; }
+.control { display: flex; min-width: 0; border: 1px solid #a2b2a9; border-radius: .5rem; background: var(--surface); }
+.control:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.picker { position: relative; display: grid; flex: 1 1 auto; min-width: 0; }
+.picker > input, .measure { grid-area: 1 / 1; padding-inline: 1.9rem 2rem; }
+.picker > input { width: 0; min-width: 100%; border: 0; background: transparent; outline: none; }
+.measure { visibility: hidden; white-space: nowrap; overflow: hidden; }
+.search-icon {
+  position: absolute;
+  inset: 50% auto auto .7rem;
+  width: .6rem;
+  height: .6rem;
+  transform: translateY(-60%);
+  border: 1.5px solid var(--muted);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.search-icon::after {
+  content: '';
+  position: absolute;
+  inset: 100% auto auto 100%;
+  width: .28rem;
+  border-top: 1.5px solid var(--muted);
+  transform: rotate(45deg);
+  transform-origin: left;
+}
 .toggle { position: absolute; inset: 1px 1px 1px auto; width: 1.8rem; color: var(--accent); }
 .popup {
   position: absolute;
@@ -116,6 +144,8 @@ async function navigate(event) {
 }
 .popup ul { margin: 0; padding: 0; list-style: none; }
 .popup li, .popup p { padding: .4rem .6rem; margin: 0; overflow-wrap: anywhere; }
-.popup li { cursor: pointer; white-space: pre-wrap; }
+.popup li { display: flex; justify-content: space-between; gap: .5rem; cursor: pointer; white-space: pre-wrap; }
+.popup li + li { border-top: 1px solid var(--line); }
+.check { color: var(--accent); }
 .popup li:hover, .popup li[aria-selected="true"] { background: var(--accent-soft); }
 </style>
