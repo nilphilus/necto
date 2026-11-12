@@ -225,6 +225,8 @@ external endpoints. No proxy is introduced by Necto.
 
 ## Request presets
 
+Active presets are always shown above the API workspace, even when they do not match the current endpoint. Their chips open the selected preset editor or deactivate that preset. Parameter notes identify the winning preset; JSON body overrides can be expanded to inspect field paths and sources. Related requests show effective preset inputs even when a preset replaces their editable field. Header values are hidden in these summaries. External APIs that have not opted into presets show an explicit exclusion note.
+
 Use **Settings → Presets** to add a named preset. Choose **Add field**, enter its name and value, and choose **Save values**.
 
 | Name | Value |

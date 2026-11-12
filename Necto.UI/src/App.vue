@@ -19,7 +19,7 @@ import { useScenarios } from './features/scenarios/useScenarios.js'
 import { rememberBinding } from './features/scenarios/scenario.js'
 import { readRoute, routePath } from './features/routing/routes.js'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
-import { buildRequest, fieldKey, contextKey, hasPresetFor, migratePreset, resolveRequestValues } from './features/request-runner/request.js'
+import { buildRequest, fieldKey, contextKey, hasPresetFor, migratePreset, presetInputs, resolveNamedRequestValues } from './features/request-runner/request.js'
 
 const { spec, configuration, error, operations, groups, externalApis } = useCatalog()
 const { sessions, sessionFor, createSession, run } = useRequestRunner(configuration)
@@ -50,6 +50,7 @@ let stampClicks = 0
 let firstStampClick = 0
 const settingsButton = ref(null)
 const settingsCloseButton = ref(null)
+const presetEditor = ref(null)
 const graphView = ref('')
 const basePath = new URL(document.baseURI).pathname
 const historyEntries = new Map()
@@ -84,7 +85,7 @@ const visiblePresetNames = computed(() => {
 
 function valuesFor(operation, layers = activePresetValues.value) {
   if (operation.apiId && operation.apiId !== 'local' && !operation.usePresets) return new Map()
-  return resolveRequestValues(operation, ...layers)
+  return resolveNamedRequestValues(operation, ...layers.map(values => ({ name: [...presets.value].find(([, stored]) => stored === values)?.[0], values })))
 }
 
 function sampleStorageKey(operation) {
@@ -203,6 +204,13 @@ async function toggleSettings() {
   settingsCloseButton.value?.focus()
 }
 
+async function editActivePreset(name) {
+  editedPresetName.value = name
+  settingsOpen.value = true
+  await nextTick()
+  presetEditor.value?.focus()
+}
+
 function clickBrandStamp(event) {
   if (skeletonWalking.value) return
   if (stampClicks === 0 || event.timeStamp - firstStampClick > 750) {
@@ -282,6 +290,7 @@ const relatedTargets = computed(() => {
     const values = valuesFor(target.operation)
     return {
       ...target,
+      presetInputs: presetInputs(target.operation, createDraft(target.operation).body, values),
       selectedCandidates: selected.find(entry => entry.operation.key === target.operation.key)?.candidates ?? [],
       candidates: target.candidates.filter(choice =>
         choice.location === 'body' || !values.has(contextKey({ in: choice.location, name: choice.name })),
@@ -577,7 +586,7 @@ function removeScenario(id) {
               <template v-if="presets.size">
                 <label>
                   Edit preset
-                  <select v-model="editedPresetName">
+                  <select ref="presetEditor" v-model="editedPresetName">
                     <option v-for="name in presets.keys()" :key="name" :value="name">{{ name }}</option>
                   </select>
                 </label>
@@ -604,6 +613,15 @@ function removeScenario(id) {
         :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"
         @remove="removeScenario" @stop="scenarioStore.stop" @inspect="inspectScenario" />
+      <section v-if="!graphView && activePresetNames.length" class="active-presets" aria-label="Active presets">
+        <strong>Active presets</strong>
+        <span v-for="name in activePresetNames" :key="name" class="active-preset-chip">
+          <button type="button" :disabled="scenarioPending" :aria-label="'Edit active preset ' + name" @click="editActivePreset(name)">{{ name }}</button>
+          <button type="button" :disabled="scenarioPending" :aria-label="'Deactivate preset ' + name" @click="togglePreset(name, false)">×</button>
+        </span>
+        <small v-if="current?.operation.apiId && current.operation.apiId !== 'local' && !current.operation.usePresets">Not applied to this external API.</small>
+        <small v-else-if="!visiblePresetNames.some(name => activePresetNames.includes(name))">None apply to this request; related requests may still use them.</small>
+      </section>
       <div v-show="!graphView" class="layout" :class="{ 'presets-collapsed': presetsCollapsed }">
         <EndpointCatalog :inert="scenarioPending"
           :groups="groups"
@@ -685,7 +703,7 @@ function removeScenario(id) {
                 </div>
               </form>
             </dialog>
-            <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)">
+            <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)" @edit-preset="editActivePreset">
               <template #request-actions>
                 <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">
                   Store as sample
@@ -711,7 +729,7 @@ function removeScenario(id) {
                 <RelatedTargets
                   :targets="relatedTargets"
                   :can-send="canSendRelated"
-                  @follow="follow"
+                  @follow="follow" @edit-preset="editActivePreset"
                 />
               </template>
             </OperationRunner>
@@ -791,6 +809,11 @@ body { margin: 0; background: #eef2ee; }
 .brand-button:hover { background: var(--surface); }
 .brand-mark { display: grid; place-items: center; width: 1.65rem; height: 1.65rem; border-radius: .45rem; background: var(--accent); color: white; }
 .api-title small { padding: .125rem .375rem; border: 1px solid var(--line); border-radius: .375rem; color: var(--muted); font-size: .72rem; }
+.active-presets { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: .4rem; padding: .45rem 1rem; border-bottom: 1px solid var(--line); background: var(--accent-soft); font-size: .78rem; }
+.active-preset-chip { display: inline-flex; border: 1px solid #b4cdc0; border-radius: 1rem; background: var(--surface); }
+.active-preset-chip button { padding: .2rem .45rem; }
+.active-preset-chip button + button { border-left: 1px solid var(--line); }
+.active-presets small { color: var(--muted); }
 .layout {
   --presets-width: 9rem;
   display: grid;

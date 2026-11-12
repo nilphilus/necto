@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch, watchPostEffect } from 'vue'
 import ResponsePreview from './ResponsePreview.vue'
-import { applyBodyPresets, contextKey, fieldKey, jsonContent, supportedParameters } from './request.js'
+import { applyBodyPresets, contextKey, fieldKey, jsonContent, presetSource, supportedParameters } from './request.js'
 
 const props = defineProps({
   operation: { type: Object, required: true },
@@ -11,9 +11,11 @@ const props = defineProps({
   selectors: { type: Array, default: () => [] },
 })
 
+const emit = defineEmits(['edit-preset'])
 const parameters = computed(() => supportedParameters(props.operation))
 const content = computed(() => jsonContent(props.operation))
-const effectiveBody = computed(() => applyBodyPresets(props.operation, props.session.body, props.values).body)
+const bodyPresetResult = computed(() => applyBodyPresets(props.operation, props.session.body, props.values))
+const effectiveBody = computed(() => bodyPresetResult.value.body)
 const editingBody = ref(false)
 const displayedBody = computed({
   get: () => editingBody.value ? props.session.body : effectiveBody.value,
@@ -121,7 +123,10 @@ function parameterHint(parameter) {
             </slot>
           </label>
           <p v-if="parameter.description" class="muted">{{ parameter.description }}</p>
-          <p v-if="values.has(contextKey(parameter))" class="muted">Set by an active request preset.</p>
+          <p v-if="values.has(contextKey(parameter))" class="muted preset-origin">Set by preset
+            <button v-if="presetSource(values, contextKey(parameter))" type="button" class="preset-link" @click="emit('edit-preset', presetSource(values, contextKey(parameter)))">{{ presetSource(values, contextKey(parameter)) }}</button>
+            <span v-else>active request preset</span>.
+          </p>
           <slot v-else name="choices" :location="parameter.in" :parameter-name="parameter.name" />
         </div>
 
@@ -138,6 +143,10 @@ function parameterHint(parameter) {
               @blur="editingBody = false"
             />
           </label>
+          <details v-if="bodyPresetResult.sources?.length" class="body-preset-origins">
+            <summary>Presets override {{ bodyPresetResult.sources.length }} body fields</summary>
+            <ul><li v-for="source in bodyPresetResult.sources" :key="JSON.stringify(source.path)"><code>{{ JSON.stringify(source.path) }}</code> · <button type="button" class="preset-link" @click="emit('edit-preset', source.preset)">{{ source.preset }}</button></li></ul>
+          </details>
           <slot name="choices" location="body" />
         </div>
 
@@ -202,6 +211,9 @@ function parameterHint(parameter) {
 .pane-header button span { margin-left: .25rem; }
 .pane-body { padding: .85rem; }
 .empty { margin: 0; font-size: .85rem; }
+.preset-link { padding: .1rem .3rem; color: var(--accent); text-decoration: underline; text-underline-offset: .15rem; }
+.body-preset-origins { font-size: .78rem; margin-top: .5rem; overflow-wrap: anywhere; }
+.body-preset-origins summary { cursor: pointer; }
 .field + .field { margin-top: .85rem; }
 .field p { margin: .35rem 0 0; font-size: .82rem; }
 .field-label { display: grid; gap: .35rem; }
