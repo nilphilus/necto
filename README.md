@@ -33,11 +33,19 @@ invoice 501.
 
 ## Large payload experiment
 
-The `feat/paginated-large-response-preview` branch adds local Preview pagination.
+Necto provides local Preview pagination.
 Run SampleApi and use `GET /invoices/large-payload?count=100000&noteSize=1024`
 for a single response above 100 MB. Preview pages contain 25 entries and retain
 absolute indices for selecting objects; changing pages does not call the API.
 See the [UI guide](Necto.UI/README.md#large-responses) for limits and measurements.
+
+## External API connections
+
+Configure additional OpenAPI documents and Necto mappings in **Settings → External
+APIs**, then use **Show external APIs** in the workspace. Services retain their
+own request URLs and operation identities. Explicit `source.apiId` / `target.apiId`
+selectors allow response values to flow between configured services. See the
+[external API guide](Necto.UI/README.md#external-apis) for configuration and CORS.
 
 ## Endpoint mappings
 

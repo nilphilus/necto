@@ -44,48 +44,63 @@ export function readValues(response, source, selectedPath, limit = Infinity) {
   return values
 }
 
-export function useRelatedEndpoints(configuration, operations) {
+export function resolveMappingLinks(operations, catalogs) {
+  const byId = new Map()
+  for (const operation of operations) {
+    if (!operation.id) continue
+    const key = JSON.stringify([operation.apiId ?? 'local', operation.id])
+    byId.set(key, byId.has(key) ? null : operation)
+  }
+  const links = []
+  for (const { apiId, mappings } of catalogs) {
+    for (const mapping of mappings) {
+      const { source, target } = mapping ?? {}
+      if (!source || !target) continue
+      const from = byId.get(JSON.stringify([source.apiId ?? apiId, source.operationId]))
+      const to = byId.get(JSON.stringify([target.apiId ?? apiId, target.operationId]))
+      if (!from || !to) continue
+      let location = target.location
+      if (location === 'parameter') location = to.parameters.find(parameter =>
+        ['path', 'query', 'header'].includes(parameter.in) && parameter.name === target.name)?.in
+      if (location === 'body' ? !to.requestBody : !['path', 'query', 'header'].includes(location) ||
+        !to.parameters.some(parameter => parameter.in === location && parameter.name === target.name)) continue
+      links.push({ from, to, location, name: target.name, source, match: mapping.match ?? 'explicit' })
+    }
+  }
+  return links
+}
+
+export function useRelatedEndpoints(configuration, operations, externalContexts = ref([])) {
   const mappings = ref([])
   const error = ref('')
 
-  watch(() => configuration.value?.endpointMappingsUrl, async url => {
+  watch(() => configuration.value?.endpointMappingsUrl, async (url, previous, onCleanup) => {
+    mappings.value = []; error.value = ''
     if (!url) return
+    const controller = new AbortController()
+    onCleanup(() => controller.abort())
     try {
-      const response = await fetch(url, { headers: { Accept: 'application/json' } })
+      const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const entries = await response.json()
       if (!Array.isArray(entries)) throw new Error('Expected a list of endpoint mappings')
-      mappings.value = entries
+      if (!controller.signal.aborted) mappings.value = entries
     } catch (cause) {
-      error.value = `Could not load related endpoints. ${cause.message}`
+      if (!controller.signal.aborted) error.value = `Could not load related endpoints. ${cause.message}`
     }
   })
 
-  const links = computed(() => {
-    const byId = new Map(operations.value.filter(operation => operation.id).map(operation => [operation.id, operation]))
-    const links = []
-    for (const { source, target } of mappings.value) {
-      const from = byId.get(source?.operationId)
-      const to = byId.get(target?.operationId)
-      if (!from || !to) continue
-
-      let location = target.location
-      if (location === 'parameter') {
-        location = to.parameters.find(parameter =>
-          ['path', 'query', 'header'].includes(parameter.in) && parameter.name === target.name,
-        )?.in
-      }
-      if (location === 'body') {
-        if (!to.requestBody) continue
-      } else if (!['path', 'query', 'header'].includes(location) ||
-        !to.parameters.some(parameter => parameter.in === location && parameter.name === target.name)) {
-        continue
-      }
-
-      links.push({ from, to, location, name: target.name, source })
-    }
-    return links
-  })
+  const graphMappings = computed(() => [
+    { apiId: 'local', entries: mappings.value },
+    ...externalContexts.value.map(api => ({ apiId: api.id, entries: api.mappings })),
+  ].flatMap(({ apiId, entries }) => entries.filter(entry => entry?.source && entry?.target).map(entry => ({
+    ...entry, source: { ...entry.source, apiId: entry.source.apiId ?? apiId },
+    target: { ...entry.target, apiId: entry.target.apiId ?? apiId },
+  }))))
+  const links = computed(() => resolveMappingLinks(operations.value, [
+    { apiId: 'local', mappings: mappings.value },
+    ...externalContexts.value.map(api => ({ apiId: api.id, mappings: api.mappings })),
+  ]))
 
   function mappedValues(link, result) {
     if (!result?.ok) return []
@@ -116,7 +131,7 @@ export function useRelatedEndpoints(configuration, operations) {
       for (const result of results.get(link.from.key) ?? []) {
         for (const value of mappedValues(link, result)) {
           const key = JSON.stringify([link.name, value])
-          if (!choices.has(key)) choices.set(key, { key, name: link.name, value, source: link.from.name })
+          if (!choices.has(key)) choices.set(key, { key, name: link.name, value, source: (link.from.apiId && link.from.apiId !== 'local' ? link.from.apiName + ' · ' : '') + link.from.name })
         }
       }
     }
@@ -127,7 +142,7 @@ export function useRelatedEndpoints(configuration, operations) {
     return links.value.filter(link => link.from.key === operation.key).map(link => sourcePath(link.source))
   }
 
-  return { error, targetsFor, choicesFor, selectablePaths, mappings }
+  return { error, targetsFor, choicesFor, selectablePaths, mappings: graphMappings }
 }
 
 export function applyChoice(session, location, choice) {

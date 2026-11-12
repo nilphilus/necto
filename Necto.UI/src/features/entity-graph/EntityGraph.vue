@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, ref, watch, useId } from 'vue'
 import { buildEntityGraph, layoutGraph } from './graph.js'
-const props = defineProps({ spec: Object, operations: Array, mappings: Array, mappingError: String })
+const props = defineProps({ spec: Object, operations: Array, mappings: Array, mappingError: String, apis: { type: Array, default: () => [] } })
 defineEmits(['open-operation'])
 const search = ref('')
 const selectedId = ref('')
@@ -9,7 +9,7 @@ const zoom = ref(1)
 const kind = ref('all')
 const markerId = useId()
 const detailsTitle = ref(null)
-const graph = computed(() => buildEntityGraph(props.spec, props.operations, props.mappings))
+const graph = computed(() => buildEntityGraph(props.spec, props.operations, props.mappings, props.apis))
 const filtered = computed(() => graph.value.nodes.filter(node => node.name.toLowerCase().includes(search.value.trim().toLowerCase())))
 // Limit the overview, then search to inspect another part of a large catalog.
 const positions = computed(() => layoutGraph(filtered.value.slice(0, 100)))
@@ -22,6 +22,7 @@ const relationships = computed(() => graph.value.edges.filter(edge => (edge.from
 const names = computed(() => new Map(graph.value.nodes.map(node => [node.id, node.name])))
 const width = computed(() => Math.max(620, ...positions.value.map(node => node.x + 305)))
 const height = computed(() => Math.max(380, ...positions.value.map(node => node.y + 125)))
+watch(graph, value => { if (selectedId.value && !value.nodes.some(node => node.id === selectedId.value)) selectedId.value = '' })
 watch(() => props.spec, () => { selectedId.value = ''; search.value = '' })
 function curve(edge) {
   const from = byId.value.get(edge.from), to = byId.value.get(edge.to)

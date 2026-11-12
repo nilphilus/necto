@@ -42,6 +42,7 @@ const choices = computed(() => fields.value.filter(field => drafts[field.key] !=
     <div class="destination-title">
       <span class="method" :data-method="target.operation.method">{{ target.operation.method }}</span>
       <strong>{{ target.operation.name }}</strong>
+      <small v-if="target.operation.apiId && target.operation.apiId !== 'local'">{{ target.operation.apiName }} [{{ target.operation.apiId }}]</small>
     </div>
     <form @submit.prevent="canSend(target.operation, choices) && emit('follow', target.operation, choices, true)">
       <label v-for="field in fields" :key="field.key">
