@@ -24,6 +24,7 @@ const rows = computed(() => props.targets.map(({ operation, candidates }) => ({
           <div class="destination-title">
             <span class="method" :data-method="target.operation.method">{{ target.operation.method }}</span>
             <strong>{{ target.operation.name }}</strong>
+            <small v-if="target.operation.apiId !== 'local'">{{ target.operation.apiName }} [{{ target.operation.apiId }}]</small>
           </div>
           <code v-if="target.choice" :title="JSON.stringify(target.choice.value)">
             {{ target.choice.name ?? 'body' }} = {{ JSON.stringify(target.choice.value) }}

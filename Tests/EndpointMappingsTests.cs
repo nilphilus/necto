@@ -16,6 +16,24 @@ public sealed class EndpointMappingsTests : IClassFixture<WebApplicationFactory<
     }
 
     [Fact]
+    public void OptionalApiIdsRoundTripWithoutChangingExistingMappingJson()
+    {
+        var mapping = new EndpointMapping(new("Invoices", true, "id"),
+            new("InvoiceLines", "parameter", "invoiceId"), "name", "InvoiceId");
+        var options = System.Text.Json.JsonSerializerOptions.Web;
+        var original = System.Text.Json.JsonSerializer.SerializeToNode(mapping, options)!;
+        Assert.False(original["source"]!.AsObject().ContainsKey("apiId"));
+        Assert.False(original["target"]!.AsObject().ContainsKey("apiId"));
+        var crossApi = mapping with
+        {
+            Source = mapping.Source with { ApiId = "local" },
+            Target = mapping.Target with { ApiId = "billing" }
+        };
+        var json = System.Text.Json.JsonSerializer.Serialize(crossApi, options);
+        Assert.Equal(crossApi, System.Text.Json.JsonSerializer.Deserialize<EndpointMapping>(json, options));
+    }
+
+    [Fact]
     public async Task SuggestsLinksByNameTypeAndAttribute()
     {
         var mappings = await client.GetFromJsonAsync<EndpointMapping[]>("/necto/endpoint-mappings");
