@@ -51,6 +51,52 @@ in about 2.2 seconds, with 886 preview DOM elements on both the first and last
 pages and one API call. The longest observed main-thread task was 307 ms.
 These are a development baseline, not a cross-device performance guarantee.
 
+## Entity graph
+
+Choose **Entity graph** in the workspace header to explore models from OpenAPI.
+Each node represents a named object schema or an inline object used by a request
+or successful response. Scalar schemas are excluded; nested models and schema
+parameters are associated with the operations that use them.
+
+Solid arrows show direct schema references (including nested properties and
+composition). Dashed arrows show response-to-request value flows described by
+Necto mappings. These are API model and value-flow connections, not inferred
+database foreign keys. Value flows use the producing response model and the
+consuming operation's response model, or its request model when no response
+model exists. Consumers also appear under their source model's mapped inputs.
+
+Click a node to inspect its connected endpoints and their request/response or
+mapped-input roles. Click an endpoint to open its request editor. Request drafts
+are preserved when switching between API and graph views. Use entity search,
+connection filters, and zoom controls to navigate. The graph overview displays
+up to 100 matching entities; refine the search for larger catalogs. Relationships
+are also listed as buttons in the details panel, and nodes support keyboard
+navigation.
+
+The graph works without endpoint mappings: OpenAPI schema references remain
+available. Only local OpenAPI schema references are resolved. Successful response
+associations use explicit 2xx response codes; error/default responses are omitted.
+
+## Endpoint graph
+
+Choose **Endpoint graph** to inspect request-to-request connections separately
+from the entity view. Every OpenAPI operation is a node, identified by its HTTP
+method and path. Arrows point from the operation producing a response value to
+the operation consuming it. Multiple mapped fields between the same pair of
+operations share one arrow; the details panel lists every response selector,
+resolved target location, target name, and match rule.
+
+Select a node to inspect incoming and outgoing mappings, follow a connected
+endpoint in the graph, or choose **Open request** to edit it. Search by name,
+method, path, operation ID, or tag; filter to connected endpoints or to incoming
+or outgoing connections for the selection. Zoom and keyboard navigation work
+independently of the entity view. The overview displays up to 100 matching nodes.
+
+Connections require valid Necto mappings resolved against available operations
+and inputs. Shared schemas alone do not create endpoint connections. Without
+mappings, operations remain visible as isolated nodes. Missing or ambiguous
+operation IDs and unsupported target fields are skipped.
+
 ## Request presets
 
 Use **Settings → Presets** to add a named preset. Choose **Add field**, select its type, and enter its name and value. For example, add these rows and choose **Save values**.

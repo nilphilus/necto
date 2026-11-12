@@ -45,6 +45,7 @@ function readOperations(spec) {
         tags: operation.tags?.length ? [...new Set(operation.tags)] : ['Other'],
         parameters: [...parameters.values()],
         requestBody: resolve(operation.requestBody),
+        responses: operation.responses ?? {},
         server: [operation.servers, item.servers, spec.servers].find(servers => servers?.length)?.[0],
         resolve,
       }
