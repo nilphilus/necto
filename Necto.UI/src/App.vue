@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import WorkspaceSettings from './features/workbench/WorkspaceSettings.vue'
 import AgentPanel from './features/agents/AgentPanel.vue'
 import AuthorizationDialog from './features/authentication/AuthorizationDialog.vue'
 import { useAuthentication } from './features/authentication/useAuthentication.js'
@@ -32,8 +33,8 @@ authentication.register({ id: 'local', name: 'Local API', bootstrap: true, schem
   openApiUrl: new URL('/openapi/v1.json', document.baseURI).href, apiBaseUrl: new URL('/', document.baseURI).href,
   configurationUrl: new URL('./configuration', document.baseURI).href,
 }, origins: [location.origin] })
-const { spec, configuration, error, operations, groups, externalApis, reload: reloadCatalog } = useCatalog(authentication)
-const { sessions, sessionFor, createSession, run } = useRequestRunner(configuration, authentication)
+const { spec, configuration, error, operations, groups, externalApis, reload: reloadCatalog, importDocument } = useCatalog(authentication)
+const { sessions, sessionFor, createSession, run, prepare: prepareRequest, cancel: cancelRequest, history: requestHistory } = useRequestRunner(configuration, authentication)
 const { error: mappingError, targetsFor, choicesFor, selectablePaths, mappings: endpointMappings, links: mappingLinks, pending: mappingPending } = useRelatedEndpoints(configuration, operations, externalApis.contexts, authentication)
 
 const { connections, show: showExternalApis, statuses: externalStatuses, storageError: externalStorageError } = externalApis
@@ -133,11 +134,12 @@ watch([spec, configuration, operations, connections, externalApis.contexts], () 
 function operationOrigins(entries, config) {
   const origins = new Set([new URL(config.openApiUrl).origin, new URL(config.apiBaseUrl || '/', config.openApiUrl).origin])
   for (const operation of entries) {
-    try {
-      const server = config.overrideServer ? undefined : operation.server
-      const url = server?.url.replace(/\{([^}]+)\}/g, (_, name) => server.variables?.[name]?.default ?? '')
-      if (url) origins.add(new URL(url, config.openApiUrl).origin)
-    } catch { /* Invalid servers are reported when building requests. */ }
+    for (const server of [operation.server, ...(operation.servers ?? []), configuration.value?.serverProfiles?.[operation.apiId ?? 'local']].filter(Boolean)) {
+      try {
+        const url = server.url.replace(/\{([^}]+)\}/g, (_, name) => server.values?.[name] ?? server.variables?.[name]?.default ?? '')
+        origins.add(new URL(url, config.openApiUrl).origin)
+      } catch { /* Invalid servers are reported when building requests. */ }
+    }
   }
   return [...origins]
 }
@@ -672,6 +674,7 @@ function removeScenario(id) {
     <p v-if="error" class="app-message error" role="alert">{{ error }} <button type="button" class="secondary" @click="retryAuthorizedMetadata">Retry documentation</button></p>
     <p v-else-if="!spec" class="app-message" role="status">Loading API documentation…</p>
     <template v-else>
+      <p v-if="spec?.['x-necto-import-warning']" class="app-message" role="status">{{ spec['x-necto-import-warning'] }}</p>
       <p v-if="routeError" class="app-message error" role="alert">{{ routeError }}</p>
       <p v-else-if="pendingRoute" class="app-message" role="status">Loading workspace view…</p>
       <div v-if="settingsOpen" class="settings-backdrop" aria-hidden="true" @click="closeSettings"></div>
@@ -685,6 +688,7 @@ function removeScenario(id) {
             <nav class="settings-sections" aria-label="Settings sections">
               <button type="button" class="secondary" :aria-pressed="settingsTab === 'presets'" @click="settingsTab = 'presets'">Presets</button>
               <button type="button" class="secondary" :aria-pressed="settingsTab === 'connections'" @click="settingsTab = 'connections'">External APIs</button>
+              <button type="button" class="secondary" :aria-pressed="settingsTab === 'workspace'" @click="settingsTab = 'workspace'">Workspace</button>
             </nav>
           </div>
           <div :inert="scenarioPending">
@@ -713,6 +717,7 @@ function removeScenario(id) {
               </template>
               <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
             </section>
+            <WorkspaceSettings v-show="settingsTab === 'workspace'" :import-document="importDocument" :operations="operations" />
             <ExternalApiSettings v-show="settingsTab === 'connections'" v-model:show="showExternalApis" :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
               :save="externalApis.saveConnection" :remove="externalApis.removeConnection" :test="externalApis.testConnection" />
           </div>
@@ -851,7 +856,7 @@ function removeScenario(id) {
                 </div>
               </form>
             </dialog>
-            <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" @edit-preset="editActivePreset">
+            <OperationRunner :prepare="prepareRequest" :cancel="cancelRequest" :history="requestHistory" :configuration="configuration" :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" @edit-preset="editActivePreset">
               <template #request-actions>
                 <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">
                   Save request
