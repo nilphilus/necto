@@ -318,3 +318,13 @@ and queue a prompt. Progress and results appear in the task panel. Your agent
 uses its own HTTP tools and credentials; Necto supplies API metadata and task
 coordination. See the [full guide](../docs/bring-your-agent/README.md) for host
 configuration, client setup, tools, capability lifetime and execution limits.
+
+## Authentication
+
+**Authorize** is available before the OpenAPI document loads, including when it
+returns HTTP 401. Choose API access / documentation login, provide a token, Basic
+credentials, API key, browser session or OIDC public-client settings, and allow
+the intended origins. Necto retries protected metadata and applies authentication
+to normal, related and scenario requests. Credentials are memory-only and traces
+redact managed secrets. See the [authentication guide](../docs/authentication/README.md)
+for protected-document hosting, security requirements, PKCE and session behavior.

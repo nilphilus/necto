@@ -1,12 +1,15 @@
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onScopeDispose, ref } from 'vue'
 import { useExternalApis } from '../external-apis/connections.js'
 
 const methods = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace', 'query']
 
-async function fetchJson(url) {
-  const response = await fetch(url, { headers: { Accept: 'application/json' } })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return response.json()
+async function fetchJson(url, authentication, signal) {
+  const response = await (authentication?.metadataFetch(url, 'local', { signal, headers: { Accept: 'application/json' } }) ?? fetch(url, { signal, headers: { Accept: 'application/json' } }))
+  if (!response.ok) throw new Error(`HTTP ${response.status}${response.status === 401 ? ' — sign in using Authorize, then retry.' : response.status === 403 ? ' — access denied for this account.' : ''}`)
+  if (response.redirected || !/json/i.test(response.headers.get('content-type') ?? '')) throw new Error('The documentation endpoint returned a login page. Use Authorize or sign into the product, then retry.')
+  const data = await response.json()
+  signal?.throwIfAborted()
+  return data
 }
 
 function resolveReference(spec, value) {
@@ -52,6 +55,8 @@ export function readOperations(spec, api = { id: 'local' }) {
         parameters: [...parameters.values()],
         requestBody: resolve(operation.requestBody),
         responses: operation.responses ?? {},
+        security: Object.hasOwn(operation, 'security') ? operation.security : spec.security ?? null,
+        securitySchemes: Object.fromEntries(Object.entries(spec.components?.securitySchemes ?? {}).map(([name, value]) => [name, resolve(value)])),
         server: [operation.servers, item.servers, spec.servers].find(servers => servers?.length)?.[0],
         resolve,
       }
@@ -59,11 +64,11 @@ export function readOperations(spec, api = { id: 'local' }) {
   })
 }
 
-export function useCatalog() {
+export function useCatalog(authentication) {
   const spec = ref(null)
   const configuration = ref(null)
   const error = ref('')
-  const externalApis = useExternalApis(configuration)
+  const externalApis = useExternalApis(configuration, authentication)
   const operations = computed(() => spec.value ? [
     ...readOperations(spec.value),
     ...externalApis.contexts.value.flatMap(api => readOperations(api.document, api)),
@@ -80,18 +85,28 @@ export function useCatalog() {
       .map(([name, operations]) => ({ name, operations }))
   })
 
-  onMounted(async () => {
+  let generation = 0, controller
+  onScopeDispose(() => controller?.abort())
+  async function reload() {
+    const version = ++generation
+    controller?.abort()
+    controller = new AbortController()
+    const signal = controller.signal
+    error.value = ''
     try {
-      const settings = await fetchJson('./configuration')
+      const settings = await fetchJson('./configuration', authentication, signal)
+      if (version !== generation) return
       const openApiUrl = new URL(settings.openApiUrl, document.baseURI).href
-      const openApiDocument = await fetchJson(openApiUrl)
-      if (!openApiDocument?.openapi) throw new Error('Expected an OpenAPI document')
-      configuration.value = { ...settings, openApiUrl }
-      spec.value = openApiDocument
+      configuration.value = { ...settings, openApiUrl, configurationUrl: new URL('./configuration', document.baseURI).href }
+      const current = authentication?.apis.get('local')
+      authentication?.register({ id: 'local', name: 'Local API', configuration: configuration.value, document: current?.document, schemes: current?.schemes, origins: [new URL(openApiUrl).origin] })
+      const openApiDocument = await fetchJson(openApiUrl, authentication, signal)
+      if (!openApiDocument?.openapi) throw new Error('Expected an OpenAPI document. If redirected to a login page, sign into the product first.')
+      if (version === generation) spec.value = openApiDocument
     } catch (cause) {
-      error.value = `Could not load the API documentation. ${cause.message}`
+      if (version === generation && !signal.aborted) error.value = `Could not load the API documentation. ${cause.message}`
     }
-  })
-
-  return { spec, configuration, error, operations, groups, externalApis }
+  }
+  onMounted(reload)
+  return { spec, configuration, error, operations, groups, externalApis, reload }
 }

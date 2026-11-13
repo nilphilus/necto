@@ -1,4 +1,10 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 
-createApp(App).mount('#app')
+if (location.pathname === new URL('./oauth-callback', document.baseURI).pathname) {
+  const query = new URLSearchParams(location.search)
+  const message = { source: 'necto-oauth', code: query.get('code'), state: query.get('state'), error: query.get('error') }
+  history.replaceState(null, '', location.pathname)
+  document.body.textContent = 'Sign-in received. You can close this window and return to Necto.'
+  window.opener?.postMessage(message, location.origin)
+} else createApp(App).mount('#app')

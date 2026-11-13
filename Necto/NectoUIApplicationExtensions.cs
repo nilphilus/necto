@@ -71,7 +71,7 @@ public static class NectoUIApplicationExtensions
         });
 
         foreach (var route in new[] { "/api", "/api/endpoint/{operation}", "/scenarios",
-            "/scenarios/{id}/steps/{step:int}", "/entities", "/endpoints", "/agent" })
+            "/scenarios/{id}/steps/{step:int}", "/entities", "/endpoints", "/agent", "/oauth-callback" })
         {
             ui.MapMethods(route, ReadMethods, (HttpContext context) => ServeIndex(context, uiPath));
         }
