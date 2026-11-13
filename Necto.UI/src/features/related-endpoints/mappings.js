@@ -1,3 +1,4 @@
+import { openApiMappingLinks } from '../workbench/openapiLinks.js'
 import { computed, ref, watch } from 'vue'
 
 export function sourcePath(source) {
@@ -52,7 +53,7 @@ export function resolveMappingLinks(operations, catalogs) {
     const key = JSON.stringify([operation.apiId ?? 'local', operation.id])
     byId.set(key, byId.has(key) ? null : operation)
   }
-  const links = []
+  const links = openApiMappingLinks(operations)
   for (const { apiId, mappings } of catalogs) {
     for (const mapping of mappings) {
       const { source, target } = mapping ?? {}
@@ -108,6 +109,8 @@ export function useRelatedEndpoints(configuration, operations, externalContexts 
 
   function mappedEntries(link, result) {
     if (!result?.ok) return []
+    const status = link.source.responseStatus
+    if (status && status !== 'default' && !(status === String(result.status) || /^[1-5]XX$/i.test(status) && status[0] === String(result.status)[0])) return []
     return readResponseEntries(result.json, link.source, result.selectedPath, RELATED_VALUE_LIMIT)
       .filter(entry => link.location === 'body' || entry.value !== null)
   }
