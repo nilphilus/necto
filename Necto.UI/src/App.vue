@@ -47,6 +47,7 @@ const mobilePresetsOpen = ref(false)
 const defaultPresetColor = '#287557'
 const activePresetNames = ref([])
 const settingsOpen = ref(false)
+const settingsTab = ref('presets')
 const skeletonWalking = ref(false)
 let stampClicks = 0
 let firstStampClick = 0
@@ -207,6 +208,7 @@ async function toggleSettings() {
 }
 
 async function editActivePreset(name) {
+  settingsTab.value = 'presets'
   editedPresetName.value = name
   settingsOpen.value = true
   await nextTick()
@@ -573,9 +575,13 @@ function removeScenario(id) {
             <button ref="settingsCloseButton" type="button" class="secondary settings-icon" aria-label="Close settings" @click="closeSettings">
               <span aria-hidden="true">×</span>
             </button>
+            <nav class="settings-sections" aria-label="Settings sections">
+              <button type="button" class="secondary" :aria-pressed="settingsTab === 'presets'" @click="settingsTab = 'presets'">Presets</button>
+              <button type="button" class="secondary" :aria-pressed="settingsTab === 'connections'" @click="settingsTab = 'connections'">External APIs</button>
+            </nav>
           </div>
           <div :inert="scenarioPending">
-            <section class="preset-panel" aria-labelledby="presets-title">
+            <section v-show="settingsTab === 'presets'" class="preset-panel" aria-labelledby="presets-title">
               <h3 id="presets-title">Presets</h3>
               <form class="preset-actions" @submit.prevent="addPreset">
                 <label>New preset <input v-model="newPresetName" required></label>
@@ -598,16 +604,16 @@ function removeScenario(id) {
               </template>
               <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
             </section>
-            <ExternalApiSettings v-model:show="showExternalApis" :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
+            <ExternalApiSettings v-show="settingsTab === 'connections'" v-model:show="showExternalApis" :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
               :save="externalApis.saveConnection" :remove="externalApis.removeConnection" :test="externalApis.testConnection" />
           </div>
         </aside>
       </Transition>
       <p v-if="graphView === 'agent' && !configuration?.agentUrl" class="app-message">Bring your agent is not enabled on this server.</p>
       <AgentPanel v-if="configuration?.agentUrl" v-show="graphView === 'agent'" :spec="spec" :configuration="configuration" :operations="operations" :mappings="endpointMappings" :apis="externalApis.contexts.value" :busy="mappingPending || externalPending" />
-      <EntityGraph v-if="graphView === 'entities'" :spec="spec" :apis="externalApis.contexts.value" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
+      <EntityGraph :initial-operation-key="current?.operation.key" v-if="graphView === 'entities'" :spec="spec" :apis="externalApis.contexts.value" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
-      <EndpointGraph v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
+      <EndpointGraph :initial-operation-key="current?.operation.key" v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <ScenarioPanel v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
         :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
@@ -625,6 +631,8 @@ function removeScenario(id) {
       <div v-show="!graphView" class="layout" :class="{ 'presets-collapsed': presetsCollapsed, 'has-presets': visiblePresetNames.length }">
         <EndpointCatalog :inert="scenarioPending"
           :groups="groups"
+          :external-count="connections.length" :show-external="showExternalApis" :external-loading="externalPending"
+          @toggle-external="showExternalApis = $event"
           :active-group="current?.group ?? ''"
           :active-operation="current?.operation.key ?? ''"
           @select-operation="selectOperation"
@@ -881,7 +889,10 @@ body { margin: 0; background: #eef2ee; }
   box-shadow: -.5rem 0 1.5rem #202b2729;
   overscroll-behavior: contain;
 }
-.settings-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.settings-sections { display: flex; flex-basis: 100%; gap: .4rem; margin-top: .65rem; }
+.settings-sections [aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.settings { padding-top: 0; }
+.settings-header { position: sticky; top: 0; z-index: 3; padding: 1rem 0; background: var(--canvas); display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--line); }
 .settings h2 { margin: 0; }
 .settings h3 { margin: 0; font-size: 1rem; }
 .settings .preset-panel { max-width: 48rem; gap: .85rem; justify-items: start; }
