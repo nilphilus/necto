@@ -20,8 +20,8 @@ public sealed class InvoicesGroup : Group
         Configure("invoices", endpoint => endpoint.Description(builder => builder.WithTags("Invoices")));
 }
 
-public sealed class WeatherGroup : Group
+public sealed class BuildingsGroup : Group
 {
-    public WeatherGroup() =>
-        Configure("weather", endpoint => endpoint.Description(builder => builder.WithTags("Weather")));
+    public BuildingsGroup() =>
+        Configure("buildings", endpoint => endpoint.Description(builder => builder.WithTags("Buildings")));
 }

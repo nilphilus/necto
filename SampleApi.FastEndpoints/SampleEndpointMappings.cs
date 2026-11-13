@@ -1,9 +1,9 @@
 using FastEndpoints;
 using Necto;
 using SampleApi.FastEndpoints.Assets;
+using SampleApi.FastEndpoints.Buildings;
 using SampleApi.FastEndpoints.Customers;
 using SampleApi.FastEndpoints.Invoices;
-using SampleApi.FastEndpoints.Weather;
 
 namespace SampleApi.FastEndpoints;
 
@@ -12,38 +12,35 @@ internal static class SampleEndpointMappings
     public static EndpointMapping[] Create() =>
     [
         Link<ListCustomers, GetCustomer>("id", "path", "customerId", eachItem: true),
-        Link<ListCustomers, SearchCustomers>("id", "body", "customerId", eachItem: true),
-        Link<ListCustomers, ListAssets>("id", "query", "customerId", eachItem: true),
-        Link<GetCustomer, ListAssets>("id", "query", "customerId"),
+        Link<ListCustomers, ListBuildings>("id", "query", "ownerCustomerId", eachItem: true),
+        Link<GetCustomer, ListBuildings>("id", "query", "ownerCustomerId"),
         Link<GetCustomer, ListInvoices>("id", "query", "customerId"),
-        Link<SearchCustomers, ListAssets>("id", "query", "customerId"),
+        Link<ListBuildings, GetBuilding>("id", "path", "buildingId", eachItem: true),
+        Link<ListBuildings, ListInvoices>("id", "query", "buildingId", eachItem: true),
+        Link<ListBuildings, ListAssets>("id", "query", "buildingId", eachItem: true),
+        Link<GetBuilding, ListInvoices>("id", "query", "buildingId"),
+        Link<GetBuilding, GetCustomer>("ownerCustomerId", "path", "customerId"),
+        Link<GetBuilding, ListAssets>("id", "query", "buildingId"),
+        Link<GetBuilding, CreateInvoice>("id", "body", "buildingId"),
         Link<ListAssets, GetAsset>("id", "path", "assetId", eachItem: true),
-        Link<ListAssets, ListInvoices>("id", "query", "assetId", eachItem: true),
-        Link<GetAsset, GetCustomer>("customerId", "path", "customerId"),
-        Link<GetAsset, ListInvoices>("id", "query", "assetId"),
-        Link<GetAsset, GetWeatherForecast>("locationId", "path", "locationId"),
+        Link<ListAssets, CreateInvoiceLine>("id", "body", "assetId", eachItem: true),
+        Link<GetAsset, GetBuilding>("buildingId", "path", "buildingId"),
+        Link<GetAsset, CreateInvoiceLine>("id", "body", "assetId"),
         Link<ListInvoices, GetInvoice>("id", "path", "invoiceId", eachItem: true),
-        Link<ListInvoices, InvoiceLines>("id", "path", "invoiceId", eachItem: true),
-        Link<ListInvoices, CreateInvoiceLine>("id", "path", "invoiceId", eachItem: true),
-        Link<CreateInvoice, GetInvoice>("id", "path", "invoiceId"),
-        Link<CreateInvoice, InvoiceLines>("id", "path", "invoiceId"),
-        Link<CreateInvoice, CreateInvoiceLine>("id", "path", "invoiceId"),
-        Link<GetInvoice, CreateInvoiceLine>("id", "path", "invoiceId"),
-        Link<CreateInvoiceLine, InvoiceLine>("lineId", "path", "lineId"),
-        Link<CreateInvoiceLine, InvoiceLineDetails>("detailId", "path", "detailId"),
-        Link<InvoiceLines, InvoiceLine>("lineId", "path", "lineId", eachItem: true),
-        Link<InvoiceLine, InvoiceLineDetails>("detailId", "path", "detailId"),
+        Link<GetInvoice, GetBuilding>("buildingId", "path", "buildingId"),
         Link<GetInvoice, GetCustomer>("customerId", "path", "customerId"),
-        Link<GetInvoice, GetAsset>("assetId", "path", "assetId"),
-        Link<ListWeatherLocations, GetWeatherForecast>("id", "path", "locationId", eachItem: true)
+        Link<GetInvoice, GetAsset>("assetId", "path", "assetId", objectPath: ["lines", null]),
+        Link<CreateInvoice, CreateInvoiceLine>("id", "path", "invoiceId"),
+        Link<CreateInvoice, GetInvoice>("id", "path", "invoiceId"),
+        Link<CreateInvoiceLine, GetInvoice>("id", "path", "invoiceId")
     ];
 
     private static EndpointMapping Link<TSource, TTarget>(
-        string property, string location, string parameter, bool eachItem = false)
+        string property, string location, string parameter, bool eachItem = false, string?[]? objectPath = null)
         where TSource : IEndpoint
         where TTarget : IEndpoint =>
         new(
-            new(IEndpoint.GetName<TSource>(), eachItem, property),
+            new(IEndpoint.GetName<TSource>(), eachItem, property) { ObjectPath = objectPath },
             new(IEndpoint.GetName<TTarget>(), location, parameter),
             "name",
             null);
