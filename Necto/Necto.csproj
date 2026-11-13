@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <PackageId>Necto.OpenApi</PackageId>
-    <Version>0.2.1</Version>
+    <Version>0.2.2</Version>
     <Description>OpenAPI UI for ASP.NET Core with a Roslyn source generator that maps response values to inputs in related requests.</Description>
     <RepositoryUrl>https://github.com/nilphilus/necto</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
