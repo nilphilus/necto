@@ -8,6 +8,8 @@ const props = defineProps({ steps: { type: Array, required: true }, pending: Boo
 defineEmits(['inspect'])
 const view = ref('steps')
 const selectedIndex = ref(0)
+const compareRequest = ref(false)
+watch(selectedIndex, () => { compareRequest.value = false })
 const following = ref(true)
 const cards = computed(() => traceSteps(props.steps))
 const selected = computed(() => cards.value[selectedIndex.value])
@@ -39,14 +41,10 @@ function follow() { following.value = true; selectedIndex.value = executionFocus
       <article v-if="selected" class="selected-step" aria-label="Selected step details">
         <header>
           <div><h3>{{ selectedIndex + 1 }}. {{ selected.step.operation.name }}</h3><code>{{ selected.step.operation.method }} {{ selected.step.operation.path }}</code></div>
+          <button type="button" class="secondary" :aria-pressed="compareRequest" @click="compareRequest = !compareRequest">Request and response</button>
           <button type="button" class="secondary" :disabled="pending" :aria-label="'Open request for step ' + (selectedIndex + 1)" @click="$emit('inspect', selectedIndex)">Open request</button>
         </header>
         <p v-if="selected.step.error" class="step-error error" role="status">{{ selected.step.error }}</p>
-        <div class="selected-columns">
-          <section class="selected-request" aria-label="Selected step request">
-            <h4>Request</h4>
-            <template v-if="selected.request">
-              <code class="request-url">{{ selected.request.url }}</code>
               <div v-if="selected.inputs.length" class="mapped-inputs">
                 <h5>Values from earlier responses</h5>
                 <button v-for="binding in selected.inputs" :key="binding.target" type="button" class="binding" :style="{ '--binding-color': binding.color }"
@@ -54,11 +52,7 @@ function follow() { following.value = true; selectedIndex.value = executionFocus
                   <span>{{ binding.target }} ← Step {{ binding.sourceStep + 1 }}</span><code>{{ binding.value }}</code>
                 </button>
               </div>
-              <details v-if="Object.keys(selected.request.headers).length"><summary>Headers</summary><TracePayload :value="selected.request.headers" /></details>
-              <TracePayload v-if="selected.request.body !== undefined" :value="selected.request.body" />
-            </template>
-            <p v-else class="muted">No request sent.</p>
-          </section>
+        <div class="selected-columns" :class="{ compare: compareRequest }">
           <section class="selected-response" aria-label="Selected step response">
             <h4>Response <span v-if="selected.step.httpStatus !== undefined">{{ selected.step.httpStatus }}</span></h4>
             <div v-if="selected.outputs.length" class="mapped-outputs">
@@ -69,6 +63,16 @@ function follow() { following.value = true; selectedIndex.value = executionFocus
               :value="selected.step.response.json" :text="selected.step.response.text" />
             <p v-else class="muted">{{ selected.step.response ? 'Empty response body.' : 'No response received.' }}</p>
           </section>
+          <details :key="selectedIndex" :open="compareRequest" class="selected-request" aria-label="Selected step request">
+            <summary>Request details</summary>
+            <template v-if="selected.request">
+              <code class="request-url">{{ selected.request.url }}</code>
+
+              <details v-if="Object.keys(selected.request.headers).length"><summary>Headers</summary><TracePayload :value="selected.request.headers" /></details>
+              <TracePayload v-if="selected.request.body !== undefined" :value="selected.request.body" />
+            </template>
+            <p v-else class="muted">No request sent.</p>
+          </details>
         </div>
       </article>
     </div>
@@ -90,12 +94,30 @@ function follow() { following.value = true; selectedIndex.value = executionFocus
 .selected-step { border: 1px solid var(--line); border-radius: .55rem; overflow-wrap: anywhere; background: var(--surface); }
 .selected-step > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; padding: .75rem; border-bottom: 1px solid var(--line); }
 .selected-step h3 { margin: 0 0 .3rem; font-size: .95rem; }.selected-step header code { font-size: .75rem; color: var(--muted); }.selected-step header button { font-size: .78rem; }
-.selected-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.selected-columns { display: grid; grid-template-columns: minmax(0, 1fr); }
+.selected-columns.compare { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+.selected-columns.compare .selected-request { grid-column: 1; grid-row: 1; }
+.selected-columns.compare .selected-response { grid-column: 2; grid-row: 1; }
+.selected-columns > details { min-width: 0; padding: .75rem; font-size: .8rem; border-top: 1px solid var(--line); }
+.selected-request summary { cursor: pointer; font-weight: 650; }
+.selected-request[open] > summary { margin-bottom: .6rem; }
+.selected-step > .mapped-inputs { padding: .45rem .75rem; }
+.selected-step > .mapped-inputs .binding { display: inline-flex; flex-wrap: wrap; gap: .5rem; width: auto; margin: 0 .4rem .2rem 0; }
+
 .selected-columns > section { display: grid; align-content: start; gap: .6rem; padding: .75rem; font-size: .8rem; }
-.selected-response { border-left: 1px solid var(--line); }h4, h5, p { margin: 0; }h4 { font-size: .85rem; }h5 { font-weight: 500; color: var(--muted); font-size: .72rem; margin-bottom: .4rem; }summary { cursor: pointer; }
+.selected-response { border-left: 0; }
+.selected-columns.compare .selected-response { border-left: 1px solid var(--line); }h4, h5, p { margin: 0; }h4 { font-size: .85rem; }h5 { font-weight: 500; color: var(--muted); font-size: .72rem; margin-bottom: .4rem; }summary { cursor: pointer; }
 .request-url { color: var(--muted); }.step-error { padding: .65rem .75rem; }
 .binding { display: grid; gap: .2rem; width: 100%; padding: .35rem .45rem; margin-bottom: .35rem; border-left: .22rem solid var(--binding-color); background: color-mix(in srgb, var(--binding-color) 12%, white); border-radius: .25rem; text-align: left; font-size: .76rem; }
 .binding span { color: var(--binding-color); }.binding code { overflow-wrap: anywhere; white-space: pre-wrap; }
 @media (max-width: 1000px) { .execution-overview { grid-template-columns: minmax(0, 1fr); }.execution-steps { grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); } }
 @media (max-width: 650px) { .execution-steps { grid-template-columns: minmax(0, 1fr); }.selected-columns { grid-template-columns: minmax(0, 1fr); }.selected-response { border-left: 0; border-top: 1px solid var(--line); } }
+</style>
+
+<style scoped>
+@media (max-width: 650px) {
+  .selected-columns.compare { grid-template-columns: minmax(0, 1fr); }
+  .selected-columns.compare .selected-response { grid-column: 1; grid-row: 1; border-left: 0; }
+  .selected-columns.compare .selected-request { grid-column: 1; grid-row: 2; }
+}
 </style>
