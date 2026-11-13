@@ -615,6 +615,8 @@ function removeScenario(id) {
           <div :inert="scenarioPending">
             <section v-show="settingsTab === 'presets'" class="preset-panel" aria-labelledby="presets-title">
               <h3 id="presets-title">Presets</h3>
+              <p class="muted">Presets supply shared values across requests. Saved requests keep inputs for one endpoint; scenarios replay a chain of requests.</p>
+              <p v-if="!presets.size" class="muted" role="status">No presets yet. Create one below, add values, then activate it for matching requests.</p>
               <form class="preset-actions" @submit.prevent="addPreset">
                 <label>New preset <input v-model="newPresetName" required></label>
                 <button type="submit" class="secondary">Add</button>
@@ -750,6 +752,17 @@ function removeScenario(id) {
                 </div>
               </form>
             </dialog>
+            <div v-if="!visiblePresetNames.length" class="preset-guidance">
+              <template v-if="current.operation.apiId !== 'local' && !current.operation.usePresets">
+                <span>Shared presets are disabled for this external API.</span>
+                <button type="button" class="secondary" @click="settingsTab = 'connections'; toggleSettings()">Manage connection</button>
+              </template>
+              <template v-else>
+                <span v-if="!presets.size">No presets yet. Reuse shared values across requests.</span>
+                <span v-else>No presets match this request. Your presets remain available for other requests.</span>
+                <button type="button" class="secondary" @click="settingsTab = 'presets'; toggleSettings()">{{ presets.size ? 'Manage presets' : 'Create preset' }}</button>
+              </template>
+            </div>
             <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" @edit-preset="editActivePreset">
               <template #request-actions>
                 <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">
@@ -789,6 +802,9 @@ function removeScenario(id) {
 </template>
 
 <style>
+.preset-guidance { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; margin-bottom: .65rem; color: var(--muted); font-size: .75rem; }
+.preset-guidance button { padding: .2rem .4rem; font-size: inherit; }
+
 :root {
   color-scheme: light;
   font-family: system-ui, sans-serif;
