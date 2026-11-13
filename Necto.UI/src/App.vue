@@ -801,6 +801,12 @@ function removeScenario(id) {
 </template>
 
 <style>
+.chain-save-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.chain-save-actions small { color: var(--muted); }
+.saving-guide { margin-block: .5rem .75rem; font-size: .8rem; color: var(--muted); }
+.saving-guide summary { cursor: pointer; width: fit-content; }
+.saving-guide p { margin: .4rem 0; max-width: 65ch; }
+
 :root {
   color-scheme: light;
   font-family: system-ui, sans-serif;
