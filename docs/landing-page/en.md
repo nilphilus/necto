@@ -39,6 +39,10 @@ Necto ships its UI in the .NET package and reads your OpenAPI document. Serve th
 
 **Read the setup guide**
 
+## Why Necto?
+
+From the Latin [nectō](https://cld.bbaw.de/lemma/lat/necto) — “I bind” or “I connect.” A name for what we do: connect responses, values, and your next request.
+
 ## See where your API can take you.
 
 **Get started** · **Explore on GitHub**

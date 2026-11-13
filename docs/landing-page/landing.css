@@ -737,6 +737,33 @@ h1>span {
   color:#a9c19b;
   flex-wrap:wrap
 }
+.name-origin {
+  display:flex;
+  align-items:baseline;
+  gap:32px;
+  padding-block:30px;
+  border-bottom:1px solid var(--line)
+}
+.name-origin h2 {
+  flex:none;
+  margin:0;
+  font-size:17px;
+  font-weight:620;
+  letter-spacing:-.02em
+}
+.name-origin p {
+  margin:0;
+  max-width:680px;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.8
+}
+.name-origin a {
+  color:var(--green);
+  font-style:italic;
+  text-decoration:underline;
+  text-underline-offset:3px
+}
 .last-call {
   text-align:center;
   padding-block:70px 65px
@@ -1242,6 +1269,13 @@ h1>span {
   }
   .code-heading span:last-child {
     font-size:7px
+  }
+  .name-origin {
+    display:block;
+    padding-block:25px
+  }
+  .name-origin h2 {
+    margin-bottom:9px
   }
   .last-call {
     padding-block:45px
