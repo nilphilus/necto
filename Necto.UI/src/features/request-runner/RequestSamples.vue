@@ -40,7 +40,7 @@ const fields = computed(() => supportedParameters(props.operation).map(parameter
 try {
   saved.value = readSamples(localStorage, props.storageKey)
 } catch {
-  error.value = 'Could not load saved samples in this browser.'
+  error.value = 'Could not load saved requests in this browser.'
 }
 
 function resetForm() {
@@ -88,7 +88,7 @@ function persist(update) {
     error.value = ''
     return true
   } catch (cause) {
-    error.value = cause.message === 'A sample with that name already exists.' ? cause.message : 'Could not save samples in this browser.'
+    error.value = cause.message === 'A sample with that name already exists.' ? 'A saved request with that name already exists.' : 'Could not save requests in this browser.'
     return false
   }
 }
@@ -96,7 +96,7 @@ function persist(update) {
 function storeSample() {
   const sampleName = name.value.trim()
   if (!sampleName) {
-    error.value = 'Enter a sample name.'
+    error.value = 'Enter a request name.'
     return
   }
   const sample = {
@@ -149,7 +149,7 @@ function toggleDefault(sampleName) {
 </script>
 
 <template>
-  <section v-if="saved.samples.length || (error && !storeOpen)" class="samples" aria-label="Request samples">
+  <section v-if="saved.samples.length || (error && !storeOpen)" class="samples" aria-label="Saved requests">
     <div v-if="saved.samples.length" class="sample-toolbar">
       <strong>Saved requests</strong>
       <div class="sample-controls">
@@ -193,9 +193,9 @@ function toggleDefault(sampleName) {
   </section>
   <Teleport to="body">
     <dialog ref="storeDialog" class="endpoint-dialog" aria-labelledby="store-sample-title" @close="storeOpen = false">
-      <h3 id="store-sample-title">{{ renameOnly ? 'Rename saved request' : editing ? 'Update saved request' : 'Store as sample' }}</h3>
+      <h3 id="store-sample-title">{{ renameOnly ? 'Rename saved request' : editing ? 'Update saved request' : 'Save request' }}</h3>
       <form @submit.prevent="storeSample">
-        <label class="dialog-field">Sample name <input v-model="name" required autofocus maxlength="120"></label>
+        <label class="dialog-field">Request name <input v-model="name" required autofocus maxlength="120"></label>
         <fieldset v-if="fields.length && !renameOnly">
           <legend>Fields to store</legend>
           <label v-for="field in fields" :key="field.key">
@@ -207,7 +207,7 @@ function toggleDefault(sampleName) {
         <p v-if="error" class="error" role="alert">{{ error }}</p>
         <div class="dialog-actions">
           <button class="secondary" type="button" @click="storeDialog.close()">Cancel</button>
-          <button class="primary" type="submit">{{ editing ? 'Save changes' : 'Save sample' }}</button>
+          <button class="primary" type="submit">{{ editing ? 'Save changes' : 'Save request' }}</button>
         </div>
       </form>
     </dialog>
