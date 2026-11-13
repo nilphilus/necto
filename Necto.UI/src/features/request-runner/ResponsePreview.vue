@@ -6,12 +6,15 @@ import PayloadSearch from '../payload-search/PayloadSearch.vue'
 import { valueAtPath, pathLabel } from '../payload-search/search.js'
 import JsonNode from './JsonNode.vue'
 import { selectionLabel } from './selection.js'
+import { usePreviewHeight } from './usePreviewHeight.js'
 const props = defineProps({ result: { type: Object, required: true }, selectors: { type: Array, default: () => [] }, operation: Object })
 const raw = ref(false)
 const textPage = ref(1)
 const navigation = ref(null)
 const focusPath = ref([])
 const preview = ref(null)
+const schedulePreviewHeight = usePreviewHeight()
+watch([raw, textPage, focusPath], () => nextTick(schedulePreviewHeight))
 let navigationId = 0
 const previewValue = computed(() => valueAtPath(props.result.json, focusPath.value))
 const text = computed(() => props.result.rawText ?? props.result.text ?? '')
@@ -80,7 +83,8 @@ function download() {
 .preview-toolbar code { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .preview-toolbar button { padding: .25rem .4rem; border: 1px solid var(--line); }
 .preview-toolbar button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
-.json-preview, pre { overflow: auto; max-height: 32rem; margin: 0; padding: .8rem; border-radius: .45rem; background: #182420; color: #e7f3eb; font: .85rem/1.65 ui-monospace, Consolas, monospace; }
+.json-preview, pre { overflow: auto; max-height: var(--preview-height, 32rem); margin: 0; padding: .8rem; border-radius: .45rem; background: #182420; color: #e7f3eb; font: .85rem/1.65 ui-monospace, Consolas, monospace; }
 .json-preview { white-space: nowrap; }
 .raw-preview { background: #182420; border-radius: .45rem; padding: .4rem; }
+.response-preview > .preview-toolbar:first-child { position: sticky; top: 0; z-index: 3; background: var(--subtle); padding-block: .2rem; }
 </style>
