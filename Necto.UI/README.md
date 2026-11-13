@@ -262,6 +262,14 @@ if (app.Environment.IsDevelopment())
 
 The UI opens at `/necto/` and reads `/openapi/v1.json` by default. Both paths are relative to the ASP.NET Core application's path base. To use a different UI path and an existing OpenAPI endpoint, call `app.UseNectoUI(routePrefix: "/docs/api", openApiPath: "/swagger/v1/swagger.json")`.
 
+Use `MapNectoUI` in place of `UseNectoUI` to attach ASP.NET Core endpoint metadata to all UI routes, including the configuration and assets. Replace `SkipRequiredHeaderAttribute` with the attribute your header validation recognizes.
+
+```csharp
+app.MapNectoUI().WithMetadata(new SkipRequiredHeaderAttribute());
+```
+
+OpenAPI JSON, endpoint mappings, and agent routes are registered separately. To apply the same metadata to any of those routes, chain `WithMetadata` on its own registration (`MapOpenApi`, `MapNectoEndpointMappings`, or `MapNectoAgent`).
+
 ## Development
 
 Building or packing Necto from source requires Node.js 22.12 or later and pnpm. MSBuild installs the dependencies from the lockfile, builds the frontend, and embeds its assets. Applications using the published NuGet package only need the .NET runtime.

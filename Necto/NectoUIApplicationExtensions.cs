@@ -2,6 +2,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.StaticFiles;
 
 namespace Necto;
@@ -18,6 +19,23 @@ public static class NectoUIApplicationExtensions
     /// <param name="agentPath">Optional path registered using MapNectoAgent.</param>
     /// <param name="endpointMappingsPath">The optional endpoint mappings JSON path.</param>
     public static WebApplication UseNectoUI(
+        this WebApplication app,
+        string routePrefix = "/necto",
+        string openApiPath = "/openapi/v1.json",
+        string? endpointMappingsPath = null,
+        string? agentPath = null)
+    {
+        app.MapNectoUI(routePrefix, openApiPath, endpointMappingsPath, agentPath);
+        return app;
+    }
+
+    /// <summary>Maps the embedded Necto UI and returns its group for endpoint conventions.</summary>
+    /// <param name="app">The application serving Necto UI.</param>
+    /// <param name="routePrefix">The UI path, relative to the application's path base.</param>
+    /// <param name="openApiPath">The OpenAPI JSON path, relative to the application's path base.</param>
+    /// <param name="endpointMappingsPath">The optional endpoint mappings JSON path.</param>
+    /// <param name="agentPath">Optional path registered using MapNectoAgent.</param>
+    public static RouteGroupBuilder MapNectoUI(
         this WebApplication app,
         string routePrefix = "/necto",
         string openApiPath = "/openapi/v1.json",
@@ -73,7 +91,7 @@ public static class NectoUIApplicationExtensions
         });
         ui.MapMethods("/assets/{assetName}", ReadMethods, (string assetName) => ServeAsset("assets/" + assetName));
 
-        return app;
+        return ui;
     }
 
     private static IResult ServeIndex(HttpContext context, string uiPath)
