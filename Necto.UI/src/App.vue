@@ -753,7 +753,7 @@ function removeScenario(id) {
             <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" @edit-preset="editActivePreset">
               <template #request-actions>
                 <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">
-                  Store as sample
+                  Save request
                 </button>
               </template>
               <template #samples>
