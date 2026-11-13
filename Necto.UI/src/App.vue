@@ -49,8 +49,19 @@ const overwriteScenario = computed(() => scenarios.value.find(scenario =>
 const scenarioBusy = computed(() => scenarioPending.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
 const presets = ref(new Map())
 const presetColors = ref(new Map())
-const presetsCollapsed = ref(false)
-const mobilePresetsOpen = ref(false)
+const presetDialog = ref(null)
+const catalogMedia = matchMedia('(max-width: 760px)')
+const catalogOpen = ref(!catalogMedia.matches)
+const catalogWidth = ref(240)
+try { const width = Number(localStorage.getItem('necto:catalog-width')); if (width >= 180 && width <= 360) catalogWidth.value = width } catch { /* Optional layout preference. */ }
+watch(catalogWidth, width => { try { localStorage.setItem('necto:catalog-width', String(width)) } catch { /* Memory-only fallback. */ } })
+const syncCatalog = () => { catalogOpen.value = !catalogMedia.matches }
+catalogMedia.addEventListener('change', syncCatalog)
+onUnmounted(() => catalogMedia.removeEventListener('change', syncCatalog))
+function selectCatalogOperation(operation, group) {
+  selectOperation(operation, group)
+  if (catalogMedia.matches) catalogOpen.value = false
+}
 const defaultPresetColor = '#287557'
 const activePresetNames = ref([])
 const settingsOpen = ref(false)
@@ -662,32 +673,30 @@ function removeScenario(id) {
         <small v-if="current?.operation.apiId && current.operation.apiId !== 'local' && !current.operation.usePresets">Not applied to this external API.</small>
         <small v-else-if="!visiblePresetNames.some(name => activePresetNames.includes(name))">None apply to this request; related requests may still use them.</small>
       </section>
-      <div :inert="settingsOpen" v-show="!graphView" class="layout" :class="{ 'presets-collapsed': presetsCollapsed, 'has-presets': visiblePresetNames.length }">
+      <div :inert="settingsOpen" v-show="!graphView" class="layout navigation-layout" :style="{ '--catalog-width': catalogOpen ? catalogWidth + 'px' : '0px' }">
+        <div v-show="catalogOpen" class="catalog-container">
+          <div class="catalog-controls">
+            <button type="button" class="secondary" aria-label="Hide endpoint catalog" @click="catalogOpen = false">Hide catalog</button>
+            <details class="catalog-size"><summary>Width</summary><label>Catalog width <input v-model.number="catalogWidth" type="range" min="180" max="360" step="10"></label></details>
+          </div>
         <EndpointCatalog :inert="scenarioPending"
           :groups="groups"
           :external-count="connections.length" :show-external="showExternalApis" :external-loading="externalPending"
           @toggle-external="showExternalApis = $event"
           :active-group="current?.group ?? ''"
           :active-operation="current?.operation.key ?? ''"
-          @select-operation="selectOperation"
+          @select-operation="selectCatalogOperation"
         />
 
-        <button v-if="visiblePresetNames.length" type="button" class="secondary mobile-presets-toggle" :disabled="scenarioPending"
-          :aria-expanded="mobilePresetsOpen" aria-controls="request-presets" @click="mobilePresetsOpen = !mobilePresetsOpen">
-          Presets ({{ visiblePresetNames.length }}) <span aria-hidden="true">{{ mobilePresetsOpen ? '▴' : '▾' }}</span>
-        </button>
-        <aside v-if="visiblePresetNames.length" class="presets-column" :class="{ 'mobile-open': mobilePresetsOpen }" aria-label="Presets" :inert="scenarioPending">
-          <div class="presets-header">
-            <h2>Presets</h2>
-            <button type="button" class="secondary presets-toggle"
-              :aria-label="presetsCollapsed ? 'Expand presets' : 'Collapse presets'"
-              :title="presetsCollapsed ? 'Expand presets' : 'Collapse presets'"
-              :aria-expanded="!presetsCollapsed"
-              aria-controls="request-presets"
-              @click="presetsCollapsed = !presetsCollapsed">
-              <span aria-hidden="true">{{ presetsCollapsed ? '›' : '‹' }}</span>
-            </button>
+        </div>
+        <div ref="workArea" class="work-area">
+          <div v-if="!catalogOpen || visiblePresetNames.length" class="workspace-tools">
+            <button v-if="!catalogOpen" type="button" class="secondary" aria-label="Show endpoint catalog" @click="catalogOpen = true">Endpoints</button>
+            <button v-if="visiblePresetNames.length" type="button" class="secondary" :disabled="scenarioPending" aria-haspopup="dialog" @click="presetDialog.showModal()">Presets ({{ visiblePresetNames.length }})</button>
           </div>
+          <dialog v-if="visiblePresetNames.length" ref="presetDialog" class="endpoint-dialog preset-picker" aria-label="Matching presets">
+            <header><h3>Presets</h3><button type="button" class="secondary" @click="presetDialog.close()">Close presets</button></header>
+            <p class="muted">Activate shared values for this request.</p>
           <div id="request-presets" class="presets-list" role="group" aria-label="Request presets">
             <button
               v-for="name in visiblePresetNames"
@@ -704,9 +713,8 @@ function removeScenario(id) {
               <span class="preset-name">{{ name }}</span>
             </button>
           </div>
-        </aside>
 
-        <div ref="workArea" class="work-area">
+          </dialog>
           <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
           <article v-if="current && !pendingRoute" :inert="scenarioPending" aria-labelledby="endpoint-title">
             <div class="chain-header">
@@ -899,6 +907,28 @@ body { margin: 0; background: #eef2ee; }
   min-height: 0;
   grid-template-columns: clamp(14rem, 23vw, 18rem) minmax(0, 1fr);
 }
+.navigation-layout { grid-template-columns: var(--catalog-width, 240px) minmax(0, 1fr); }
+.navigation-layout > .work-area { grid-column: 2; }
+.catalog-container { min-width: 0; min-height: 0; overflow: auto; border-right: 1px solid var(--line); }
+.catalog-container .catalog { border-right: 0; overflow: visible; }
+.catalog-controls, .workspace-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.catalog-controls { padding: .5rem; font-size: .75rem; }
+.catalog-size { position: relative; }
+.catalog-size summary { cursor: pointer; }
+.catalog-size label { position: absolute; left: 0; z-index: 4; width: 11rem; padding: .5rem; background: var(--surface); border: 1px solid var(--line); }
+.catalog-size input { width: 100%; }
+.workspace-tools { margin-bottom: .5rem; font-size: .8rem; }
+.preset-picker header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.preset-picker h3 { margin: 0; }
+.preset-picker .presets-list { display: grid; }
+@media (max-width: 760px) {
+  .navigation-layout { grid-template-columns: minmax(0, 1fr); }
+  .navigation-layout > .work-area { grid-column: 1; }
+  .catalog-size { display: none; }
+  .catalog-container { border-right: 0; border-bottom: 1px solid var(--line); }
+  .workspace-tools button { min-height: 44px; }
+}
+
 .layout.has-presets { grid-template-columns: clamp(14rem, 23vw, 18rem) var(--presets-width) minmax(0, 1fr); }
 .mobile-presets-toggle { display: none; }
 .layout.presets-collapsed .presets-header h2, .layout.presets-collapsed .preset-name { display: none; }
