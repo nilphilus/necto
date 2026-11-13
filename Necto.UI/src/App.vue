@@ -717,7 +717,7 @@ function removeScenario(id) {
           </dialog>
           <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
           <article v-if="current && !pendingRoute" :inert="scenarioPending" aria-labelledby="endpoint-title">
-            <div class="chain-header">
+            <div v-if="chain.length > 1 || editingScenario" class="chain-header">
               <nav class="breadcrumbs" aria-label="Request chain">
                 <ol>
                   <li v-for="(step, index) in chain" :key="index">
@@ -738,14 +738,6 @@ function removeScenario(id) {
                 </button>
               </div>
             </div>
-            <details v-if="!editingScenario" class="saving-guide">
-              <summary>Saved request or scenario?</summary>
-              <div id="saving-guide">
-                <p><strong>Saved requests</strong> keep input values for one endpoint so you can load them again.</p>
-                <p><strong>Scenarios</strong> replay a chain of requests and pass response values between steps. Use a related request to add the next step; a one-request scenario is also supported.</p>
-                <p><strong>Presets</strong> supply shared values across requests.</p>
-              </div>
-            </details>
             <section v-if="editingScenario" class="scenario-edit-context" aria-label="Scenario editing">
               <div><strong>Scenario: {{ editingScenario.name }}</strong><span>Step {{ currentIndex + 1 }}/{{ chain.length }}</span><span role="status" class="save-state" :class="{ dirty: scenarioDirty }">{{ scenarioDirty ? 'Unsaved changes' : 'All changes saved' }}</span></div>
               <div class="scenario-edit-actions"><button type="button" class="primary" :disabled="scenarioBusy || !scenarioDirty" @click="updateEditingScenario">Update scenario</button><button type="button" class="secondary" :disabled="scenarioBusy" @click="copyEditingScenario">Save as copy</button></div>
@@ -758,7 +750,30 @@ function removeScenario(id) {
                 <span class="method" :data-method="current.operation.method">{{ current.operation.method }}</span>
                 <code>{{ current.operation.path }}</code>
               </div>
-              <p v-if="current.operation.description" class="muted">{{ current.operation.description }}</p>
+              <details :key="current.operation.key" class="endpoint-help" @keydown.esc.stop.prevent="$event.currentTarget.open = false; $event.currentTarget.querySelector('summary').focus()">
+                <summary>Help and presets</summary>
+                <div class="endpoint-help-content">
+                  <p v-if="current.operation.description">{{ current.operation.description }}</p>
+              <div id="saving-guide">
+                <p><strong>Saved requests</strong> keep input values for one endpoint so you can load them again.</p>
+                <p><strong>Scenarios</strong> replay a chain of requests and pass response values between steps. Use a related request to add the next step; a one-request scenario is also supported.</p>
+                <p><strong>Presets</strong> supply shared values across requests.</p>
+              </div>
+            <div v-if="!visiblePresetNames.length" class="preset-guidance">
+              <template v-if="current.operation.apiId !== 'local' && !current.operation.usePresets">
+                <span>Shared presets are disabled for this external API.</span>
+                <button type="button" class="secondary" @click="settingsTab = 'connections'; toggleSettings()">Manage connection</button>
+              </template>
+              <template v-else>
+                <span v-if="!presets.size">No presets yet. Reuse shared values across requests.</span>
+                <span v-else>No presets match this request. Your presets remain available for other requests.</span>
+                <button type="button" class="secondary" @click="settingsTab = 'presets'; toggleSettings()">{{ presets.size ? 'Manage presets' : 'Create preset' }}</button>
+              </template>
+            </div>
+
+                  <button v-if="!editingScenario && chain.length === 1" type="button" class="secondary" @click="scenarioDialog.showModal()">Save as single-step scenario</button>
+                </div>
+              </details>
             </header>
             <dialog :key="current.operation.key" ref="scenarioDialog" class="endpoint-dialog" aria-labelledby="save-scenario-title">
               <h3 id="save-scenario-title">{{ editingScenario && !overwriteScenario ? 'Save scenario copy' : 'Save scenario' }}</h3>
@@ -772,17 +787,6 @@ function removeScenario(id) {
                 </div>
               </form>
             </dialog>
-            <div v-if="!visiblePresetNames.length" class="preset-guidance">
-              <template v-if="current.operation.apiId !== 'local' && !current.operation.usePresets">
-                <span>Shared presets are disabled for this external API.</span>
-                <button type="button" class="secondary" @click="settingsTab = 'connections'; toggleSettings()">Manage connection</button>
-              </template>
-              <template v-else>
-                <span v-if="!presets.size">No presets yet. Reuse shared values across requests.</span>
-                <span v-else>No presets match this request. Your presets remain available for other requests.</span>
-                <button type="button" class="secondary" @click="settingsTab = 'presets'; toggleSettings()">{{ presets.size ? 'Manage presets' : 'Create preset' }}</button>
-              </template>
-            </div>
             <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" @edit-preset="editActivePreset">
               <template #request-actions>
                 <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">
@@ -1019,10 +1023,14 @@ body { margin: 0; background: #eef2ee; }
 .breadcrumbs button { padding: .3rem .45rem; color: var(--accent); text-align: left; overflow-wrap: anywhere; }
 .breadcrumbs [aria-current] { padding: .3rem .45rem; font-weight: 650; }
 .separator { color: var(--muted); }
-.endpoint-header { margin-bottom: 1rem; overflow-wrap: anywhere; }
-.endpoint-header h2 { margin: 0 0 .5rem; font-size: 1.75rem; letter-spacing: -.035em; }
-.endpoint-route { display: flex; align-items: baseline; gap: .5rem; color: var(--muted); font-size: .85rem; }
-.endpoint-header p { margin: .5rem 0 0; font-size: .875rem; }
+.endpoint-header { position: relative; display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .65rem; margin-bottom: .65rem; overflow-wrap: anywhere; }
+.endpoint-header h2 { margin: 0; font-size: 1.2rem; letter-spacing: -.035em; }
+.endpoint-route { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; color: var(--muted); font-size: .85rem; }
+.endpoint-header p { margin: .5rem 0; font-size: .8rem; }
+.endpoint-help { margin-left: auto; font-size: .75rem; }
+.endpoint-help summary { cursor: pointer; padding: .25rem .4rem; }
+.endpoint-help-content { position: absolute; top: 100%; right: 0; z-index: 8; width: min(30rem, 100%); padding: .75rem; background: var(--surface); border: 1px solid var(--line); border-radius: .5rem; box-shadow: 0 5px 20px #20352c20; }
+.endpoint-help-content .preset-guidance { margin-block: .65rem; }
 .muted { color: var(--muted); }
 .error { color: #8f2225; }
 button, input, select, textarea { font: inherit; color: inherit; }
