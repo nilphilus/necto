@@ -179,7 +179,7 @@ function parameterHint(parameter) {
           <div class="response-content" :class="{ 'has-related': hasRelated }">
           <div class="response-body">
             <p class="response-type">{{ session.result.contentType || 'Body' }}</p>
-            <ResponsePreview :result="session.result" :selectors="selectors" />
+            <ResponsePreview :result="session.result" :selectors="selectors" :operation="operation" />
           </div>
           <aside v-if="hasRelated" class="response-actions" aria-label="Next request">
             <details open class="continuation-panel">
