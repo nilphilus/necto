@@ -34,6 +34,7 @@ export function useRequestRunner(configuration) {
       const started = performance.now()
       const result = await sendRequest(request)
       if (result.json && typeof result.json === 'object') markRaw(result.json)
+      session.resultStale = false
       session.result = { ...result, elapsed: Math.round(performance.now() - started) }
       return session.result
     } catch (cause) {
