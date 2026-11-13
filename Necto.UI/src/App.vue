@@ -235,9 +235,23 @@ function clickBrandStamp(event) {
   }
 }
 
-function closeSettings() {
+async function closeSettings() {
   settingsOpen.value = false
+  await nextTick()
   settingsButton.value?.focus()
+}
+
+function trapSettingsFocus(event) {
+  if (event.key !== 'Tab') return
+  const focusable = [...event.currentTarget.querySelectorAll('button, input, select, textarea, a[href], [tabindex]')]
+    .filter(element => !element.disabled && element.tabIndex >= 0 && element.getClientRects().length && !element.closest('[inert]'))
+  const first = focusable[0], last = focusable.at(-1)
+  if (!first) { event.preventDefault(); return }
+  if (event.shiftKey && (document.activeElement === first || !focusable.includes(document.activeElement))) {
+    event.preventDefault(); last.focus()
+  } else if (!event.shiftKey && (document.activeElement === last || !focusable.includes(document.activeElement))) {
+    event.preventDefault(); first.focus()
+  }
 }
 
 function addPreset() {
@@ -547,7 +561,7 @@ function removeScenario(id) {
 </script>
 
 <template>
-  <div class="brand-track">
+  <div class="brand-track" :inert="settingsOpen">
     <div class="brand-stamp">
       <button type="button" class="brand-button" @click="clickBrandStamp">
         <span class="brand-mark" aria-hidden="true">N</span>
@@ -557,7 +571,7 @@ function removeScenario(id) {
     </div>
   </div>
   <main class="app">
-    <header class="hero">
+    <header class="hero" :inert="settingsOpen">
       <nav v-if="spec" class="view-navigation" aria-label="Workspace views">
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="!graphView" @click="navigateView('')">API</button>
         <button v-if="configuration?.agentUrl" type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'agent'" @click="navigateView('agent')">Bring your agent</button>
@@ -585,8 +599,9 @@ function removeScenario(id) {
     <template v-else>
       <p v-if="routeError" class="app-message error" role="alert">{{ routeError }}</p>
       <p v-else-if="pendingRoute" class="app-message" role="status">Loading workspace view…</p>
+      <div v-if="settingsOpen" class="settings-backdrop" aria-hidden="true" @click="closeSettings"></div>
       <Transition name="settings-drawer">
-        <aside v-if="settingsOpen" id="settings-panel" class="work-area settings" aria-labelledby="settings-title" @keydown.esc.stop="closeSettings">
+        <aside v-if="settingsOpen" id="settings-panel" class="work-area settings" role="dialog" aria-modal="true" @keydown="trapSettingsFocus" aria-labelledby="settings-title" @keydown.esc.stop="closeSettings">
           <div class="settings-header">
             <h2 id="settings-title">Settings</h2>
             <button ref="settingsCloseButton" type="button" class="secondary settings-icon" aria-label="Close settings" @click="closeSettings">
@@ -627,16 +642,16 @@ function removeScenario(id) {
         </aside>
       </Transition>
       <p v-if="graphView === 'agent' && !configuration?.agentUrl" class="app-message">Bring your agent is not enabled on this server.</p>
-      <AgentPanel v-if="configuration?.agentUrl" v-show="graphView === 'agent'" :spec="spec" :configuration="configuration" :operations="operations" :mappings="endpointMappings" :apis="externalApis.contexts.value" :busy="mappingPending || externalPending" />
-      <EntityGraph :initial-operation-key="current?.operation.key" v-if="graphView === 'entities'" :spec="spec" :apis="externalApis.contexts.value" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
+      <AgentPanel :inert="settingsOpen" v-if="configuration?.agentUrl" v-show="graphView === 'agent'" :spec="spec" :configuration="configuration" :operations="operations" :mappings="endpointMappings" :apis="externalApis.contexts.value" :busy="mappingPending || externalPending" />
+      <EntityGraph :inert="settingsOpen" :initial-operation-key="current?.operation.key" v-if="graphView === 'entities'" :spec="spec" :apis="externalApis.contexts.value" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
-      <EndpointGraph :initial-operation-key="current?.operation.key" v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
+      <EndpointGraph :inert="settingsOpen" :initial-operation-key="current?.operation.key" v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
-      <ScenarioPanel v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
+      <ScenarioPanel :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
         :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"
         @remove="removeScenario" @stop="scenarioStore.stop" @inspect="inspectScenario" />
-      <section v-if="!graphView && activePresetNames.length" class="active-presets" aria-label="Active presets">
+      <section :inert="settingsOpen" v-if="!graphView && activePresetNames.length" class="active-presets" aria-label="Active presets">
         <strong>Active presets</strong>
         <span v-for="name in activePresetNames" :key="name" class="active-preset-chip">
           <button type="button" :disabled="scenarioPending" :aria-label="'Edit active preset ' + name" @click="editActivePreset(name)">{{ name }}</button>
@@ -645,7 +660,7 @@ function removeScenario(id) {
         <small v-if="current?.operation.apiId && current.operation.apiId !== 'local' && !current.operation.usePresets">Not applied to this external API.</small>
         <small v-else-if="!visiblePresetNames.some(name => activePresetNames.includes(name))">None apply to this request; related requests may still use them.</small>
       </section>
-      <div v-show="!graphView" class="layout" :class="{ 'presets-collapsed': presetsCollapsed, 'has-presets': visiblePresetNames.length }">
+      <div :inert="settingsOpen" v-show="!graphView" class="layout" :class="{ 'presets-collapsed': presetsCollapsed, 'has-presets': visiblePresetNames.length }">
         <EndpointCatalog :inert="scenarioPending"
           :groups="groups"
           :external-count="connections.length" :show-external="showExternalApis" :external-loading="externalPending"
@@ -900,9 +915,10 @@ body { margin: 0; background: #eef2ee; }
 .view-navigation { display: flex; flex-wrap: wrap; gap: .35rem; }
 .view-navigation [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .settings-icon.secondary { display: grid; flex: none; place-items: center; width: 2rem; height: 2rem; padding: 0; font-size: 1.2rem; line-height: 1; }
+.settings-backdrop { position: fixed; inset: 0; z-index: 3; background: #202b274d; }
 .settings {
   position: fixed;
-  z-index: 2;
+  z-index: 4;
   inset: var(--app-gutter) var(--app-gutter) var(--app-gutter) auto;
   width: min(28rem, calc(100% - 2 * var(--app-gutter)));
   overflow: auto;
