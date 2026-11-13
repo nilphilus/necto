@@ -122,6 +122,7 @@ function parameterHint(parameter) {
         <button v-if="requestCompact" type="button" class="secondary" @click="editRequest">Edit request</button>
         <div class="request-actions">
           <slot name="request-actions" />
+          <button v-if="session.result && !requestCompact" type="button" class="secondary focus-response" @click="focusResponse">Focus response</button>
           <button
             class="primary"
             type="submit"
@@ -196,7 +197,6 @@ function parameterHint(parameter) {
     <section ref="responsePane" class="response-pane" tabindex="-1" aria-label="Response" :aria-busy="session.pending">
       <header class="pane-header">
         <h3>{{ (session.pending || session.resultStale) && session.result ? 'Last response' : 'Response' }}</h3>
-        <button v-if="session.result && !requestCompact" type="button" class="secondary focus-response" @click="focusResponse">Focus response</button>
         <div class="response-meta" role="status">
           <template v-if="session.result">
             <strong class="status" :class="{ failed: !session.result.ok }">
