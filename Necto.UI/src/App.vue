@@ -590,13 +590,23 @@ function removeScenario(id) {
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'entities'" @click="navigateView('entities')">Entity graph</button>
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'endpoints'" @click="navigateView('endpoints')">Endpoint graph</button>
       </nav>
+      <label v-if="spec" class="mobile-workspace-view">
+        <span class="sr-only">Workspace view</span>
+        <select :value="graphView" :disabled="scenarioPending" @change="navigateView($event.target.value)">
+          <option value="">API</option><option v-if="configuration?.agentUrl" value="agent">Bring your agent</option><option value="scenarios">Scenarios</option><option value="entities">Entity graph</option><option value="endpoints">Endpoint graph</option>
+        </select>
+      </label>
       <div class="api-identity">
         <div class="api-info">
+          <details class="mobile-api-about" @keydown.esc.stop.prevent="$event.currentTarget.open = false">
+            <summary>{{ spec?.info?.title ?? 'API documentation' }}</summary>
+            <div><strong>{{ spec?.info?.title }}</strong><p v-if="spec?.info?.version">Version {{ spec.info.version }}</p><p v-if="spec?.info?.description">{{ spec.info.description }}</p></div>
+          </details>
           <div class="api-title">
-            <h1>{{ spec?.info?.title ?? 'API documentation' }}</h1>
+            <h1 :title="spec?.info?.title">{{ spec?.info?.title ?? 'API documentation' }}</h1>
             <small v-if="spec?.info?.version">Version {{ spec.info.version }}</small>
           </div>
-          <p v-if="spec?.info?.description" class="muted">{{ spec.info.description }}</p>
+          <details v-if="spec?.info?.description" class="api-description"><summary>About API</summary><p>{{ spec.info.description }}</p></details>
         </div>
         <button v-if="spec" ref="settingsButton" type="button" class="secondary settings-icon" :disabled="scenarioPending"
           aria-label="Settings" title="Settings" :aria-expanded="settingsOpen" :aria-controls="settingsOpen ? 'settings-panel' : undefined" @click="toggleSettings">
@@ -861,12 +871,17 @@ body { margin: 0; background: #eef2ee; }
   border: 1px solid var(--line);
   border-radius: .75rem;
 }
-.hero { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1rem; padding: 2.125rem 1rem 1rem; border-bottom: 1px solid var(--line); }
-.api-identity { display: flex; flex: 1 1 16rem; justify-content: flex-end; align-items: center; gap: .75rem; min-width: 0; }
+.hero { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .5rem 1rem .5rem 7rem; min-height: 3.5rem; border-bottom: 1px solid var(--line); }
+.api-identity { display: flex; flex: 1 1 12rem; justify-content: flex-end; align-items: center; gap: .75rem; min-width: 0; }
 .api-info { min-width: 0; overflow-wrap: anywhere; text-align: right; }
 .api-title { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .5rem; min-height: 1.65rem; }
+.mobile-workspace-view, .mobile-api-about { display: none; }
+.mobile-workspace-view > .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .hero h1 { margin: 0; font-size: 1.05rem; letter-spacing: -.025em; }
 .hero p { margin: .25rem 0 0; font-size: .82rem; }
+.api-description { position: relative; font-size: .75rem; }
+.api-description summary { cursor: pointer; }
+.api-description p { position: absolute; top: 100%; right: 0; z-index: 10; width: min(26rem, 75vw); padding: .6rem; background: var(--surface); border: 1px solid var(--line); border-radius: .4rem; }
 .brand-track {
   position: absolute;
   z-index: 1;
@@ -877,7 +892,7 @@ body { margin: 0; background: #eef2ee; }
 .brand-stamp {
   --stamp-inset: .8rem;
   position: absolute;
-  top: -.55rem;
+  top: .6rem;
   left: var(--stamp-inset);
   pointer-events: auto;
 }
@@ -1061,6 +1076,22 @@ input:not([type="checkbox"]), select, textarea {
 .method[data-method="DELETE"] { background: #ffe3e2; color: #8f2225; }
 @media (max-width: 760px) {
   #app { --app-gutter: .75rem; }
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) 44px; padding: .25rem .5rem .25rem 6rem; gap: 0 .35rem; min-height: 64px; }
+  .hero .view-navigation { display: none; }
+  .mobile-workspace-view { display: block; grid-column: 1; grid-row: 1; min-width: 0; }
+  .mobile-workspace-view select { width: 100%; min-width: 0; min-height: 44px; padding: .25rem; font-size: .8rem; }
+  .hero .api-identity { display: contents; }
+  .hero .api-info { grid-column: 1; grid-row: 2; text-align: left; position: relative; }
+  .mobile-api-about { display: block; min-width: 0; font-size: .7rem; line-height: 1rem; }
+  .mobile-api-about summary { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-api-about > div { position: absolute; top: 100%; right: 0; z-index: 10; width: min(24rem, 80vw); padding: .6rem; background: var(--surface); border: 1px solid var(--line); border-radius: .4rem; }
+  .hero .api-title { display: none; }
+  .hero .api-title { justify-content: flex-start; min-height: 0; }
+  .hero h1 { font-size: .7rem; line-height: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hero .api-title small, .hero .api-description { display: none; }
+  .hero .settings-icon { grid-column: 2; grid-row: 1 / 3; min-height: 44px; width: 44px; align-self: center; }
+  .brand-stamp { top: .8rem; left: .5rem; }
+
   .app { height: auto; min-height: calc(100dvh - 2 * var(--app-gutter)); }
   .layout, .layout.has-presets { grid-template-columns: minmax(0, 1fr); }
   .mobile-presets-toggle { display: flex; justify-content: space-between; align-items: center; margin: .5rem 1rem; }
