@@ -47,7 +47,7 @@ function select(row, index) { emit('select', row.owner); reveal(index) }
       <label>Search in <select v-model="scope" aria-label="Search scope"><option value="all">Keys and values</option><option value="values">Values only</option><option value="keys">Keys only</option></select></label>
       <label><input v-model="caseSensitive" type="checkbox"> Match case</label><label><input v-model="exact" type="checkbox"> Exact match</label>
     </div>
-    <p class="search-status muted" role="status" aria-live="polite">
+    <p v-if="state.pending || state.cancelled || state.total || query.trim()" class="search-status muted" role="status" aria-live="polite">
       <template v-if="state.pending">Searching the whole response… <template v-if="state.scanned">{{ state.scanned.toLocaleString() }} locations checked.</template></template>
       <template v-else-if="state.cancelled">Search stopped.</template>
       <template v-else-if="state.total">{{ state.total.toLocaleString() }} matching locations. Match {{ current.toLocaleString() }} of {{ state.total.toLocaleString() }}.</template>
