@@ -802,7 +802,6 @@ function removeScenario(id) {
 </template>
 
 <style>
-
 :root {
   color-scheme: light;
   font-family: system-ui, sans-serif;
