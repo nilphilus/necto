@@ -1,4 +1,5 @@
 <script setup>
+import RequestSendIcon from '../request-runner/RequestSendIcon.vue'
 import { computed, reactive, watch } from 'vue'
 import ValueInput from './ValueInput.vue'
 const props = defineProps({ target: Object, canSend: Function })
@@ -53,14 +54,14 @@ const ready = computed(() => props.canSend(props.target.operation, choices.value
     </ul>
     <form @submit.prevent="(!quickSend || ready) && emit('follow', target.operation, choices, quickSend)">
       <button v-if="!fields.length && quickSend" type="submit" class="secondary send" :disabled="!ready"
-        :aria-label="'Send ' + target.operation.name">Send ↗</button>
+        :aria-label="'Send ' + target.operation.name">Send <RequestSendIcon /></button>
       <div v-if="fields.length" class="fields">
         <div v-for="(field, index) in fields" :key="field.key" class="field">
           <ValueInput v-model="drafts[field.key]" :choices="field.choices" dropdown placeholder="Type or choose a value…">
             <template #label>{{ field.name ?? 'body' }} <small>{{ field.location }}</small></template>
             <template v-if="index === 0 && quickSend" #trailing>
               <button type="submit" class="send send-joined" :disabled="!ready"
-                :aria-label="'Send ' + target.operation.name">Send ↗</button>
+                :aria-label="'Send ' + target.operation.name">Send <RequestSendIcon /></button>
             </template>
           </ValueInput>
         </div>

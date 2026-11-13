@@ -129,7 +129,7 @@ async function inspect(id) {
           <p v-if="selected.operation.apiId && selected.operation.apiId !== 'local'" class="muted">{{ selected.operation.apiName }} [{{ selected.operation.apiId }}]</p>
           <div class="selected-route"><span class="method" :data-method="selected.operation.method">{{ selected.operation.method }}</span><code>{{ selected.operation.path }}</code></div>
           <p v-if="selected.operation.description" class="muted">{{ selected.operation.description }}</p>
-          <button type="button" class="primary open-request" @click="$emit('open-operation', selected.operation)">Open request ↗</button>
+          <button type="button" class="primary open-request" @click="$emit('open-operation', selected.operation)">Open request</button>
           <template v-for="group in [{ name: 'Incoming', entries: incoming, peer: 'from' }, { name: 'Outgoing', entries: outgoing, peer: 'to' }]" :key="group.name">
             <section v-if="direction === 'all' || direction === group.name.toLowerCase()" :aria-label="group.name + ' endpoint connections'">
               <h4>{{ group.name }} ({{ group.entries.length }})</h4>
