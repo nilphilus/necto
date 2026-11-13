@@ -161,7 +161,7 @@ function parameterHint(parameter) {
     </form>
 
     <section ref="responsePane" class="response-pane" aria-label="Response" :aria-busy="session.pending">
-      <header class="pane-header">
+      <header v-if="!session.result" class="pane-header">
         <h3>{{ (session.pending || session.resultStale) && session.result ? 'Last response' : 'Response' }}</h3>
         <div class="response-meta" role="status">
           <template v-if="session.result">
@@ -179,8 +179,7 @@ function parameterHint(parameter) {
           <p v-if="session.resultStale" class="muted response-stale" role="status">Inputs changed. Showing the previous response until you send again.</p>
           <div class="response-content" :class="{ 'has-related': hasRelated }">
           <div class="response-body">
-            <p class="response-type">{{ session.result.contentType || 'Body' }}</p>
-            <ResponsePreview :result="session.result" :selectors="selectors" :operation="operation" />
+            <ResponsePreview :result="session.result" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="session.resultStale" />
           </div>
           <aside v-if="hasRelated" class="response-actions" aria-label="Next request">
             <details open class="continuation-panel">
