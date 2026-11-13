@@ -1,5 +1,9 @@
 # Necto
 
+**OpenAPI UI with a backbone.** Follow response values into your next request, save connected workflows, and explore your API with the data in view.
+
+[Product overview](docs/landing-page/en.md) · [Setup and technical guide](docs/landing-page/technical.md) · [Preview the product website](docs/landing-page/README.md)
+
 ## OpenAPI UI
 
 Call `app.UseNectoUI()` alongside `app.MapOpenApi()` to serve the Vue UI at
