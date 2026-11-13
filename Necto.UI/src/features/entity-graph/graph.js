@@ -3,6 +3,14 @@ import { resolveMappingLinks } from '../related-endpoints/mappings.js'
 
 const refPrefix = '#/components/schemas/'
 
+function schemaLabel(name) {
+  // Qualified component keys commonly carry a CLR namespace or enclosing type.
+  const shortName = /^[\w]+(?:[.+][\w]+)+$/.test(name) ? name.split(/[.+]/).at(-1) : name
+  const characters = Array.from(shortName)
+  // Some generators flatten the namespace into the key without separators.
+  return characters.length > 28 ? `…${characters.slice(-27).join('')}` : shortName
+}
+
 function readEntityGraph(spec, operations) {
   const schemas = spec?.components?.schemas ?? {}
   const nodes = new Map()
@@ -22,7 +30,9 @@ function readEntityGraph(spec, operations) {
   }
   function addNode(id, name, schema) {
     const title = typeof schema.title === 'string' ? schema.title.trim() : ''
-    if (!nodes.has(id)) nodes.set(id, { id, name: title || name, schema, endpoints: new Map() })
+    const schemaKey = id.startsWith('schema:') ? name : undefined
+    if (!nodes.has(id)) nodes.set(id, { id, name: title || (schemaKey ? schemaLabel(schemaKey) : name),
+      schemaKey, schema, endpoints: new Map() })
     return id
   }
   for (const [name, schema] of Object.entries(schemas)) {

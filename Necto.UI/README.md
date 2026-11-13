@@ -268,7 +268,7 @@ Use `MapNectoUI` in place of `UseNectoUI` to attach ASP.NET Core endpoint metada
 app.MapNectoUI().WithMetadata(new SkipRequiredHeaderAttribute());
 ```
 
-OpenAPI JSON, endpoint mappings, and agent routes are registered separately. To apply the same metadata to any of those routes, chain `WithMetadata` on its own registration (`MapOpenApi`, `MapNectoEndpointMappings`, or `MapNectoAgent`).
+To apply the same attribute to the UI and routes registered with `MapNectoEndpointMappings`, call `app.UseNectoUI(metadataAttribute: new SkipRequiredHeaderAttribute())`. The mappings route can be registered before or after the UI. For OpenAPI JSON, agent routes, or a custom mappings route registered with `MapGet`, apply metadata on that route's registration.
 
 ## Development
 
