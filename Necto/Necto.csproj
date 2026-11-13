@@ -5,8 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
-    <Version>0.2.0</Version>
-    <Description>An OpenAPI UI that reuses values across requests.</Description>
+    <PackageId>Necto.OpenApi</PackageId>
+    <Version>0.2.1</Version>
+    <Description>OpenAPI UI for ASP.NET Core with a Roslyn source generator that maps response values to inputs in related requests.</Description>
     <RepositoryUrl>https://github.com/nilphilus/necto</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
