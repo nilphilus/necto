@@ -26,6 +26,8 @@ Lead with response-to-request value reuse, then show scenarios, whole-response s
 
 Retain the repository tagline: **OpenAPI UI with a backbone.** Use the real `Necto.OpenApi` package name. The NuGet package was checked at authoring time (0.2.2). Do not describe the Commons Clause license as unrestricted open source. Do not advertise unmerged authentication or unfinished call overrides, unlimited payloads, inferred business workflows, or an agent that executes requests inside Necto.
 
+The short **Why Necto?** note links the name to Latin *nectō* (to bind or connect) and the product's response-to-request connections. Its dictionary reference is [Lewis & Short, via CLD](https://cld.bbaw.de/lemma/lat/necto).
+
 ## Screenshot provenance
 
 Captured from SampleApi with the UI from main `3286b4b` at 1366 × 900:

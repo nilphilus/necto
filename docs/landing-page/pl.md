@@ -27,6 +27,10 @@ Dla programistów i QA pracujących z API ASP.NET Core.
 
 Presety współdzielą wartości między requestami. Połączenia zewnętrzne dodają inne API i ich mapowania. Most MCP przekazuje kontekst Twojemu agentowi, który korzysta z własnego modelu, narzędzi HTTP i poświadczeń.
 
+## Dlaczego Necto?
+
+Od łacińskiego [nectō](https://cld.bbaw.de/lemma/lat/necto) — „wiążę” lub „łączę”. Nazwa oddaje ideę produktu: łączenie odpowiedzi, wartości i kolejnego requestu.
+
 ## Twoje API. Jeszcze jedna przydatna ścieżka.
 
 Interfejs jest dołączony do pakietu .NET i korzysta z dokumentu OpenAPI. Szczegóły wdrożenia, działania mapowań i ograniczeń są na osobnej stronie technicznej.
