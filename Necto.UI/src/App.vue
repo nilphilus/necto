@@ -660,7 +660,7 @@ function removeScenario(id) {
           </div>
           <details v-if="spec?.info?.description" class="api-description"><summary>About API</summary><p>{{ spec.info.description }}</p></details>
         </div>
-        <button ref="authorizationButton" type="button" class="secondary authorize-button" @click="openAuthorization()">Authorize<small v-if="authorizedCount"> · configured</small></button>
+        <button ref="authorizationButton" type="button" class="secondary authorize-button" aria-label="Authorize" :title="authorizedCount ? 'Authorize · configured' : 'Authorize'" :data-configured="authorizedCount > 0" @click="openAuthorization()"><svg class="authorize-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="4"/><path d="m11 11 9 9m-3-3 2-2m-5 2 2-2"/></svg><span class="authorize-label">Authorize<small v-if="authorizedCount"> · configured</small></span></button>
         <button v-if="spec" ref="settingsButton" type="button" class="secondary settings-icon" :disabled="scenarioPending"
           aria-label="Settings" title="Settings" :aria-expanded="settingsOpen" :aria-controls="settingsOpen ? 'settings-panel' : undefined" @click="toggleSettings">
           <span aria-hidden="true">⚙︎</span>
@@ -1158,5 +1158,17 @@ input:not([type="checkbox"]), select, textarea {
   .layout > .catalog { grid-column: 1 / -1; }
   .work-area { overflow: visible; padding: 1rem; }
   .settings { overflow: auto; }
+}
+</style>
+
+<style>
+.authorize-icon { display: none; }
+@media (max-width: 760px) {
+  .hero { grid-template-columns: minmax(0, 1fr) 44px 44px; }
+  .hero .settings-icon { grid-column: 3; }
+  .hero .authorize-button { position: relative; grid-column: 2; grid-row: 1 / 3; width: 44px; height: 44px; padding: 9px; align-self: center; }
+  .authorize-label { display: none; }
+  .authorize-icon { display: block; width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+  .authorize-button[data-configured="true"]::after { content: ''; position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 }
 </style>
