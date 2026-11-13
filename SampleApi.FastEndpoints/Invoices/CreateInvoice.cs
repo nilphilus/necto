@@ -49,7 +49,15 @@ public sealed class CreateInvoice : Endpoint<CreateInvoiceRequest, Invoice>
         Post("/");
         Group<InvoicesGroup>();
         AllowAnonymous();
-        Summary(summary => summary.Summary = "Create an invoice with line items");
+        Summary(summary =>
+        {
+            summary.Summary = "Create an invoice with line items";
+            summary.ExampleRequest = new CreateInvoiceRequest
+            {
+                CustomerId = 7, AssetId = 12, Description = "Consulting invoice", Currency = "PLN",
+                Lines = [new() { Description = "Consulting", Quantity = 2, UnitPrice = 75m }]
+            };
+        });
         Description(builder => builder.Produces<Invoice>(StatusCodes.Status201Created));
     }
 
