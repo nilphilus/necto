@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch, watchPostEffect } from 'vue'
 import { bodyFields, hasBodyExample } from './bodyHelp.js'
 import ResponsePreview from './ResponsePreview.vue'
 import RequestSendIcon from './RequestSendIcon.vue'
+import NextRequestsPanel from './NextRequestsPanel.vue'
 import { applyBodyPresets, contextKey, fieldKey, jsonContent, presetSource, supportedParameters } from './request.js'
 
 const props = defineProps({
@@ -24,6 +25,7 @@ const displayedBody = computed({
   get: () => editingBody.value ? props.session.body : effectiveBody.value,
   set: body => { props.session.body = body },
 })
+const relatedPinned = ref(false)
 const unsupported = computed(() => props.operation.requestBody && !content.value)
 const form = ref(null)
 const bodyEditor = ref(null)
@@ -212,16 +214,12 @@ function parameterHint(parameter) {
       <div class="pane-body">
         <template v-if="session.result">
           <p v-if="session.resultStale" class="muted response-stale" role="status">Inputs changed. Showing the previous response until you send again.</p>
-          <div class="response-content" :class="{ 'has-related': hasRelated }">
+          <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }">
+          <NextRequestsPanel v-if="hasRelated" :operation-key="operation.key" @pin="relatedPinned = $event"><slot name="related" /></NextRequestsPanel>
           <div class="response-body">
             <ResponsePreview :result="session.result" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="session.resultStale" />
           </div>
-          <aside v-if="hasRelated" class="response-actions" aria-label="Next request">
-            <details open class="continuation-panel">
-              <summary>Next request</summary>
-              <slot name="related" />
-            </details>
-          </aside>
+
           </div>
         </template>
         <p v-else class="muted empty">
@@ -290,13 +288,12 @@ function parameterHint(parameter) {
 .status.failed { background: #ffe3e2; color: #8f2225; }
 .response-content { display: grid; gap: .85rem; align-items: start; }
 .response-content > * { min-width: 0; }
-.response-body { margin: 0; }
-.response-actions { min-width: 0; }
-.continuation-panel > summary { cursor: pointer; padding: .55rem .7rem; border: 1px solid var(--line); border-radius: .5rem; color: var(--accent); font-size: .82rem; font-weight: 650; background: var(--surface); }
-.continuation-panel[open] > summary { margin-bottom: .5rem; }
+.response-body { margin: 0; grid-column: 1; }
+.response-content.related-pinned .response-body { grid-row: 1; }
+
 @container (min-width: 48rem) {
-  .response-content.has-related { grid-template-columns: minmax(0, 1fr) 17rem; }
-  .response-actions { position: sticky; top: 1rem; max-height: calc(100dvh - 10rem); overflow: auto; }
+  .response-content.related-pinned { grid-template-columns: minmax(0, 1fr) 17rem; }
+  .response-content.related-pinned :deep(.next-requests) { grid-column: 2; grid-row: 1; position: sticky; top: 1rem; max-height: calc(100dvh - 10rem); overflow: auto; }
 }
 .response-type { margin: 0 0 .35rem; color: var(--muted); font-size: .74rem; overflow-wrap: anywhere; }
 pre { overflow: auto; max-height: 28rem; margin: 0; padding: .8rem; border-radius: .45rem; background: #182420; color: #e7f3eb; }
