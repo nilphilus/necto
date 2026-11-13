@@ -1,55 +1,46 @@
 # Necto
 
-## OpenAPI UI with a backbone.
+**OpenAPI UI with a backbone.**
 
-### Give your API a sense of direction.
+## Follow the data. Test the whole flow.
 
-Turn a response into your next request. Necto connects the dots between your endpoints so you can explore real workflows, carry useful data forward, and keep moving.
+Select an object. Carry its values into your next request. Save the journey and run it again.
 
-**[Try Necto](../../README.md)** · **[Explore on GitHub](https://github.com/nilphilus/necto)**
+- Less copying IDs
+- Repeatable workflows
+- Room for the response
 
-[See how it works under the hood →](technical.md)
+**Try the workflow** · **Add to your API** · **GitHub**
 
-## Follow the data. Find your next step.
+Built for developers and QA working with ASP.NET Core APIs.
 
-You have the customer. Now you need their invoices. Then the line items. Then the details.
+## One answer. More ways forward.
 
-Necto helps you make that journey. Select an object in the response, pick a related request, and the matching value is already there. Stay focused on what you want to discover.
+Go from “what did I get?” to “what can I do next?” Keep the data, the context, and the next step together.
 
-**Customer → Invoices → Line items → Details**
+- **Follow the data:** select an invoice, choose a related request, and carry its ID forward. Review or edit before sending.
+- **Replay the flow:** save a request chain and run it with values from fresh responses. Inspect each step and its value sources.
+- **Find your object:** search the whole response, jump to the matching page, and select the object you need.
+- **See the connections:** explore separate entity and endpoint graphs, inspect a node, and open its request.
 
-## Make every response useful.
+## Set the context. Keep your momentum.
 
-Your response is the starting point for what comes next. A readable JSON preview brings the data into focus. Select an invoice or a line item and use its values in a related request.
+- **Presets that travel with you:** reuse headers and parameters; switch tenant or environment without filling the same fields again.
+- **More than one API:** connect external OpenAPI documents and Necto mappings; follow configured links across services.
+- **Bring your own agent:** give an MCP-capable agent API context while keeping your own model, HTTP tools and credentials.
 
-Keep the suggested value, find another one, or type your own. You're always in control of the next call.
+## Your API. One more useful route.
 
-## Explore the whole story.
+Necto ships its UI in the .NET package and reads your OpenAPI document. Serve the workspace alongside the API you already have.
 
-Every related request becomes a step you can return to. Go back to an earlier response, take a different route, and see where the data leads.
+- No separate frontend deployment
+- Connections informed by your C# code
+- A short path from install to first request
 
-It's a workspace for investigating how your API fits together, testing a customer journey, or getting to know a service you've just joined.
-
-## Big responses. Room to explore.
-
-A long response deserves a useful preview. Browse large collections page by page, expand the details you need, and select an item wherever you find it. Preview pagination works even when the API returns everything in one response.
-
-Need the original? Switch to Raw or download the complete response.
-
-**Tested with 100,000 records in a 117 MB response.** [See the measurement and limits →](technical.md#large-response-preview)
-
-## Set your context once.
-
-Save the headers and parameters you use repeatedly as named presets. Combine the context you need for the task at hand, then move through requests with fewer fields to fill in again.
-
-## At home in your ASP.NET Core API.
-
-Bring Necto into the application you already have. It uses your OpenAPI document and serves its UI alongside your API. Your team gets one place to explore endpoints and follow the data between them.
-
-The connections are informed by your C# code. [Discover how Necto finds related requests →](technical.md#how-connections-work)
+**Read the setup guide**
 
 ## See where your API can take you.
 
-Try the sample invoice flow. Select a response value. Follow the next request. Explore another path.
+**Get started** · **Explore on GitHub**
 
-**[Get started with Necto](../../README.md)** · **[Read the technical guide](technical.md)**
+[Rendered website](index.html) · [Technical guide](technical.md)
