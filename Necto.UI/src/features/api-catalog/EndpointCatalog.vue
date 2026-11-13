@@ -5,8 +5,11 @@ const props = defineProps({
   groups: { type: Array, required: true },
   activeGroup: { type: String, required: true },
   activeOperation: { type: String, required: true },
+  externalCount: { type: Number, default: 0 },
+  showExternal: Boolean,
+  externalLoading: Boolean,
 })
-const emit = defineEmits(['select-group', 'select-operation'])
+const emit = defineEmits(['select-group', 'select-operation', 'toggle-external'])
 
 const filter = ref('')
 const showPaths = ref(false)
@@ -50,6 +53,10 @@ function selectGroup(name) {
 <template>
   <nav class="catalog" aria-label="API endpoints">
     <h2 class="catalog-title">Endpoints</h2>
+    <div v-if="externalCount" class="api-visibility" aria-label="API visibility">
+      <label><input type="checkbox" role="switch" :checked="showExternal" @change="$emit('toggle-external', $event.target.checked)"> External APIs ({{ externalCount }})</label>
+      <small>{{ externalLoading ? 'Loading external services…' : showExternal ? 'Local + external services' : 'Local service only' }}</small>
+    </div>
     <input v-model="filter" type="search" aria-label="Find an endpoint" placeholder="Find an endpoint">
     <label class="mode">
       <input v-model="showPaths" type="checkbox" role="switch">
@@ -102,6 +109,9 @@ function selectGroup(name) {
   padding: 1rem;
   border-right: 1px solid var(--line);
 }
+.api-visibility { padding: .6rem; margin-bottom: .75rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--accent-soft); font-size: .8rem; }
+.api-visibility label { display: flex; align-items: center; gap: .35rem; }
+.api-visibility small { display: block; color: var(--muted); margin-top: .25rem; }
 .catalog-title { margin: 0 0 .75rem; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
 .catalog input[type="search"] { width: 100%; }
 .mode { display: flex; align-items: center; gap: .45rem; margin: .65rem 0 1rem; font-size: .8rem; }
