@@ -1,6 +1,8 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import AgentPanel from './features/agents/AgentPanel.vue'
+import AuthorizationDialog from './features/authentication/AuthorizationDialog.vue'
+import { useAuthentication } from './features/authentication/useAuthentication.js'
 import NectoSkeleton from './NectoSkeleton.vue'
 import { useCatalog } from './features/api-catalog/catalog.js'
 import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
@@ -22,9 +24,17 @@ import { readRoute, routePath } from './features/routing/routes.js'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
 import { buildRequest, fieldKey, contextKey, hasPresetFor, migratePreset, presetInputs, resolveNamedRequestValues } from './features/request-runner/request.js'
 
-const { spec, configuration, error, operations, groups, externalApis } = useCatalog()
-const { sessions, sessionFor, createSession, run } = useRequestRunner(configuration)
-const { error: mappingError, targetsFor, choicesFor, selectablePaths, mappings: endpointMappings, links: mappingLinks, pending: mappingPending } = useRelatedEndpoints(configuration, operations, externalApis.contexts)
+const authentication = useAuthentication()
+const authorizationOpen = ref(false)
+const authorizationApiId = ref('local')
+const authorizationButton = ref(null)
+authentication.register({ id: 'local', name: 'Local API', bootstrap: true, schemes: {}, configuration: {
+  openApiUrl: new URL('/openapi/v1.json', document.baseURI).href, apiBaseUrl: new URL('/', document.baseURI).href,
+  configurationUrl: new URL('./configuration', document.baseURI).href,
+}, origins: [location.origin] })
+const { spec, configuration, error, operations, groups, externalApis, reload: reloadCatalog } = useCatalog(authentication)
+const { sessions, sessionFor, createSession, run } = useRequestRunner(configuration, authentication)
+const { error: mappingError, targetsFor, choicesFor, selectablePaths, mappings: endpointMappings, links: mappingLinks, pending: mappingPending } = useRelatedEndpoints(configuration, operations, externalApis.contexts, authentication)
 
 const { connections, show: showExternalApis, statuses: externalStatuses, storageError: externalStorageError } = externalApis
 const externalPending = computed(() => showExternalApis.value && [...externalStatuses.values()].some(status => status.pending))
@@ -95,6 +105,48 @@ const chain = computed(() => {
 })
 const currentIndex = computed(() => inspectedScenarioStep.value === null ? chain.value.length - 1 : Math.min(inspectedScenarioStep.value, chain.value.length - 1))
 const current = computed(() => chain.value[currentIndex.value])
+const authorizedCount = computed(() => { const api = authentication.apis.get(current.value?.operation.apiId ?? 'local'); return Object.keys(api?.credentials ?? {}).length + (api?.access ? 1 : 0) })
+function openAuthorization(id = current.value?.operation.apiId ?? 'local') { authorizationApiId.value = id; authorizationOpen.value = true }
+async function closeAuthorization() { authorizationOpen.value = false; await nextTick(); authorizationButton.value?.focus() }
+function retryAuthorizedMetadata() {
+  void reloadCatalog()
+  for (const entry of connections.value) void externalApis.testConnection(entry.id)
+}
+watch([spec, configuration, operations, connections, externalApis.contexts], () => {
+  const activeIds = new Set(['local', ...connections.value.map(entry => entry.id)])
+  for (const id of authentication.apis.keys()) if (!activeIds.has(id)) authentication.remove(id)
+  if (configuration.value) {
+    const local = operations.value.filter(operation => operation.apiId === 'local')
+    authentication.register({ id: 'local', name: spec.value?.info?.title ?? 'Local API', document: spec.value,
+      configuration: configuration.value, schemes: local[0]?.securitySchemes ?? spec.value?.components?.securitySchemes ?? {},
+      origins: operationOrigins(local, configuration.value) })
+  }
+  for (const entry of connections.value) {
+    const context = externalApis.contexts.value.find(api => api.id === entry.id)
+    const config = context?.configuration ?? { openApiUrl: entry.openApiUrl, endpointMappingsUrl: entry.endpointMappingsUrl,
+      apiBaseUrl: entry.apiBaseUrl || new URL('/', entry.openApiUrl).href, overrideServer: Boolean(entry.apiBaseUrl) }
+    const scoped = operations.value.filter(operation => operation.apiId === entry.id)
+    authentication.register({ id: entry.id, name: entry.name, configuration: config, document: context?.document,
+      schemes: scoped[0]?.securitySchemes ?? context?.document?.components?.securitySchemes ?? {}, origins: operationOrigins(scoped, config) })
+  }
+})
+function operationOrigins(entries, config) {
+  const origins = new Set([new URL(config.openApiUrl).origin, new URL(config.apiBaseUrl || '/', config.openApiUrl).origin])
+  for (const operation of entries) {
+    try {
+      const server = config.overrideServer ? undefined : operation.server
+      const url = server?.url.replace(/\{([^}]+)\}/g, (_, name) => server.variables?.[name]?.default ?? '')
+      if (url) origins.add(new URL(url, config.openApiUrl).origin)
+    } catch { /* Invalid servers are reported when building requests. */ }
+  }
+  return [...origins]
+}
+watch(authentication.revision, () => {
+  scenarioStore.stop(); scenarioRuns.clear(); scenarioState.steps = []; scenarioState.error = ''; scenarioState.status = 'idle'
+  for (const session of [...sessions.values(), ...chain.value.map(step => step.session)]) { session.result = null; session.error = '' }
+  void reloadCatalog()
+})
+
 const requestValues = computed(() => current.value ? valuesFor(current.value.operation) : new Map())
 const visiblePresetNames = computed(() => {
   if (!current.value) return []
@@ -518,7 +570,7 @@ function choose(session, location, choice, sourceIndex) {
   }
 }
 function scenarioContext(requestValuesFor = valuesFor) {
-  return { operations: operations.value, links: mappingLinks.value, configuration: configuration.value,
+  return { operations: operations.value, links: mappingLinks.value, configuration: configuration.value, authorize: authentication.apply,
     createSession, valuesFor: requestValuesFor }
 }
 function saveScenario() {
@@ -608,6 +660,7 @@ function removeScenario(id) {
           </div>
           <details v-if="spec?.info?.description" class="api-description"><summary>About API</summary><p>{{ spec.info.description }}</p></details>
         </div>
+        <button ref="authorizationButton" type="button" class="secondary authorize-button" aria-label="Authorize" :title="authorizedCount ? 'Authorize · configured' : 'Authorize'" :data-configured="authorizedCount > 0" @click="openAuthorization()"><svg class="authorize-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="4"/><path d="m11 11 9 9m-3-3 2-2m-5 2 2-2"/></svg><span class="authorize-label">Authorize<small v-if="authorizedCount"> · configured</small></span></button>
         <button v-if="spec" ref="settingsButton" type="button" class="secondary settings-icon" :disabled="scenarioPending"
           aria-label="Settings" title="Settings" :aria-expanded="settingsOpen" :aria-controls="settingsOpen ? 'settings-panel' : undefined" @click="toggleSettings">
           <span aria-hidden="true">⚙︎</span>
@@ -615,7 +668,8 @@ function removeScenario(id) {
       </div>
     </header>
 
-    <p v-if="error" class="app-message error" role="alert">{{ error }}</p>
+    <AuthorizationDialog v-if="authorizationOpen" :authentication="authentication" :api-id="authorizationApiId" @close="closeAuthorization" @retry="retryAuthorizedMetadata" />
+    <p v-if="error" class="app-message error" role="alert">{{ error }} <button type="button" class="secondary" @click="retryAuthorizedMetadata">Retry documentation</button></p>
     <p v-else-if="!spec" class="app-message" role="status">Loading API documentation…</p>
     <template v-else>
       <p v-if="routeError" class="app-message error" role="alert">{{ routeError }}</p>
@@ -1104,5 +1158,17 @@ input:not([type="checkbox"]), select, textarea {
   .layout > .catalog { grid-column: 1 / -1; }
   .work-area { overflow: visible; padding: 1rem; }
   .settings { overflow: auto; }
+}
+</style>
+
+<style>
+.authorize-icon { display: none; }
+@media (max-width: 760px) {
+  .hero { grid-template-columns: minmax(0, 1fr) 44px 44px; }
+  .hero .settings-icon { grid-column: 3; }
+  .hero .authorize-button { position: relative; grid-column: 2; grid-row: 1 / 3; width: 44px; height: 44px; padding: 9px; align-self: center; }
+  .authorize-label { display: none; }
+  .authorize-icon { display: block; width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+  .authorize-button[data-configured="true"]::after { content: ''; position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 }
 </style>

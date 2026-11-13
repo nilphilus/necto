@@ -71,19 +71,20 @@ export function resolveMappingLinks(operations, catalogs) {
   return links
 }
 
-export function useRelatedEndpoints(configuration, operations, externalContexts = ref([])) {
+export function useRelatedEndpoints(configuration, operations, externalContexts = ref([]), authentication) {
   const mappings = ref([])
   const error = ref('')
   const pending = ref(false)
 
-  watch(() => configuration.value?.endpointMappingsUrl, async (url, previous, onCleanup) => {
+  watch([() => configuration.value?.endpointMappingsUrl, () => authentication?.revision.value], async ([url], previous, onCleanup) => {
     mappings.value = []; error.value = ''; pending.value = false
     if (!url) return
     pending.value = true
     const controller = new AbortController()
     onCleanup(() => controller.abort())
     try {
-      const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } })
+      const options = { signal: controller.signal, headers: { Accept: 'application/json' } }
+      const response = await (authentication?.metadataFetch(url, 'local', options) ?? fetch(url, options))
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const entries = await response.json()
       if (!Array.isArray(entries)) throw new Error('Expected a list of endpoint mappings')

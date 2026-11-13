@@ -64,6 +64,14 @@ or stop a running scenario. Scenarios are stored in your browser; current reques
 presets and external API connections apply when replaying. See the
 [scenario guide](Necto.UI/README.md#saved-scenarios).
 
+## Authentication
+
+Use **Authorize** to access protected APIs and protected OpenAPI documents. The
+button is available even when the document returns 401. Necto supports Bearer/JWT,
+Basic, API keys, existing browser sessions and OAuth2/OIDC Authorization Code with
+PKCE, scoped to each API and approved origins. Credentials stay in tab memory.
+See [authentication setup](docs/authentication/README.md).
+
 ## Bring your agent
 
 Write a prompt in Necto and let your own MCP-capable agent discover endpoints,

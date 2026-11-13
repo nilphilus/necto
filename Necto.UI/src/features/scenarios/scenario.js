@@ -93,7 +93,7 @@ function placeholder(operation, binding) {
   return type === 'array' ? [] : type === 'object' ? {} : 'scenario-value'
 }
 
-export function prepareScenario(scenario, { operations, links, configuration, createSession, valuesFor, validateRequests = true }) {
+export function prepareScenario(scenario, { operations, links, configuration, createSession, valuesFor, authorize, validateRequests = true }) {
   validateScenario(scenario)
   const byKey = new Map(operations.map(operation => [operation.key, operation]))
   const plan = scenario.steps.map((step, index) => {
@@ -124,7 +124,8 @@ export function prepareScenario(scenario, { operations, links, configuration, cr
         if (!valid) throw new Error(`The mapping from step ${binding.sourceStep + 1} (${pathLabel(binding.path)}) to ${binding.location}:${binding.name ?? 'body'} is no longer available.`)
         applyChoice(draft, binding.location, { name: binding.name, value: placeholder(step.operation, binding) })
       }
-      buildRequest(step.operation, configuration, draft, step.values)
+      const request = buildRequest(step.operation, configuration, draft, step.values)
+      authorize?.(request, step.operation)
     } catch (cause) { throw new Error(`Step ${index + 1}: ${cause.message}`) }
   }
   return plan
