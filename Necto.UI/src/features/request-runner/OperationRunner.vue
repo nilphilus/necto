@@ -45,6 +45,7 @@ async function focusResponse() {
   if (!form.value.checkValidity()) { await editRequest(); form.value.reportValidity(); return }
   requestCompact.value = true; rememberFocus(true)
   await nextTick()
+  responsePane.value?.setAttribute('tabindex', '-1')
   responsePane.value?.focus({ preventScroll: true })
   responsePane.value?.scrollIntoView({ block: 'start', behavior: 'instant' })
 }
@@ -194,7 +195,7 @@ function parameterHint(parameter) {
       </div>
     </form>
 
-    <section ref="responsePane" class="response-pane" tabindex="-1" aria-label="Response" :aria-busy="session.pending">
+    <section ref="responsePane" class="response-pane" aria-label="Response" :aria-busy="session.pending">
       <header class="pane-header">
         <h3>{{ (session.pending || session.resultStale) && session.result ? 'Last response' : 'Response' }}</h3>
         <div class="response-meta" role="status">
