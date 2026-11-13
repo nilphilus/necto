@@ -1,8 +1,32 @@
 # Necto
 
-**OpenAPI UI with a backbone.** Follow response values into your next request, save connected workflows, and explore your API with the data in view.
+**OpenAPI UI with a backbone.**
 
-[Product overview](docs/landing-page/en.md) · [Setup and technical guide](docs/landing-page/technical.md) · [Preview the product website](docs/landing-page/README.md)
+## Follow the data. Test the whole flow.
+
+Select an object in an API response, carry its values into your next request,
+and save the journey to run it again. Built for developers and QA working with
+ASP.NET Core APIs.
+
+- **Less copying IDs:** use selected response values in related requests.
+- **Repeatable workflows:** replay saved chains with values from fresh responses.
+- **Room for the response:** search large JSON across local Preview pages.
+- **Connected context:** explore entity and endpoint graphs, reuse presets,
+  connect external APIs, or bring your own MCP-capable agent.
+
+**[HTML landing page](docs/landing-page/index.html)** ·
+[Preview instructions](docs/landing-page/README.md#preview) ·
+[Setup and technical guide](docs/landing-page/technical.md)
+
+The public website is planned for **[nilphilus.github.io/necto](https://nilphilus.github.io/necto/)**
+after the repository is public and GitHub Pages is enabled. It is not published
+yet; GitHub currently displays the HTML link above as source. Use the preview
+instructions to open the working website locally.
+
+![Necto: selected invoice values ready for related requests](docs/landing-page/assets/workflow.png)
+
+**Why Necto?** From Latin [*nectō*](https://cld.bbaw.de/lemma/lat/necto),
+“I bind” or “I connect”: responses, values, and your next request.
 
 ## OpenAPI UI
 
