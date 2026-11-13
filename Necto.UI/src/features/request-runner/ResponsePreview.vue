@@ -5,7 +5,8 @@ import { pageRange, TEXT_PAGE_SIZE } from './preview.js'
 import PayloadSearch from '../payload-search/PayloadSearch.vue'
 import { valueAtPath, pathLabel } from '../payload-search/search.js'
 import JsonNode from './JsonNode.vue'
-const props = defineProps({ result: { type: Object, required: true }, selectors: { type: Array, default: () => [] } })
+import { selectionLabel } from './selection.js'
+const props = defineProps({ result: { type: Object, required: true }, selectors: { type: Array, default: () => [] }, operation: Object })
 const raw = ref(false)
 const textPage = ref(1)
 const navigation = ref(null)
@@ -51,7 +52,8 @@ function download() {
         <button type="button" :aria-pressed="!raw" @click="raw = false">Preview</button>
         <button type="button" :aria-pressed="raw" @click="raw = true">Raw</button>
         <template v-if="result.selectedPath">
-          <code role="status">Selected: {{ JSON.stringify(result.selectedPath) }}</code>
+          <span role="status" class="selection-label">{{ selectionLabel(operation, result) }}</span>
+          <details class="selection-path"><summary>JSON path</summary><code>{{ pathLabel(result.selectedPath) }}</code></details>
           <button type="button" @click="result.selectedPath = undefined">Clear selection</button>
         </template>
         <span v-else-if="selectors.length">Select an object to fill related request fields.</span>
@@ -72,6 +74,9 @@ function download() {
 
 <style scoped>
 .preview-toolbar { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-bottom: .5rem; font-size: .75rem; color: var(--muted); }
+.selection-label { color: var(--accent); font-weight: 600; overflow-wrap: anywhere; max-width: 100%; }
+.selection-path { max-width: 100%; }
+.selection-path summary { cursor: pointer; }
 .preview-toolbar code { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .preview-toolbar button { padding: .25rem .4rem; border: 1px solid var(--line); }
 .preview-toolbar button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
