@@ -9,7 +9,7 @@ const props = defineProps({
   showExternal: Boolean,
   externalLoading: Boolean,
 })
-const emit = defineEmits(['select-group', 'select-operation', 'toggle-external'])
+const emit = defineEmits(['select-operation', 'toggle-external'])
 
 const filter = ref('')
 const showPaths = ref(false)
@@ -44,10 +44,6 @@ function toggleGroup(name) {
   }
 }
 
-function selectGroup(name) {
-  if (!isExpanded(name)) toggleGroup(name)
-  emit('select-group', name)
-}
 </script>
 
 <template>
@@ -79,7 +75,7 @@ function selectGroup(name) {
         >
           <span class="chevron" aria-hidden="true"></span>
         </button>
-        <button type="button" class="group-label" :class="{ selected: activeGroup === group.name }" @click="selectGroup(group.name)">
+        <button type="button" class="group-label" :class="{ selected: activeGroup === group.name }" @click="toggleGroup(group.name)" :aria-expanded="isExpanded(group.name)" :aria-controls="group.id">
           <span>{{ group.name }}</span>
           <small>{{ group.operations.length }}</small>
         </button>
