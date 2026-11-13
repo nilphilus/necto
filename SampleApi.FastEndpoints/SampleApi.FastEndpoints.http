@@ -1,113 +1,72 @@
-@SampleApi_HostAddress = http://localhost:5001
+@host = http://localhost:5001
+@tenant = acme
 
-GET {{SampleApi_HostAddress}}/customers
-Accept: application/json
+### Building history. Change the tenant to northstar and repeat.
 
-### Use a customer ID from the list
+GET {{host}}/buildings
+X-Tenant: {{tenant}}
 
-GET {{SampleApi_HostAddress}}/customers/7
-Accept: application/json
+###
 
-### Search for the same customer using a JSON body
+GET {{host}}/invoices?buildingId=101
+X-Tenant: {{tenant}}
 
-POST {{SampleApi_HostAddress}}/customers/search
-Content-Type: application/json
+###
 
-{"customerId":7}
+GET {{host}}/invoices/501
+X-Tenant: {{tenant}}
 
-### Unknown customer (404)
+### Follow a line to its asset.
 
-POST {{SampleApi_HostAddress}}/customers/search
-Content-Type: application/json
+GET {{host}}/assets/11
+X-Tenant: {{tenant}}
 
-{"customerId":99}
+### Filter the building's invoices to its previous owner.
 
-### Invalid customer ID (400)
+GET {{host}}/invoices?buildingId=101&customerId=8
+X-Tenant: {{tenant}}
 
-POST {{SampleApi_HostAddress}}/customers/search
-Content-Type: application/json
+### Create a draft invoice.
 
-{"customerId":0}
-
-### Find the customer's assets
-
-GET {{SampleApi_HostAddress}}/assets?customerId=7
-Accept: application/json
-
-### Get an asset and its installation location
-
-GET {{SampleApi_HostAddress}}/assets/101
-Accept: application/json
-
-### Find invoices for the customer and asset
-
-GET {{SampleApi_HostAddress}}/invoices?customerId=7&assetId=101
-Accept: application/json
-
-### Create an invoice with its initial lines
-
-# @name createInvoice
-POST {{SampleApi_HostAddress}}/invoices
+# @name draft
+POST {{host}}/invoices
+X-Tenant: {{tenant}}
 Content-Type: application/json
 
 {
-  "customerId": 7,
-  "assetId": 101,
-  "description": "Cooling unit service",
+  "buildingId": 101,
   "currency": "PLN",
   "lines": [
-    { "description": "Inspection", "quantity": 2, "unitPrice": 150 }
+    { "assetId": 11, "description": "Lift inspection", "quantity": 2, "unitPrice": 150 }
   ]
 }
 
-### Add a line to the newly created invoice
+### Add a second asset to the draft.
 
-POST {{SampleApi_HostAddress}}/invoices/{{createInvoice.response.body.$.id}}/lines
+POST {{host}}/invoices/{{draft.response.body.$.id}}/lines
+X-Tenant: {{tenant}}
 Content-Type: application/json
 
-{ "description": "Replacement filter", "quantity": 1, "unitPrice": 75 }
+{ "assetId": 12, "description": "Ventilation service", "quantity": 1, "unitPrice": 75 }
 
-### List the newly created invoice's lines
+### Verify the draft has two lines and totals 375 PLN.
 
-GET {{SampleApi_HostAddress}}/invoices/{{createInvoice.response.body.$.id}}/lines
-Accept: application/json
+GET {{host}}/invoices/{{draft.response.body.$.id}}
+X-Tenant: {{tenant}}
 
-### Get an invoice and its customer and asset IDs
+### Missing tenant (400).
 
-GET {{SampleApi_HostAddress}}/invoices/501
-Accept: application/json
+GET {{host}}/buildings
 
-### List the invoice's line items
+### Invoice 502 belongs to Acme (404 for Northstar).
 
-GET {{SampleApi_HostAddress}}/invoices/501/lines
-Accept: application/json
+GET {{host}}/invoices/502
+X-Tenant: northstar
 
-### Get a line item and its pricing detail ID
+###
 
-GET {{SampleApi_HostAddress}}/invoices/lines/17
-Accept: application/json
+GET {{host}}/openapi/v1.json
 
-### Get the line item's pricing details
+###
 
-GET {{SampleApi_HostAddress}}/invoices/line-details/117
-Accept: application/json
-
-### List locations that have simulated forecasts
-
-GET {{SampleApi_HostAddress}}/weather/locations
-Accept: application/json
-
-### Use the location ID from the asset
-
-GET {{SampleApi_HostAddress}}/weather/locations/1/forecast
-Accept: application/json
-
-### OpenAPI document
-
-GET {{SampleApi_HostAddress}}/openapi/v1.json
-Accept: application/json
-
-### Necto UI mappings
-
-GET {{SampleApi_HostAddress}}/necto/endpoint-mappings
-Accept: application/json
+GET {{host}}/necto/endpoint-mappings

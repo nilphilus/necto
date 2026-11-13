@@ -59,8 +59,19 @@ const overwriteScenario = computed(() => scenarios.value.find(scenario =>
 const scenarioBusy = computed(() => scenarioPending.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
 const presets = ref(new Map())
 const presetColors = ref(new Map())
-const presetsCollapsed = ref(false)
-const mobilePresetsOpen = ref(false)
+const presetDialog = ref(null)
+const catalogMedia = matchMedia('(max-width: 760px)')
+const catalogOpen = ref(!catalogMedia.matches)
+const catalogWidth = ref(240)
+try { const width = Number(localStorage.getItem('necto:catalog-width')); if (width >= 180 && width <= 360) catalogWidth.value = width } catch { /* Optional layout preference. */ }
+watch(catalogWidth, width => { try { localStorage.setItem('necto:catalog-width', String(width)) } catch { /* Memory-only fallback. */ } })
+const syncCatalog = () => { catalogOpen.value = !catalogMedia.matches }
+catalogMedia.addEventListener('change', syncCatalog)
+onUnmounted(() => catalogMedia.removeEventListener('change', syncCatalog))
+function selectCatalogOperation(operation, group) {
+  selectOperation(operation, group)
+  if (catalogMedia.matches) catalogOpen.value = false
+}
 const defaultPresetColor = '#287557'
 const activePresetNames = ref([])
 const settingsOpen = ref(false)
@@ -631,13 +642,23 @@ function removeScenario(id) {
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'entities'" @click="navigateView('entities')">Entity graph</button>
         <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'endpoints'" @click="navigateView('endpoints')">Endpoint graph</button>
       </nav>
+      <label v-if="spec" class="mobile-workspace-view">
+        <span class="sr-only">Workspace view</span>
+        <select :value="graphView" :disabled="scenarioPending" @change="navigateView($event.target.value)">
+          <option value="">API</option><option v-if="configuration?.agentUrl" value="agent">Bring your agent</option><option value="scenarios">Scenarios</option><option value="entities">Entity graph</option><option value="endpoints">Endpoint graph</option>
+        </select>
+      </label>
       <div class="api-identity">
         <div class="api-info">
+          <details class="mobile-api-about" @keydown.esc.stop.prevent="$event.currentTarget.open = false">
+            <summary>{{ spec?.info?.title ?? 'API documentation' }}</summary>
+            <div><strong>{{ spec?.info?.title }}</strong><p v-if="spec?.info?.version">Version {{ spec.info.version }}</p><p v-if="spec?.info?.description">{{ spec.info.description }}</p></div>
+          </details>
           <div class="api-title">
-            <h1>{{ spec?.info?.title ?? 'API documentation' }}</h1>
+            <h1 :title="spec?.info?.title">{{ spec?.info?.title ?? 'API documentation' }}</h1>
             <small v-if="spec?.info?.version">Version {{ spec.info.version }}</small>
           </div>
-          <p v-if="spec?.info?.description" class="muted">{{ spec.info.description }}</p>
+          <details v-if="spec?.info?.description" class="api-description"><summary>About API</summary><p>{{ spec.info.description }}</p></details>
         </div>
         <button ref="authorizationButton" type="button" class="secondary authorize-button" @click="openAuthorization()">Authorize<small v-if="authorizedCount"> · configured</small></button>
         <button v-if="spec" ref="settingsButton" type="button" class="secondary settings-icon" :disabled="scenarioPending"
@@ -669,6 +690,8 @@ function removeScenario(id) {
           <div :inert="scenarioPending">
             <section v-show="settingsTab === 'presets'" class="preset-panel" aria-labelledby="presets-title">
               <h3 id="presets-title">Presets</h3>
+              <p class="muted">Presets supply shared values across requests. Saved requests keep inputs for one endpoint; scenarios replay a chain of requests.</p>
+              <p v-if="!presets.size" class="muted" role="status">No presets yet. Create one below, add values, then activate it for matching requests.</p>
               <form class="preset-actions" @submit.prevent="addPreset">
                 <label>New preset <input v-model="newPresetName" required></label>
                 <button type="submit" class="secondary">Add</button>
@@ -714,32 +737,30 @@ function removeScenario(id) {
         <small v-if="current?.operation.apiId && current.operation.apiId !== 'local' && !current.operation.usePresets">Not applied to this external API.</small>
         <small v-else-if="!visiblePresetNames.some(name => activePresetNames.includes(name))">None apply to this request; related requests may still use them.</small>
       </section>
-      <div :inert="settingsOpen" v-show="!graphView" class="layout" :class="{ 'presets-collapsed': presetsCollapsed, 'has-presets': visiblePresetNames.length }">
+      <div :inert="settingsOpen" v-show="!graphView" class="layout navigation-layout" :style="{ '--catalog-width': catalogOpen ? catalogWidth + 'px' : '0px' }">
+        <div v-show="catalogOpen" class="catalog-container">
+          <div class="catalog-controls">
+            <button type="button" class="secondary" aria-label="Hide endpoint catalog" @click="catalogOpen = false">Hide catalog</button>
+            <details class="catalog-size"><summary>Width</summary><label>Catalog width <input v-model.number="catalogWidth" type="range" min="180" max="360" step="10"></label></details>
+          </div>
         <EndpointCatalog :inert="scenarioPending"
           :groups="groups"
           :external-count="connections.length" :show-external="showExternalApis" :external-loading="externalPending"
           @toggle-external="showExternalApis = $event"
           :active-group="current?.group ?? ''"
           :active-operation="current?.operation.key ?? ''"
-          @select-operation="selectOperation"
+          @select-operation="selectCatalogOperation"
         />
 
-        <button v-if="visiblePresetNames.length" type="button" class="secondary mobile-presets-toggle" :disabled="scenarioPending"
-          :aria-expanded="mobilePresetsOpen" aria-controls="request-presets" @click="mobilePresetsOpen = !mobilePresetsOpen">
-          Presets ({{ visiblePresetNames.length }}) <span aria-hidden="true">{{ mobilePresetsOpen ? '▴' : '▾' }}</span>
-        </button>
-        <aside v-if="visiblePresetNames.length" class="presets-column" :class="{ 'mobile-open': mobilePresetsOpen }" aria-label="Presets" :inert="scenarioPending">
-          <div class="presets-header">
-            <h2>Presets</h2>
-            <button type="button" class="secondary presets-toggle"
-              :aria-label="presetsCollapsed ? 'Expand presets' : 'Collapse presets'"
-              :title="presetsCollapsed ? 'Expand presets' : 'Collapse presets'"
-              :aria-expanded="!presetsCollapsed"
-              aria-controls="request-presets"
-              @click="presetsCollapsed = !presetsCollapsed">
-              <span aria-hidden="true">{{ presetsCollapsed ? '›' : '‹' }}</span>
-            </button>
+        </div>
+        <div ref="workArea" class="work-area">
+          <div v-if="!catalogOpen || visiblePresetNames.length" class="workspace-tools">
+            <button v-if="!catalogOpen" type="button" class="secondary" aria-label="Show endpoint catalog" @click="catalogOpen = true">Endpoints</button>
+            <button v-if="visiblePresetNames.length" type="button" class="secondary" :disabled="scenarioPending" aria-haspopup="dialog" @click="presetDialog.showModal()">Presets ({{ visiblePresetNames.length }})</button>
           </div>
+          <dialog v-if="visiblePresetNames.length" ref="presetDialog" class="endpoint-dialog preset-picker" aria-label="Matching presets">
+            <header><h3>Presets</h3><button type="button" class="secondary" @click="presetDialog.close()">Close presets</button></header>
+            <p class="muted">Activate shared values for this request.</p>
           <div id="request-presets" class="presets-list" role="group" aria-label="Request presets">
             <button
               v-for="name in visiblePresetNames"
@@ -756,12 +777,11 @@ function removeScenario(id) {
               <span class="preset-name">{{ name }}</span>
             </button>
           </div>
-        </aside>
 
-        <div ref="workArea" class="work-area">
+          </dialog>
           <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
           <article v-if="current && !pendingRoute" :inert="scenarioPending" aria-labelledby="endpoint-title">
-            <div class="chain-header">
+            <div v-if="chain.length > 1 || editingScenario" class="chain-header">
               <nav class="breadcrumbs" aria-label="Request chain">
                 <ol>
                   <li v-for="(step, index) in chain" :key="index">
@@ -775,9 +795,12 @@ function removeScenario(id) {
                   </li>
                 </ol>
               </nav>
-              <button v-if="!editingScenario" class="secondary save-scenario" type="button" aria-haspopup="dialog" @click="scenarioDialog.showModal()">
-                Save scenario
-              </button>
+              <div v-if="!editingScenario" class="chain-save-actions">
+                <small>{{ chain.length }} {{ chain.length === 1 ? 'request' : 'requests' }} in chain</small>
+                <button class="secondary save-scenario" type="button" aria-haspopup="dialog" aria-describedby="saving-guide" @click="scenarioDialog.showModal()">
+                  Save scenario
+                </button>
+              </div>
             </div>
             <section v-if="editingScenario" class="scenario-edit-context" aria-label="Scenario editing">
               <div><strong>Scenario: {{ editingScenario.name }}</strong><span>Step {{ currentIndex + 1 }}/{{ chain.length }}</span><span role="status" class="save-state" :class="{ dirty: scenarioDirty }">{{ scenarioDirty ? 'Unsaved changes' : 'All changes saved' }}</span></div>
@@ -791,10 +814,34 @@ function removeScenario(id) {
                 <span class="method" :data-method="current.operation.method">{{ current.operation.method }}</span>
                 <code>{{ current.operation.path }}</code>
               </div>
-              <p v-if="current.operation.description" class="muted">{{ current.operation.description }}</p>
+              <details :key="current.operation.key" class="endpoint-help" @keydown.esc.stop.prevent="$event.currentTarget.open = false; $event.currentTarget.querySelector('summary').focus()">
+                <summary>Help and presets</summary>
+                <div class="endpoint-help-content">
+                  <p v-if="current.operation.description">{{ current.operation.description }}</p>
+              <div id="saving-guide">
+                <p><strong>Saved requests</strong> keep input values for one endpoint so you can load them again.</p>
+                <p><strong>Scenarios</strong> replay a chain of requests and pass response values between steps. Use a related request to add the next step; a one-request scenario is also supported.</p>
+                <p><strong>Presets</strong> supply shared values across requests.</p>
+              </div>
+            <div v-if="!visiblePresetNames.length" class="preset-guidance">
+              <template v-if="current.operation.apiId !== 'local' && !current.operation.usePresets">
+                <span>Shared presets are disabled for this external API.</span>
+                <button type="button" class="secondary" @click="settingsTab = 'connections'; toggleSettings()">Manage connection</button>
+              </template>
+              <template v-else>
+                <span v-if="!presets.size">No presets yet. Reuse shared values across requests.</span>
+                <span v-else>No presets match this request. Your presets remain available for other requests.</span>
+                <button type="button" class="secondary" @click="settingsTab = 'presets'; toggleSettings()">{{ presets.size ? 'Manage presets' : 'Create preset' }}</button>
+              </template>
+            </div>
+
+                  <button v-if="!editingScenario && chain.length === 1" type="button" class="secondary" @click="scenarioDialog.showModal()">Save as single-step scenario</button>
+                </div>
+              </details>
             </header>
             <dialog :key="current.operation.key" ref="scenarioDialog" class="endpoint-dialog" aria-labelledby="save-scenario-title">
               <h3 id="save-scenario-title">{{ editingScenario && !overwriteScenario ? 'Save scenario copy' : 'Save scenario' }}</h3>
+              <p class="muted">Save this {{ chain.length }}-request chain to replay its steps and the values passed between them.</p>
               <form @submit.prevent="saveScenario">
                 <label class="dialog-field">Scenario name <input v-model="scenarioName" required autofocus maxlength="120" placeholder="Invoice details"></label>
                 <p v-if="scenarioError" class="error" role="alert">{{ scenarioError }}</p>
@@ -807,7 +854,7 @@ function removeScenario(id) {
             <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" @edit-preset="editActivePreset">
               <template #request-actions>
                 <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">
-                  Store as sample
+                  Save request
                 </button>
               </template>
               <template #samples>
@@ -843,6 +890,12 @@ function removeScenario(id) {
 </template>
 
 <style>
+.chain-save-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.chain-save-actions small { color: var(--muted); }
+.saving-guide { margin-block: .5rem .75rem; font-size: .8rem; color: var(--muted); }
+.saving-guide summary { cursor: pointer; width: fit-content; }
+.saving-guide p { margin: .4rem 0; max-width: 65ch; }
+
 :root {
   color-scheme: light;
   font-family: system-ui, sans-serif;
@@ -872,12 +925,17 @@ body { margin: 0; background: #eef2ee; }
   border: 1px solid var(--line);
   border-radius: .75rem;
 }
-.hero { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1rem; padding: 2.125rem 1rem 1rem; border-bottom: 1px solid var(--line); }
-.api-identity { display: flex; flex: 1 1 16rem; justify-content: flex-end; align-items: center; gap: .75rem; min-width: 0; }
+.hero { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .5rem 1rem .5rem 7rem; min-height: 3.5rem; border-bottom: 1px solid var(--line); }
+.api-identity { display: flex; flex: 1 1 12rem; justify-content: flex-end; align-items: center; gap: .75rem; min-width: 0; }
 .api-info { min-width: 0; overflow-wrap: anywhere; text-align: right; }
 .api-title { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .5rem; min-height: 1.65rem; }
+.mobile-workspace-view, .mobile-api-about { display: none; }
+.mobile-workspace-view > .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .hero h1 { margin: 0; font-size: 1.05rem; letter-spacing: -.025em; }
 .hero p { margin: .25rem 0 0; font-size: .82rem; }
+.api-description { position: relative; font-size: .75rem; }
+.api-description summary { cursor: pointer; }
+.api-description p { position: absolute; top: 100%; right: 0; z-index: 10; width: min(26rem, 75vw); padding: .6rem; background: var(--surface); border: 1px solid var(--line); border-radius: .4rem; }
 .brand-track {
   position: absolute;
   z-index: 1;
@@ -888,7 +946,7 @@ body { margin: 0; background: #eef2ee; }
 .brand-stamp {
   --stamp-inset: .8rem;
   position: absolute;
-  top: -.55rem;
+  top: .6rem;
   left: var(--stamp-inset);
   pointer-events: auto;
 }
@@ -922,6 +980,28 @@ body { margin: 0; background: #eef2ee; }
   min-height: 0;
   grid-template-columns: clamp(14rem, 23vw, 18rem) minmax(0, 1fr);
 }
+.navigation-layout { grid-template-columns: var(--catalog-width, 240px) minmax(0, 1fr); }
+.navigation-layout > .work-area { grid-column: 2; }
+.catalog-container { min-width: 0; min-height: 0; overflow: auto; border-right: 1px solid var(--line); }
+.catalog-container .catalog { border-right: 0; overflow: visible; }
+.catalog-controls, .workspace-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.catalog-controls { padding: .5rem; font-size: .75rem; }
+.catalog-size { position: relative; }
+.catalog-size summary { cursor: pointer; }
+.catalog-size label { position: absolute; left: 0; z-index: 4; width: 11rem; padding: .5rem; background: var(--surface); border: 1px solid var(--line); }
+.catalog-size input { width: 100%; }
+.workspace-tools { margin-bottom: .5rem; font-size: .8rem; }
+.preset-picker header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.preset-picker h3 { margin: 0; }
+.preset-picker .presets-list { display: grid; }
+@media (max-width: 760px) {
+  .navigation-layout { grid-template-columns: minmax(0, 1fr); }
+  .navigation-layout > .work-area { grid-column: 1; }
+  .catalog-size { display: none; }
+  .catalog-container { border-right: 0; border-bottom: 1px solid var(--line); }
+  .workspace-tools button { min-height: 44px; }
+}
+
 .layout.has-presets { grid-template-columns: clamp(14rem, 23vw, 18rem) var(--presets-width) minmax(0, 1fr); }
 .mobile-presets-toggle { display: none; }
 .layout.presets-collapsed .presets-header h2, .layout.presets-collapsed .preset-name { display: none; }
@@ -954,6 +1034,8 @@ body { margin: 0; background: #eef2ee; }
 .work-area { overflow: auto; min-width: 0; padding: 1.5rem; background: var(--canvas); scroll-padding-block: 1rem; }
 .app-message { margin: 1rem; }
 .mapping-notice { margin: 0 0 1rem; }
+.preset-guidance { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; margin-bottom: .65rem; color: var(--muted); font-size: .75rem; }
+.preset-guidance button { padding: .2rem .4rem; font-size: inherit; }
 .preset-panel { min-width: 0; margin-inline: 0; display: grid; gap: .45rem; margin-bottom: 1rem; padding: .75rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); font-size: .85rem; }
 .preset-color-field { display: flex; align-items: center; gap: .5rem; }
 .preset-color-field input { width: 2.5rem; height: 1.75rem; padding: .15rem; cursor: pointer; }
@@ -1010,10 +1092,14 @@ body { margin: 0; background: #eef2ee; }
 .breadcrumbs button { padding: .3rem .45rem; color: var(--accent); text-align: left; overflow-wrap: anywhere; }
 .breadcrumbs [aria-current] { padding: .3rem .45rem; font-weight: 650; }
 .separator { color: var(--muted); }
-.endpoint-header { margin-bottom: 1rem; overflow-wrap: anywhere; }
-.endpoint-header h2 { margin: 0 0 .5rem; font-size: 1.75rem; letter-spacing: -.035em; }
-.endpoint-route { display: flex; align-items: baseline; gap: .5rem; color: var(--muted); font-size: .85rem; }
-.endpoint-header p { margin: .5rem 0 0; font-size: .875rem; }
+.endpoint-header { position: relative; display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .65rem; margin-bottom: .65rem; overflow-wrap: anywhere; }
+.endpoint-header h2 { margin: 0; font-size: 1.2rem; letter-spacing: -.035em; }
+.endpoint-route { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; color: var(--muted); font-size: .85rem; }
+.endpoint-header p { margin: .5rem 0; font-size: .8rem; }
+.endpoint-help { margin-left: auto; font-size: .75rem; }
+.endpoint-help summary { cursor: pointer; padding: .25rem .4rem; }
+.endpoint-help-content { position: absolute; top: 100%; right: 0; z-index: 8; width: min(30rem, 100%); padding: .75rem; background: var(--surface); border: 1px solid var(--line); border-radius: .5rem; box-shadow: 0 5px 20px #20352c20; }
+.endpoint-help-content .preset-guidance { margin-block: .65rem; }
 .muted { color: var(--muted); }
 .error { color: #8f2225; }
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -1044,6 +1130,22 @@ input:not([type="checkbox"]), select, textarea {
 .method[data-method="DELETE"] { background: #ffe3e2; color: #8f2225; }
 @media (max-width: 760px) {
   #app { --app-gutter: .75rem; }
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) 44px; padding: .25rem .5rem .25rem 6rem; gap: 0 .35rem; min-height: 64px; }
+  .hero .view-navigation { display: none; }
+  .mobile-workspace-view { display: block; grid-column: 1; grid-row: 1; min-width: 0; }
+  .mobile-workspace-view select { width: 100%; min-width: 0; min-height: 44px; padding: .25rem; font-size: .8rem; }
+  .hero .api-identity { display: contents; }
+  .hero .api-info { grid-column: 1; grid-row: 2; text-align: left; position: relative; }
+  .mobile-api-about { display: block; min-width: 0; font-size: .7rem; line-height: 1rem; }
+  .mobile-api-about summary { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-api-about > div { position: absolute; top: 100%; right: 0; z-index: 10; width: min(24rem, 80vw); padding: .6rem; background: var(--surface); border: 1px solid var(--line); border-radius: .4rem; }
+  .hero .api-title { display: none; }
+  .hero .api-title { justify-content: flex-start; min-height: 0; }
+  .hero h1 { font-size: .7rem; line-height: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hero .api-title small, .hero .api-description { display: none; }
+  .hero .settings-icon { grid-column: 2; grid-row: 1 / 3; min-height: 44px; width: 44px; align-self: center; }
+  .brand-stamp { top: .8rem; left: .5rem; }
+
   .app { height: auto; min-height: calc(100dvh - 2 * var(--app-gutter)); }
   .layout, .layout.has-presets { grid-template-columns: minmax(0, 1fr); }
   .mobile-presets-toggle { display: flex; justify-content: space-between; align-items: center; margin: .5rem 1rem; }

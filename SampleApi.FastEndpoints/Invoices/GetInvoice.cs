@@ -2,13 +2,13 @@ using FastEndpoints;
 
 namespace SampleApi.FastEndpoints.Invoices;
 
-public sealed class GetInvoiceRequest
+public sealed class GetInvoiceRequest : TenantRequest
 {
     [RouteParam]
     public int InvoiceId { get; init; }
 }
 
-public sealed class GetInvoice : Endpoint<GetInvoiceRequest, Invoice>
+public sealed class GetInvoice : TenantEndpoint<GetInvoiceRequest, Invoice>
 {
     public override void Configure()
     {
@@ -21,7 +21,7 @@ public sealed class GetInvoice : Endpoint<GetInvoiceRequest, Invoice>
 
     public override Task HandleAsync(GetInvoiceRequest request, CancellationToken ct)
     {
-        var invoice = Resolve<InvoiceStore>().Find(request.InvoiceId);
+        var invoice = Data.Invoices.Find(request.InvoiceId);
 
         return invoice is null ? Send.NotFoundAsync(ct) : Send.OkAsync(invoice, ct);
     }

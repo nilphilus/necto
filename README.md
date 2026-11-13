@@ -16,20 +16,31 @@ OpenAPI document at `/openapi/v1.json` on its sample API.
 
 ## FastEndpoints sample
 
-The API has four groups: Customers,
-Assets, Invoices, and Weather. In Necto UI, run `GET /customers` and use a
-returned customer ID to filter `GET /assets`. From an asset you can find its
-invoices or view the simulated forecast for its installation location. The
-sample provides these links through explicit endpoint mappings.
+This sample models property billing. Every business operation requires the
+`X-Tenant` header. Create two presets in **Settings → Presets** with that field,
+using the values `acme` and `northstar`. The header selects the demo dataset.
+Drafts are stored in memory until the API restarts.
+
+1. Open **List buildings**, activate the Acme preset, send the request, and
+   select **Browarna 12**. Its response includes the current owner.
+2. Open the related **List invoices** request and send it with the selected
+   building ID. The list includes invoices issued to previous owners.
+3. Select the October invoice and follow **Get invoice details**. Each line
+   describes billing for one asset. Select a line to open that asset's details.
+
+Save the chain at step 3 as **Building billing history**. Run it with each
+preset to compare the results. Both tenants have building 101 and invoice 501
+with different owners and amounts. Acme's issued invoice 502 returns 404
+under Northstar.
+
+To try writes, run **Create a draft invoice for a building** with the example
+body, then open the related **Add an asset to a draft invoice** request. Necto
+fills the newly created invoice ID. Send the example body and follow **Get
+invoice details** to see both lines and the total of 375 PLN.
 
 The [HTTP examples](SampleApi.FastEndpoints/SampleApi.FastEndpoints.http)
-show the same flow with sample IDs.
-
-Both samples contain 12 invoices and enough line items to try searchable value
-suggestions. For example, in SampleApi run `GET /invoices`, type an invoice ID
-in the related **Invoice lines** field, or select an invoice in Preview to fill
-it automatically. Invoice 42 has 12 lines; the FastEndpoints equivalent is
-invoice 501.
+include both flows. For a longer list of suggestions, use invoice 42 in
+SampleApi, which has 12 lines.
 
 ## Large payload experiment
 
@@ -95,8 +106,10 @@ field. For `location: "parameter"`, resolve the location in OpenAPI. For
 `location: "body"`, a null name selects the entire JSON body.
 
 - `type` matches the same dedicated CLR identifier type, such as `CustomerId`.
-- `name` matches equal simple CLR types by identifier name. For example,
-  `Invoice.Id` and `invoiceId` both resolve to `InvoiceId`.
+- `name` matches supported scalar fields of the same CLR type by field name
+  or by the response type name followed by the field name, ignoring case.
+  For example, `Invoice.Reference` matches `reference` and `invoiceReference`.
+  The conventional match for `Invoice.Id` is `invoiceId`.
 - `attribute` uses a logical key from `[EndpointValue("LegacyInvoice")]`.
   Use the same key on both sides, or use the conventional identifier name as the
   key on one side. The CLR types must still match.

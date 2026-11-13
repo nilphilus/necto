@@ -6,7 +6,6 @@ defineEmits(['follow', 'edit-preset'])
 
 <template>
   <section v-if="targets.length" class="related-targets" aria-label="Continue from this response">
-    <h4>Continue from this response</h4>
     <ul>
       <RelatedTarget v-for="target in targets" :key="target.operation.key" :target="target" :can-send="canSend"
         @follow="(operation, choices, send) => $emit('follow', operation, choices, send)" @edit-preset="$emit('edit-preset', $event)" />
