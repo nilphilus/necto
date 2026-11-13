@@ -10,11 +10,13 @@
     <Description>OpenAPI UI for ASP.NET Core with a Roslyn source generator that maps response values to inputs in related requests.</Description>
     <RepositoryUrl>https://github.com/nilphilus/necto</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
   </PropertyGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <None Include="../Necto.UI/README.md" Pack="true" PackagePath="/" />
+    <None Include="../LICENSE.txt" Pack="true" PackagePath="/" />
     <ProjectReference Include="..\Necto.Generator\Necto.Generator.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
     <None Include="..\Necto.Generator\bin\$(Configuration)\netstandard2.0\Necto.Generator.dll"
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
