@@ -20,6 +20,16 @@ Accept: application/json
 
 ###
 
+GET {{SampleApi_HostAddress}}/invoices/by-reference?invoiceReference=INV-42
+Accept: application/json
+
+###
+
+GET {{SampleApi_HostAddress}}/invoices?reference=INV-42
+Accept: application/json
+
+###
+
 GET {{SampleApi_HostAddress}}/invoices/42/lines
 Accept: application/json
 

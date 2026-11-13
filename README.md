@@ -87,8 +87,10 @@ field. For `location: "parameter"`, resolve the location in OpenAPI. For
 `location: "body"`, a null name selects the entire JSON body.
 
 - `type` matches the same dedicated CLR identifier type, such as `CustomerId`.
-- `name` matches equal simple CLR types by identifier name. For example,
-  `Invoice.Id` and `invoiceId` both resolve to `InvoiceId`.
+- `name` matches supported scalar fields of the same CLR type by field name
+  or by the response type name followed by the field name, ignoring case.
+  For example, `Invoice.Reference` matches `reference` and `invoiceReference`.
+  The conventional match for `Invoice.Id` is `invoiceId`.
 - `attribute` uses a logical key from `[EndpointValue("LegacyInvoice")]`.
   Use the same key on both sides, or use the conventional identifier name as the
   key on one side. The CLR types must still match.

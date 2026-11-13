@@ -25,7 +25,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 Invoice[] invoices = Enumerable.Range(42, 12)
-    .Select(id => new Invoice(id, 0m, 781 + id - 42)).ToArray();
+    .Select(id => new Invoice(id, 0m, 781 + id - 42, $"INV-{id}")).ToArray();
 InvoiceLineSample[] invoiceLines =
 [
     new(17, 42, "Consulting", 2, 117, 75m, "PLN"),
@@ -93,11 +93,22 @@ app.MapGet("/invoices/preview", () => new InvoicePreview(
     .WithTags("Invoices")
     .WithSummary("Nested invoice lines preview");
 
-app.MapGet("/invoices", () => invoices)
+app.MapGet("/invoices", ([FromQuery] string? reference) => reference is null
+        ? invoices
+        : invoices.Where(invoice => invoice.Reference == reference).ToArray())
     .WithName("Invoices")
     .WithTags("Invoices")
     .WithSummary("Invoices")
-    .WithDescription("List invoices with their totals and reference numbers.");
+    .WithDescription("List invoices with their totals and optionally filter by reference.");
+
+app.MapGet("/invoices/by-reference", Results<Ok<Invoice>, NotFound> ([FromQuery] string invoiceReference) =>
+        invoices.FirstOrDefault(invoice => invoice.Reference == invoiceReference) is { } invoice
+            ? TypedResults.Ok(invoice)
+            : TypedResults.NotFound())
+    .WithName("InvoiceByReference")
+    .WithTags("Invoices")
+    .WithSummary("Invoice by reference")
+    .WithDescription("Find an invoice using its reference.");
 
 app.MapGet("/invoices/{invoiceId:int}/lines", Results<Ok<InvoiceLine[]>, NotFound> (int invoiceId) =>
         invoices.Any(invoice => invoice.Id == invoiceId)
@@ -161,7 +172,7 @@ record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
     public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
 }
 
-record Invoice(int Id, decimal Total, [property: EndpointValue("LegacyInvoice")] int LegacyNumber);
+record Invoice(int Id, decimal Total, [property: EndpointValue("LegacyInvoice")] int LegacyNumber, string Reference);
 record InvoiceLineSample(int LineId, int InvoiceId, string Description, int Quantity, int DetailId, decimal UnitPrice, string Currency);
 record InvoiceLineMetadata(string Currency, string[] Labels);
 record LargeInvoiceLine(int LineId, int InvoiceId, string Description, string Notes, InvoiceLineMetadata Metadata);

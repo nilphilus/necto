@@ -110,8 +110,9 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
             var name = property.Name.Equals("Id", StringComparison.OrdinalIgnoreCase)
                 ? type.Name + "Id" : property.Name;
             var propertyType = NonNullable(property.Type);
-            yield return new Field(propertyType, JsonName(property), IdentifierName(name),
-                ValueKey(property), "", eachItem, path.Length > (eachItem ? 1 : 0) ? path : null);
+            yield return new Field(propertyType, JsonName(property), name,
+                ValueKey(property), "", eachItem, path.Length > (eachItem ? 1 : 0) ? path : null,
+                type.Name + property.Name);
             if (IsTypedId(propertyType))
                 continue;
             var item = propertyType is IArrayTypeSymbol { Rank: 1 } array
@@ -132,11 +133,11 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
         {
             if (IsTypedId(type) || IsScalar(type) || ValueKey(parameter) is not null)
             {
-                yield return new Field(type, null, IdentifierName(parameter.Name), ValueKey(parameter), "body");
+                yield return new Field(type, null, parameter.Name, ValueKey(parameter), "body");
                 yield break;
             }
             foreach (var property in JsonProperties(type))
-                yield return new Field(NonNullable(property.Type), JsonName(property), IdentifierName(property.Name),
+                yield return new Field(NonNullable(property.Type), JsonName(property), property.Name,
                     ValueKey(property), "body");
             yield break;
         }
@@ -163,7 +164,7 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
 
         var name = binding?.NamedArguments.FirstOrDefault(pair => pair.Key == "Name").Value.Value as string
             ?? parameter.Name;
-        yield return new Field(type, name, IdentifierName(name) ?? IdentifierName(parameter.Name),
+        yield return new Field(type, name, IdentifierName(name) ?? IdentifierName(parameter.Name) ?? name,
             ValueKey(parameter), location);
     }
 
@@ -267,9 +268,17 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
                 StringComparison.OrdinalIgnoreCase) ? "attribute" : null;
         if (IsTypedId(source.Type))
             return "type";
-        return IsScalar(source.Type) && source.ConventionName is not null
-            && string.Equals(source.ConventionName, target.ConventionName, StringComparison.OrdinalIgnoreCase) ? "name" : null;
+        return IsScalar(source.Type)
+            && (SameName(source.ConventionName, target.ConventionName)
+                || SameName(source.ConventionName, target.WireName)
+                || SameName(source.QualifiedName, target.ConventionName)
+                || SameName(source.QualifiedName, target.WireName)
+                || (!SameName(source.WireName, "Id") && SameName(source.WireName, target.WireName)))
+            ? "name" : null;
     }
+
+    private static bool SameName(string? source, string? target) =>
+        source is not null && string.Equals(source, target, StringComparison.OrdinalIgnoreCase);
 
     private static void Emit(SourceProductionContext context, IEnumerable<Endpoint> endpoints)
     {
@@ -298,7 +307,9 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
         {
             if (producer == consumer || Match(source, target) is not { } match)
                 continue;
-            var suggestion = IsScalar(source.Type) ? source.ConventionName ?? target.ConventionName : null;
+            var suggestion = IsScalar(source.Type)
+                ? IdentifierName(source.ConventionName ?? "") ?? IdentifierName(target.ConventionName ?? "")
+                : null;
             var objectPath = source.ObjectPath is null ? "" : " { ObjectPath = new string?[] { "
                 + string.Join(", ", source.ObjectPath.Select(Literal)) + " } }";
             code.AppendLine($"        new(new ResponseValue({Literal(producer.Id)}, {(source.EachItem ? "true" : "false")}, {Literal(source.WireName)}){objectPath}, "
@@ -321,5 +332,6 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
 
     private sealed record Endpoint(string Id, Field[] Response, Field[] Request);
     private sealed record Field(
-        ITypeSymbol Type, string? WireName, string? ConventionName, string? Key, string Location, bool EachItem = false, string?[]? ObjectPath = null);
+        ITypeSymbol Type, string? WireName, string? ConventionName, string? Key, string Location,
+        bool EachItem = false, string?[]? ObjectPath = null, string? QualifiedName = null);
 }
