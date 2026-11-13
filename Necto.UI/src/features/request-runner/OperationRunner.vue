@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch, watchPostEffect } from 'vue'
+import { bodyFields, hasBodyExample } from './bodyHelp.js'
 import ResponsePreview from './ResponsePreview.vue'
 import { applyBodyPresets, contextKey, fieldKey, jsonContent, presetSource, supportedParameters } from './request.js'
 
@@ -132,6 +133,8 @@ function parameterHint(parameter) {
         </div>
 
         <div v-if="content" class="field">
+          <p class="body-origin"><strong>{{ session.sampleName ? 'Saved request' : hasBodyExample(content[1], operation.resolve) ? 'OpenAPI example' : 'Generated template' }}</strong><span v-if="!session.sampleName && !hasBodyExample(content[1], operation.resolve)"> · Fill placeholder values before sending. API validation may require different values.</span></p>
+          <details v-if="content[1].schema" class="body-schema"><summary>Body fields and requirements</summary><dl><template v-for="field in bodyFields(operation, content[1].schema)" :key="field.path"><dt><code>{{ field.path }}</code></dt><dd>{{ field.rules }}</dd></template></dl><small>Requirements published by this API. Additional business rules may apply.</small></details>
           <label class="field-label">
             <span>Request body <small>{{ content[0] }}</small></span>
             <textarea
@@ -223,6 +226,10 @@ function parameterHint(parameter) {
 .preset-link { padding: .1rem .3rem; color: var(--accent); text-decoration: underline; text-underline-offset: .15rem; }
 .body-preset-origins { font-size: .78rem; margin-top: .5rem; overflow-wrap: anywhere; }
 .body-preset-origins summary { cursor: pointer; }
+.body-origin, .body-schema { font-size: .78rem; margin: 0 0 .5rem; }
+.body-schema summary { cursor: pointer; color: var(--accent); }
+.body-schema dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: .35rem; overflow-wrap: anywhere; }
+.body-schema dd { margin: 0; color: var(--muted); }
 .field + .field { margin-top: .85rem; }
 .field p { margin: .35rem 0 0; font-size: .82rem; }
 .field-label { display: grid; gap: .35rem; }
