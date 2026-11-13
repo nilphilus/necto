@@ -802,8 +802,6 @@ function removeScenario(id) {
 </template>
 
 <style>
-.preset-guidance { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; margin-bottom: .65rem; color: var(--muted); font-size: .75rem; }
-.preset-guidance button { padding: .2rem .4rem; font-size: inherit; }
 
 :root {
   color-scheme: light;
@@ -916,6 +914,8 @@ body { margin: 0; background: #eef2ee; }
 .work-area { overflow: auto; min-width: 0; padding: 1.5rem; background: var(--canvas); scroll-padding-block: 1rem; }
 .app-message { margin: 1rem; }
 .mapping-notice { margin: 0 0 1rem; }
+.preset-guidance { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; margin-bottom: .65rem; color: var(--muted); font-size: .75rem; }
+.preset-guidance button { padding: .2rem .4rem; font-size: inherit; }
 .preset-panel { min-width: 0; margin-inline: 0; display: grid; gap: .45rem; margin-bottom: 1rem; padding: .75rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); font-size: .85rem; }
 .preset-color-field { display: flex; align-items: center; gap: .5rem; }
 .preset-color-field input { width: 2.5rem; height: 1.75rem; padding: .15rem; cursor: pointer; }
