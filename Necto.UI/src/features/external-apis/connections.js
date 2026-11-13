@@ -22,9 +22,10 @@ export function normalizeConnection(input) {
 }
 
 const signature = entry => JSON.stringify([entry.openApiUrl, entry.endpointMappingsUrl, entry.apiBaseUrl])
-export async function loadConnection(entry, signal) {
+export async function loadConnection(entry, signal, authentication) {
   const read = async url => {
-    const response = await fetch(url, { signal, headers: { Accept: 'application/json' }, credentials: 'omit' })
+    const options = { signal, headers: { Accept: 'application/json' }, credentials: 'omit' }
+    const response = await (authentication?.metadataFetch(url, entry.id, options) ?? fetch(url, options))
     if (!response.ok) throw new Error(`HTTP ${response.status} loading ${url}`)
     return response.json()
   }
@@ -36,7 +37,7 @@ export async function loadConnection(entry, signal) {
   return { document, mappings, signature: signature(entry) }
 }
 
-export function useExternalApis(configuration) {
+export function useExternalApis(configuration, authentication) {
   const connections = ref([])
   const show = ref(false)
   const loaded = reactive(new Map())
@@ -72,7 +73,7 @@ export function useExternalApis(configuration) {
     statuses.set(id, { pending: true, error: '' })
     const timeout = setTimeout(() => controller.abort(new Error('Connection timed out after 20 seconds.')), 20000)
     try {
-      const result = await loadConnection(entry, controller.signal)
+      const result = await loadConnection(entry, controller.signal, authentication)
       if (jobs.get(id) !== job || controller.signal.aborted) return
       loaded.set(id, result)
       statuses.set(id, { pending: false, error: '', ready: true, mappingCount: result.mappings.length })
@@ -104,6 +105,10 @@ export function useExternalApis(configuration) {
       if (!show.value || !entry || signature(entry) !== job.signature) stop(id)
     }
     if (show.value) for (const entry of connections.value) void testConnection(entry.id, false)
+  })
+  if (authentication) watch(authentication.revision, () => {
+    for (const id of [...jobs.keys()]) stop(id)
+    if (show.value) for (const entry of connections.value) void testConnection(entry.id)
   })
   watch([show, connections], persist, { deep: true })
 
