@@ -25,11 +25,11 @@ const displayedBody = computed({
   get: () => editingBody.value ? props.session.body : effectiveBody.value,
   set: body => { props.session.body = body },
 })
+const relatedPinned = ref(false)
 const unsupported = computed(() => props.operation.requestBody && !content.value)
 const form = ref(null)
 const bodyEditor = ref(null)
 const responsePane = ref(null)
-const relatedPinned = ref(false)
 
 watchPostEffect(onCleanup => {
   const editor = bodyEditor.value
