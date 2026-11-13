@@ -2,6 +2,7 @@
 import { computed, ref, watch, watchPostEffect } from 'vue'
 import { bodyFields, hasBodyExample } from './bodyHelp.js'
 import ResponsePreview from './ResponsePreview.vue'
+import RequestSendIcon from './RequestSendIcon.vue'
 import { applyBodyPresets, contextKey, fieldKey, jsonContent, presetSource, supportedParameters } from './request.js'
 
 const props = defineProps({
@@ -99,7 +100,7 @@ function parameterHint(parameter) {
             :disabled="session.pending || unsupported"
             aria-keyshortcuts="Control+Enter Meta+Enter"
             title="Send request (Ctrl or ⌘ + Enter)"
-          >{{ session.pending ? 'Sending…' : 'Send request' }} <span aria-hidden="true">↗</span></button>
+          >{{ session.pending ? 'Sending…' : 'Send request' }} <RequestSendIcon v-if="!session.pending" /></button>
         </div>
       </header>
 
