@@ -9,6 +9,9 @@ const emit = defineEmits(['reveal', 'select'])
 const finder = usePayloadSearch(toRef(props, 'result'))
 const { query, scope, caseSensitive, exact, state } = finder
 const active = ref(0)
+const optionsOpen = ref(false)
+const resultsOpen = ref(false)
+function submitSearch() { if (!state.pending) state.total ? next(1) : finder.search() }
 let desired = 'first'
 let scrollOnResults = false
 watch([query, scope, caseSensitive, exact], () => { scrollOnResults = false })
@@ -30,52 +33,49 @@ function next(direction) {
 function select(row, index) { emit('select', row.owner); reveal(index) }
 </script>
 <template>
-  <details class="payload-search">
-    <summary>Search entire response</summary>
-    <form @submit.prevent="desired = 'first'; finder.search()">
-      <label class="query">Search JSON <input v-model="query" type="search" :maxlength="MAX_QUERY_LENGTH" placeholder="Invoice number, ID or field name" autocomplete="off"></label>
-      <label>Search in <select v-model="scope" aria-label="Search scope"><option value="all">Keys and values</option><option value="values">Values only</option><option value="keys">Keys only</option></select></label>
-      <label class="check"><input v-model="caseSensitive" type="checkbox"> Match case</label>
-      <label class="check"><input v-model="exact" type="checkbox"> Exact match</label>
-      <button type="submit" class="secondary" :disabled="!query.trim() || state.pending">Search</button>
+  <section class="payload-search" aria-label="Find in response">
+    <form class="search-bar" @submit.prevent="submitSearch">
+      <label class="query"><span class="sr-only">Search JSON</span><input v-model="query" type="search" :maxlength="MAX_QUERY_LENGTH" placeholder="Find in response…" autocomplete="off" @keydown.shift.enter.prevent="state.total && next(-1)"></label>
+      <span v-if="state.total && !state.pending" class="match-count">{{ current.toLocaleString() }}/{{ state.total.toLocaleString() }}</span>
+      <button type="button" class="secondary" aria-label="Previous match" :disabled="state.pending || !state.total || current <= 1" @click="next(-1)">↑</button>
+      <button type="button" class="secondary" aria-label="Next match" :disabled="state.pending || !state.total || current >= state.total" @click="next(1)">↓</button>
+      <button type="button" class="secondary" :aria-expanded="optionsOpen" @click="optionsOpen = !optionsOpen">Options</button>
       <button v-if="state.pending" type="button" class="secondary" @click="finder.stop">Cancel search</button>
-      <button v-if="query" type="button" class="secondary" @click="query = ''">Clear search</button>
+      <button v-if="query" type="button" class="secondary" aria-label="Clear search" @click="query = ''">×</button>
     </form>
+    <div v-if="optionsOpen" class="search-options">
+      <label>Search in <select v-model="scope" aria-label="Search scope"><option value="all">Keys and values</option><option value="values">Values only</option><option value="keys">Keys only</option></select></label>
+      <label><input v-model="caseSensitive" type="checkbox"> Match case</label><label><input v-model="exact" type="checkbox"> Exact match</label>
+    </div>
     <p class="search-status muted" role="status" aria-live="polite">
       <template v-if="state.pending">Searching the whole response… <template v-if="state.scanned">{{ state.scanned.toLocaleString() }} locations checked.</template></template>
       <template v-else-if="state.cancelled">Search stopped.</template>
       <template v-else-if="state.total">{{ state.total.toLocaleString() }} matching locations. Match {{ current.toLocaleString() }} of {{ state.total.toLocaleString() }}.</template>
       <template v-else-if="query.trim() && !state.error">No matches in this response.</template>
-      <template v-else>Search every page and nested object. No additional API requests.</template>
+      <template v-else>All pages and nested objects · Enter: next match · Shift+Enter: previous</template>
     </p>
     <p v-if="state.error" class="error" role="alert">{{ state.error }}</p>
-    <template v-if="state.matches.length && !state.pending">
-      <div class="match-navigation">
-        <button type="button" class="secondary" :disabled="current <= 1" @click="next(-1)">Previous match</button>
-        <button type="button" class="secondary" :disabled="current >= state.total" @click="next(1)">Next match</button>
-      </div>
+    <div v-if="state.matches.length && !state.pending" class="current-match">
+      <code :title="pathLabel(state.matches[active].path)">{{ pathLabel(state.matches[active].path) }}</code>
+      <button v-if="!resultsOpen && rows[active]?.owner !== null" type="button" class="secondary" :aria-label="'Select mapped object for match ' + current" @click="select(rows[active], active)">Select object</button>
+      <button type="button" class="secondary" :aria-expanded="resultsOpen" @click="resultsOpen = !resultsOpen">{{ resultsOpen ? 'Hide results' : 'Show results' }}</button>
+    </div>
+    <template v-if="resultsOpen && state.matches.length && !state.pending">
       <ol class="search-results" :start="range.start + 1" aria-label="Response search results">
         <li v-for="(row, index) in rows" :key="JSON.stringify(row.path)" :class="{ active: active === index }">
-          <button type="button" class="match" :aria-current="active === index ? 'true' : undefined" :aria-label="'Show match ' + (range.start + index + 1)" @click="reveal(index)">
-            <code>{{ pathLabel(row.path) }}</code><span>{{ row.snippet }}</span><small>{{ row.kind }}</small>
-          </button>
-          <button v-if="row.owner !== null" type="button" class="secondary select-result" :aria-label="'Select mapped object for match ' + (range.start + index + 1)" @click="select(row, index)">Select object</button>
+          <button type="button" class="match" :aria-current="active === index ? 'true' : undefined" :aria-label="'Show match ' + (range.start + index + 1)" @click="reveal(index)"><code>{{ pathLabel(row.path) }}</code><span>{{ row.snippet }}</span><small>{{ row.kind }}</small></button>
+          <button v-if="row.owner !== null" type="button" class="secondary" :aria-label="'Select mapped object for match ' + (range.start + index + 1)" @click="select(row, index)">Select object</button>
         </li>
       </ol>
       <div v-if="state.pages > 1" class="search-pager"><PreviewPager :range="range" label="Search matches" @change="desired = 'first'; finder.search($event)" /></div>
     </template>
-  </details>
+  </section>
 </template>
 <style scoped>
-.payload-search { margin-bottom: .65rem; padding: .65rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--surface); font-size: .8rem; }
-summary { cursor: pointer; color: var(--accent); font-weight: 650; width: fit-content; }
-form { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin-top: .65rem; }label { display: grid; gap: .25rem; }.query { flex: 1 1 15rem; min-width: 0; }.query input { width: 100%; min-width: 0; }.check { display: flex; gap: .25rem; align-items: center; min-height: 2.25rem; }
-form button, .match-navigation button { font-size: .75rem; padding: .45rem .6rem; }
-.search-status { margin: .6rem 0 0; font-size: .76rem; }.error { font-size: .78rem; overflow-wrap: anywhere; }
-.match-navigation { display: flex; gap: .35rem; margin-top: .5rem; }
-.search-results { padding-left: 1.65rem; margin: .5rem 0; max-height: 15rem; overflow: auto; }
-.search-results li { padding: .25rem .35rem; border-radius: .35rem; }.search-results li.active { background: var(--accent-soft); }
-.match { display: grid; gap: .15rem; width: 100%; min-width: 0; padding: .2rem; text-align: left; }.match code, .match span { overflow-wrap: anywhere; white-space: pre-wrap; }.match code { font-size: .73rem; color: var(--accent); }.match span { font-size: .76rem; }.match small { color: var(--muted); font-size: .68rem; }
-.select-result { padding: .2rem .4rem; margin: .2rem 0; font-size: .7rem; color: var(--accent); }
-.search-pager { padding: .15rem .5rem; border-radius: .35rem; background: #182420; }
+.payload-search { position: sticky; top: 0; z-index: 1; padding: .45rem; margin-bottom: .5rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--surface); font-size: .75rem; }
+.search-bar, .search-options, .current-match { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; }.query { flex: 1 1 10rem; min-width: 0; }.query input { width: 100%; min-width: 0; padding: .35rem .5rem; }
+button { padding: .3rem .45rem; font-size: .72rem; }.match-count { font-variant-numeric: tabular-nums; }.search-options { padding: .5rem 0; }.search-options label { display: flex; align-items: center; gap: .25rem; }.search-options select { padding: .25rem; font-size: .75rem; }
+.search-status { margin: .3rem 0 0; font-size: .7rem; }.error { margin: .3rem 0; overflow-wrap: anywhere; }.current-match { margin-top: .3rem; }.current-match > code { flex: 1 1 10rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); font-size: .7rem; }
+.search-results { max-height: 14rem; overflow: auto; margin: .4rem 0; padding-left: 1.4rem; }.search-results li { padding: .3rem; border-radius: .3rem; }.search-results li.active { background: var(--accent-soft); }.match { display: grid; text-align: left; width: 100%; gap: .15rem; }.match code, .match span { overflow-wrap: anywhere; white-space: pre-wrap; }.match small { color: var(--muted); }.search-pager { padding: .15rem .5rem; border-radius: .35rem; background: #182420; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>
