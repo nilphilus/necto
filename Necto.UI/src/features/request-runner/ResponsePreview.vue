@@ -2,11 +2,11 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import PreviewPager from './PreviewPager.vue'
 import { pageRange, TEXT_PAGE_SIZE } from './preview.js'
+import { usePreviewHeight } from './usePreviewHeight.js'
 import PayloadSearch from '../payload-search/PayloadSearch.vue'
 import { valueAtPath, pathLabel } from '../payload-search/search.js'
 import JsonNode from './JsonNode.vue'
 import { selectionLabel } from './selection.js'
-import { usePreviewHeight } from './usePreviewHeight.js'
 const props = defineProps({ result: { type: Object, required: true }, selectors: { type: Array, default: () => [] }, operation: Object })
 const raw = ref(false)
 const textPage = ref(1)
