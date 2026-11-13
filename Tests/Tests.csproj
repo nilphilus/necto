@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Necto\Necto.csproj" />
     <ProjectReference Include="..\SampleApi\SampleApi.csproj" />
+    <ProjectReference Include="..\SampleApi.FastEndpoints\SampleApi.FastEndpoints.csproj" Aliases="BillingSample" />
   </ItemGroup>
 
 </Project>

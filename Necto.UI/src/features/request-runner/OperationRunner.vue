@@ -1,7 +1,9 @@
 <script setup>
-import { computed, ref, watch, watchPostEffect } from 'vue'
+import { computed, nextTick, ref, watch, watchPostEffect } from 'vue'
 import { bodyFields, hasBodyExample } from './bodyHelp.js'
 import ResponsePreview from './ResponsePreview.vue'
+import RequestSendIcon from './RequestSendIcon.vue'
+import NextRequestsPanel from './NextRequestsPanel.vue'
 import { applyBodyPresets, contextKey, fieldKey, jsonContent, presetSource, supportedParameters } from './request.js'
 
 const props = defineProps({
@@ -23,10 +25,39 @@ const displayedBody = computed({
   get: () => editingBody.value ? props.session.body : effectiveBody.value,
   set: body => { props.session.body = body },
 })
+const relatedPinned = ref(false)
 const unsupported = computed(() => props.operation.requestBody && !content.value)
 const form = ref(null)
 const bodyEditor = ref(null)
 const responsePane = ref(null)
+
+const requestCompact = ref(false)
+let preferredFocus = null
+try { preferredFocus = JSON.parse(sessionStorage.getItem('necto:response-focus')) } catch { /* Optional layout preference. */ }
+const inputSummary = computed(() => parameters.value.map(parameter => {
+  const key = contextKey(parameter)
+  const value = props.values.has(key) ? props.values.get(key) : props.session.fields[fieldKey(parameter)]
+  return { key, name: parameter.name, value: /authorization|token|secret|password|api.?key/i.test(parameter.name) ? '[hidden]' : (String(value ?? '').slice(0, 160) + (String(value ?? '').length > 160 ? '…' : '')) || '(not set)', source: presetSource(props.values, key) }
+}))
+function rememberFocus(value) {
+  preferredFocus = value
+  try { sessionStorage.setItem('necto:response-focus', JSON.stringify(value)) } catch { /* Memory-only fallback. */ }
+}
+async function focusResponse() {
+  if (!form.value.checkValidity()) { await editRequest(); form.value.reportValidity(); return }
+  requestCompact.value = true; rememberFocus(true)
+  await nextTick()
+  responsePane.value?.setAttribute('tabindex', '-1')
+  responsePane.value?.focus({ preventScroll: true })
+  responsePane.value?.scrollIntoView({ block: 'start', behavior: 'instant' })
+}
+async function editRequest() {
+  requestCompact.value = false; rememberFocus(false)
+  await nextTick()
+  form.value?.querySelector('input:not([readonly]), textarea, button')?.focus()
+}
+watch(() => props.session, () => { requestCompact.value = Boolean(props.session.result && preferredFocus === true) })
+watch(() => props.session.error, error => { if (error) requestCompact.value = false })
 
 watchPostEffect(onCleanup => {
   const editor = bodyEditor.value
@@ -59,19 +90,19 @@ watchPostEffect(onCleanup => {
   })
 })
 
-watch([() => props.session, () => props.session.result], ([session, result], [previousSession]) => {
+watch([() => props.session, () => props.session.result], async ([session, result], [previousSession]) => {
   if (session !== previousSession || !result) return
+  if (!result.ok) requestCompact.value = false
+  const editing = form.value?.contains(document.activeElement) && document.activeElement.matches('input, textarea, select')
+  if (result.ok && !editing && (preferredFocus === true || preferredFocus === null && ['GET', 'HEAD'].includes(props.operation.method))) requestCompact.value = true
+  await nextTick()
+  if (props.session !== session || props.session.result !== result) return
   const response = responsePane.value
-  if (!response || !form.value) return
-  const top = response.getBoundingClientRect().top
-  const request = form.value.getBoundingClientRect()
-  const workArea = response.closest('.work-area')?.getBoundingClientRect()
-  const visibleTop = Math.max(0, workArea?.top ?? 0)
-  const visibleBottom = Math.min(window.innerHeight, workArea?.bottom ?? window.innerHeight)
-  if (request.bottom > visibleTop && request.top < visibleBottom && top >= request.bottom && top >= visibleBottom - 56) {
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    response.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'instant' : 'smooth' })
-  }
+  if (!response) return
+  const data = response.querySelector('.json-preview, .raw-preview') ?? response
+  const bounds = response.closest('.work-area')?.getBoundingClientRect()
+  const visibleBottom = Math.min(window.innerHeight, bounds?.bottom ?? window.innerHeight)
+  if (!editing && data.getBoundingClientRect().top > visibleBottom - 180) response.scrollIntoView({ block: 'start', behavior: 'instant' })
 }, { flush: 'post' })
 
 function sendShortcut(event) {
@@ -87,23 +118,30 @@ function parameterHint(parameter) {
 </script>
 
 <template>
-  <div class="runner" @keydown.enter="sendShortcut">
+  <div class="runner" :class="{ 'request-compact': requestCompact }" @keydown.enter="sendShortcut">
     <form ref="form" class="request-pane" @submit.prevent="run(operation, session)">
       <header class="pane-header">
         <h3>Request</h3>
+        <button v-if="requestCompact" type="button" class="secondary" @click="editRequest">Edit request</button>
         <div class="request-actions">
           <slot name="request-actions" />
+          <button v-if="session.result && !requestCompact" type="button" class="secondary focus-response" @click="focusResponse">Focus response</button>
           <button
             class="primary"
             type="submit"
             :disabled="session.pending || unsupported"
             aria-keyshortcuts="Control+Enter Meta+Enter"
             title="Send request (Ctrl or ⌘ + Enter)"
-          >{{ session.pending ? 'Sending…' : 'Send request' }} <span aria-hidden="true">↗</span></button>
+          >{{ session.pending ? 'Sending…' : 'Send request' }} <RequestSendIcon v-if="!session.pending" /></button>
         </div>
       </header>
 
-      <div class="pane-body">
+      <div v-if="requestCompact" class="request-summary" aria-label="Request summary">
+        <span v-for="input in inputSummary" :key="input.key"><code>{{ input.name }}</code>: <span class="summary-value">{{ input.value }}</span><button v-if="input.source" type="button" class="preset-link" @click="emit('edit-preset', input.source)">{{ input.source }}</button></span>
+        <span v-if="content">JSON body · {{ effectiveBody.length.toLocaleString() }} characters</span>
+        <span v-if="!inputSummary.length && !content">No inputs</span>
+      </div>
+      <div v-show="!requestCompact" class="pane-body">
         <slot name="samples" />
         <p v-if="!parameters.length && !operation.requestBody" class="muted empty">Ready to send. This endpoint has no inputs.</p>
 
@@ -160,7 +198,7 @@ function parameterHint(parameter) {
     </form>
 
     <section ref="responsePane" class="response-pane" aria-label="Response" :aria-busy="session.pending">
-      <header class="pane-header">
+      <header v-if="!session.result" class="pane-header">
         <h3>{{ (session.pending || session.resultStale) && session.result ? 'Last response' : 'Response' }}</h3>
         <div class="response-meta" role="status">
           <template v-if="session.result">
@@ -176,17 +214,12 @@ function parameterHint(parameter) {
       <div class="pane-body">
         <template v-if="session.result">
           <p v-if="session.resultStale" class="muted response-stale" role="status">Inputs changed. Showing the previous response until you send again.</p>
-          <div class="response-content" :class="{ 'has-related': hasRelated }">
+          <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }">
+          <NextRequestsPanel v-if="hasRelated" :operation-key="operation.key" @pin="relatedPinned = $event"><slot name="related" /></NextRequestsPanel>
           <div class="response-body">
-            <p class="response-type">{{ session.result.contentType || 'Body' }}</p>
-            <ResponsePreview :result="session.result" :selectors="selectors" />
+            <ResponsePreview :result="session.result" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="session.resultStale" />
           </div>
-          <aside v-if="hasRelated" class="response-actions" aria-label="Next request">
-            <details open class="continuation-panel">
-              <summary>Next request</summary>
-              <slot name="related" />
-            </details>
-          </aside>
+
           </div>
         </template>
         <p v-else class="muted empty">
@@ -206,6 +239,10 @@ function parameterHint(parameter) {
   border-radius: .75rem;
   background: var(--surface);
 }
+.request-summary { display: flex; flex-wrap: wrap; gap: .25rem .8rem; padding: .35rem .8rem; color: var(--muted); font-size: .75rem; }
+.request-summary > span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.summary-value { white-space: pre-wrap; }
+.focus-response { font-size: .75rem; margin-left: auto; }
 .runner > * { min-width: 0; }
 .response-pane { border-top: 1px solid var(--line); background: var(--subtle); border-radius: 0 0 .65rem .65rem; }
 .pane-header {
@@ -251,13 +288,12 @@ function parameterHint(parameter) {
 .status.failed { background: #ffe3e2; color: #8f2225; }
 .response-content { display: grid; gap: .85rem; align-items: start; }
 .response-content > * { min-width: 0; }
-.response-body { margin: 0; }
-.response-actions { min-width: 0; }
-.continuation-panel > summary { cursor: pointer; padding: .55rem .7rem; border: 1px solid var(--line); border-radius: .5rem; color: var(--accent); font-size: .82rem; font-weight: 650; background: var(--surface); }
-.continuation-panel[open] > summary { margin-bottom: .5rem; }
+.response-body { margin: 0; grid-column: 1; }
+.response-content.related-pinned .response-body { grid-row: 1; }
+
 @container (min-width: 48rem) {
-  .response-content.has-related { grid-template-columns: minmax(0, 1fr) 17rem; }
-  .response-actions { position: sticky; top: 1rem; max-height: calc(100dvh - 10rem); overflow: auto; }
+  .response-content.related-pinned { grid-template-columns: minmax(0, 1fr) 17rem; }
+  .response-content.related-pinned :deep(.next-requests) { grid-column: 2; grid-row: 1; position: sticky; top: 1rem; max-height: calc(100dvh - 10rem); overflow: auto; }
 }
 .response-type { margin: 0 0 .35rem; color: var(--muted); font-size: .74rem; overflow-wrap: anywhere; }
 pre { overflow: auto; max-height: 28rem; margin: 0; padding: .8rem; border-radius: .45rem; background: #182420; color: #e7f3eb; }

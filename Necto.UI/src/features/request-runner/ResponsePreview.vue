@@ -1,16 +1,30 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, useId, watch } from 'vue'
 import PreviewPager from './PreviewPager.vue'
 import { pageRange, TEXT_PAGE_SIZE } from './preview.js'
+import { usePreviewHeight } from './usePreviewHeight.js'
 import PayloadSearch from '../payload-search/PayloadSearch.vue'
 import { valueAtPath, pathLabel } from '../payload-search/search.js'
 import JsonNode from './JsonNode.vue'
-const props = defineProps({ result: { type: Object, required: true }, selectors: { type: Array, default: () => [] } })
+import { selectionLabel } from './selection.js'
+const props = defineProps({ result: { type: Object, required: true }, selectors: { type: Array, default: () => [] }, operation: Object, pending: Boolean, stale: Boolean })
+const searchOpen = ref(false)
+const finderButton = ref(null)
+const finderPanel = ref(null)
+const searchId = useId()
+async function toggleSearch(open = !searchOpen.value) {
+  searchOpen.value = open
+  await nextTick()
+  if (open) finderPanel.value?.querySelector('input[type="search"]')?.focus()
+  else finderButton.value?.focus()
+}
 const raw = ref(false)
 const textPage = ref(1)
 const navigation = ref(null)
 const focusPath = ref([])
 const preview = ref(null)
+const schedulePreviewHeight = usePreviewHeight()
+watch([raw, textPage, focusPath], () => nextTick(schedulePreviewHeight))
 let navigationId = 0
 const previewValue = computed(() => valueAtPath(props.result.json, focusPath.value))
 const text = computed(() => props.result.rawText ?? props.result.text ?? '')
@@ -42,22 +56,33 @@ function download() {
 </script>
 
 <template>
-  <div class="response-preview">
-    <div class="preview-toolbar">
-      <span>{{ text.length.toLocaleString() }} characters</span>
-      <button type="button" @click="download">Download response</button>
+  <div class="response-preview" @keydown.ctrl.f.prevent.stop="toggleSearch(true)" @keydown.meta.f.prevent.stop="toggleSearch(true)">
+    <div class="preview-toolbar" aria-label="Response tools">
+      <h3>{{ pending || stale ? 'Last response' : 'Response' }}</h3>
+      <span class="status" :class="{ failed: !result.ok }" role="status">{{ result.status }} {{ result.statusText }}</span>
+      <span>{{ result.elapsed }} ms</span>
       <template v-if="result.json !== undefined">
-        <span>Preview pages only · API response unchanged</span>
         <button type="button" :aria-pressed="!raw" @click="raw = false">Preview</button>
         <button type="button" :aria-pressed="raw" @click="raw = true">Raw</button>
-        <template v-if="result.selectedPath">
-          <code role="status">Selected: {{ JSON.stringify(result.selectedPath) }}</code>
-          <button type="button" @click="result.selectedPath = undefined">Clear selection</button>
-        </template>
-        <span v-else-if="selectors.length">Select an object to fill related request fields.</span>
+        <button ref="finderButton" type="button" :aria-expanded="searchOpen" :aria-controls="searchId" title="Find in response (Ctrl or ⌘ + F while the preview is focused)" @click="toggleSearch()">Find</button>
       </template>
+      <details class="response-details" @keydown.esc.stop.prevent="$event.currentTarget.open = false; $event.currentTarget.querySelector('summary').focus()">
+        <summary>Details</summary>
+        <div class="response-details-content">
+          <p>{{ result.contentType || 'Body' }} · {{ text.length.toLocaleString() }} characters</p>
+          <button type="button" @click="download">Download response</button>
+          <p v-if="result.json !== undefined">Preview pagination does not change the API response. Select a mapped object to fill related request fields.</p>
+        </div>
+      </details>
     </div>
-    <PayloadSearch v-if="result.json !== undefined" :result="result" :selectors="selectors" @reveal="reveal" @select="result.selectedPath = $event" />
+    <div v-if="result.selectedPath" class="selection-toolbar">
+      <span role="status" class="selection-label">{{ selectionLabel(operation, result) }}</span>
+      <details class="selection-path"><summary>JSON path</summary><code>{{ pathLabel(result.selectedPath) }}</code></details>
+      <button type="button" @click="result.selectedPath = undefined">Clear selection</button>
+    </div>
+    <div v-show="searchOpen" :id="searchId" ref="finderPanel" @keydown.esc.stop.prevent="toggleSearch(false)">
+      <PayloadSearch v-if="result.json !== undefined" :result="result" :selectors="selectors" @reveal="reveal" @select="result.selectedPath = $event" />
+    </div>
     <div v-if="focusPath.length && !raw" class="preview-toolbar"><code>Focused object: {{ pathLabel(focusPath) }}</code><button type="button" @click="fullResponse">Back to full response</button></div>
     <div v-if="result.json !== undefined" v-show="!raw" ref="preview" class="json-preview" tabindex="0" aria-label="JSON response preview">
       <JsonNode :key="JSON.stringify(focusPath)" :value="previewValue" :path="focusPath" :root="true" :navigation="navigation" :selectors="selectors" :selected="result.selectedPath" @select="result.selectedPath = $event" />
@@ -71,11 +96,24 @@ function download() {
 </template>
 
 <style scoped>
+.preview-toolbar h3 { margin: 0; font-size: .85rem; }
+.status { padding: .15rem .35rem; border-radius: .3rem; background: #ddf3e8; color: #125f41; }
+.status.failed { background: #ffe3e2; color: #8f2225; }
+.response-details { position: relative; margin-left: auto; }
+.response-details summary { cursor: pointer; padding: .25rem .4rem; }
+.response-details-content { position: absolute; right: 0; top: 100%; width: min(22rem, 75vw); padding: .6rem; z-index: 5; border: 1px solid var(--line); border-radius: .4rem; background: var(--surface); box-shadow: 0 6px 20px #20352c20; overflow-wrap: anywhere; }
+.response-details-content p { margin: .2rem 0 .5rem; }
+.selection-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-bottom: .35rem; font-size: .75rem; }
+.selection-toolbar button { padding: .2rem .4rem; border: 1px solid var(--line); }
 .preview-toolbar { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-bottom: .5rem; font-size: .75rem; color: var(--muted); }
+.selection-label { color: var(--accent); font-weight: 600; overflow-wrap: anywhere; max-width: 100%; }
+.selection-path { max-width: 100%; }
+.selection-path summary { cursor: pointer; }
 .preview-toolbar code { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .preview-toolbar button { padding: .25rem .4rem; border: 1px solid var(--line); }
 .preview-toolbar button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
-.json-preview, pre { overflow: auto; max-height: 32rem; margin: 0; padding: .8rem; border-radius: .45rem; background: #182420; color: #e7f3eb; font: .85rem/1.65 ui-monospace, Consolas, monospace; }
+.json-preview, pre { overflow: auto; max-height: var(--preview-height, 32rem); margin: 0; padding: .8rem; border-radius: .45rem; background: #182420; color: #e7f3eb; font: .85rem/1.65 ui-monospace, Consolas, monospace; }
 .json-preview { white-space: nowrap; }
 .raw-preview { background: #182420; border-radius: .45rem; padding: .4rem; }
+.response-preview > .preview-toolbar:first-child { position: sticky; top: 0; z-index: 3; background: var(--subtle); padding-block: .2rem; }
 </style>

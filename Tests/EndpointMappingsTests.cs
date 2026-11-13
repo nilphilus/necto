@@ -99,6 +99,25 @@ public sealed class EndpointMappingsTests : IClassFixture<WebApplicationFactory<
     }
 
     [Fact]
+    public async Task LinksAndFiltersInvoicesByReference()
+    {
+        var mappings = await client.GetFromJsonAsync<EndpointMapping[]>("/necto/endpoint-mappings");
+        Assert.NotNull(mappings);
+        Assert.Contains(new EndpointMapping(new("Invoices", true, "reference"),
+            new("InvoiceByReference", "query", "invoiceReference"), "name", null), mappings);
+        Assert.Contains(new EndpointMapping(new("InvoiceByReference", false, "reference"),
+            new("Invoices", "query", "reference"), "name", null), mappings);
+
+        var invoice = await client.GetFromJsonAsync<JsonObject>("/invoices/by-reference?invoiceReference=INV-42");
+        Assert.Equal("INV-42", invoice!["reference"]!.GetValue<string>());
+        var filtered = await client.GetFromJsonAsync<JsonArray>("/invoices?reference=INV-42");
+        Assert.True(JsonNode.DeepEquals(invoice, Assert.Single(filtered!)));
+        Assert.Empty((await client.GetFromJsonAsync<JsonArray>("/invoices?reference=unknown"))!);
+        using var missing = await client.GetAsync("/invoices/by-reference?invoiceReference=unknown");
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    [Fact]
     public async Task GeneratedLinksReferToOpenApiOperationsAndActualJson()
     {
         var configuration = await client.GetFromJsonAsync<JsonObject>("/necto/configuration");

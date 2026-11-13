@@ -2,31 +2,28 @@ using FastEndpoints;
 
 namespace SampleApi.FastEndpoints.Invoices;
 
-public sealed class ListInvoicesRequest
+public sealed class ListInvoicesRequest : TenantRequest
 {
     [QueryParam]
     public int? CustomerId { get; init; }
 
     [QueryParam]
-    public int? AssetId { get; init; }
+    public int? BuildingId { get; init; }
 }
 
-public sealed class ListInvoices : Endpoint<ListInvoicesRequest, Invoice[]>
+public sealed class ListInvoices : TenantEndpoint<ListInvoicesRequest, InvoiceSummary[]>
 {
     public override void Configure()
     {
         Get("/");
         Group<InvoicesGroup>();
         AllowAnonymous();
-        Summary(summary => summary.Summary = "List invoices by customer, asset, or both");
+        Summary(summary => summary.Summary = "List invoices by customer, building, or both");
     }
 
     public override Task HandleAsync(ListInvoicesRequest request, CancellationToken ct)
     {
-        var invoices = Resolve<InvoiceStore>().List()
-            .Where(invoice => (request.CustomerId is null || invoice.CustomerId == request.CustomerId)
-                && (request.AssetId is null || invoice.AssetId == request.AssetId))
-            .ToArray();
+        var invoices = Data.Invoices.List(request.BuildingId, request.CustomerId);
 
         return Send.OkAsync(invoices, ct);
     }

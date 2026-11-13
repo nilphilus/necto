@@ -2,11 +2,10 @@ using FastEndpoints;
 using FastEndpoints.OpenApi;
 using Necto;
 using SampleApi.FastEndpoints;
-using SampleApi.FastEndpoints.Invoices;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddSingleton<InvoiceStore>();
+builder.Services.AddSingleton<TenantDirectory>();
 builder.Services.AddFastEndpoints().OpenApiDocument(options =>
 {
     options.Title = "SampleApi.FastEndpoints";
@@ -15,7 +14,12 @@ builder.Services.AddFastEndpoints().OpenApiDocument(options =>
 });
 
 var app = builder.Build();
-app.UseFastEndpoints();
+app.UseRouting();
+app.Use((context, next) => context.RequestServices.GetRequiredService<TenantDirectory>().SelectAsync(context, next));
+app.UseFastEndpoints(options => options.Endpoints.Configurator = endpoint => endpoint.Options(builder => builder
+    .WithMetadata(new TenantRequired())
+    .Produces(StatusCodes.Status400BadRequest)
+    .Produces(StatusCodes.Status404NotFound)));
 
 if (app.Environment.IsDevelopment())
 {
