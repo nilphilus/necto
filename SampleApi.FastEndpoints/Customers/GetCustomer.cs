@@ -2,13 +2,13 @@ using FastEndpoints;
 
 namespace SampleApi.FastEndpoints.Customers;
 
-public sealed class GetCustomerRequest
+public sealed class GetCustomerRequest : TenantRequest
 {
     [RouteParam]
     public int CustomerId { get; init; }
 }
 
-public sealed class GetCustomer : Endpoint<GetCustomerRequest, Customer>
+public sealed class GetCustomer : TenantEndpoint<GetCustomerRequest, Customer>
 {
     public override void Configure()
     {
@@ -21,7 +21,7 @@ public sealed class GetCustomer : Endpoint<GetCustomerRequest, Customer>
 
     public override Task HandleAsync(GetCustomerRequest request, CancellationToken ct)
     {
-        var customer = Customer.Samples.FirstOrDefault(customer => customer.Id == request.CustomerId);
+        var customer = Data.Customers.FirstOrDefault(customer => customer.Id == request.CustomerId);
 
         return customer is null ? Send.NotFoundAsync(ct) : Send.OkAsync(customer, ct);
     }
