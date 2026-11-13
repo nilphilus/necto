@@ -2,7 +2,7 @@
 
 An English, buildless product website with a separate technical guide.
 
-- `index.html` — marketing page, interactive sample and product gallery.
+- [HTML landing page](index.html) — marketing page, interactive sample and product gallery.
 - `technical.html` — installation, architecture, integrations and limits.
 - `landing.css` / `landing.js` — shared styles and browser interactions.
 - `assets/` — local brand asset and real screenshots from SampleApi on main.
@@ -19,6 +19,12 @@ python3 -m http.server 4173 --directory docs/landing-page
 Open `http://localhost:4173/`. No Node.js, dependencies, framework build or external image/font service is needed. The directory can be hosted unchanged by any static host. This change does not configure or deploy hosting.
 
 The interactive invoice example is explicitly labeled sample data and never calls an API. Gallery screenshots are real captures of the current sample application, not generated UI mockups. Tab navigation supports arrows/Home/End, images open in a native dialog, and code blocks support copying with a manual fallback. Reduced motion is respected.
+
+## GitHub Pages publication
+
+The planned public URL is [https://nilphilus.github.io/necto/](https://nilphilus.github.io/necto/). It is not live yet. The repository is still private and this PR is being held until the product is ready.
+
+When publishing, configure GitHub Pages to deploy this directory as the site root. Relative asset and page links support the `/necto/` project path without a build-time base URL. Opening `index.html` on GitHub itself shows source, not the rendered page; use the local preview until Pages is enabled.
 
 ## Content decisions
 
