@@ -20,7 +20,11 @@ public sealed class CreateInvoiceLine : Endpoint<CreateInvoiceLineRequest, Invoi
         Post("/{invoiceId:int}/lines");
         Group<InvoicesGroup>();
         AllowAnonymous();
-        Summary(summary => summary.Summary = "Add a line item to an invoice");
+        Summary(summary =>
+        {
+            summary.Summary = "Add a line item to an invoice";
+            summary.ExampleRequest = new CreateInvoiceLineRequest { InvoiceId = 501, Description = "Support", Quantity = 1, UnitPrice = 60m };
+        });
         Description(builder => builder.Produces<InvoiceLineItem>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status404NotFound));
     }
