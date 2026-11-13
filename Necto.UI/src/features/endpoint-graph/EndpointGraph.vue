@@ -1,8 +1,9 @@
 <script setup>
 import { computed, nextTick, ref, useId, watch } from 'vue'
+import { useGraphViewport } from '../graph-viewport.js'
 import { routeConnection } from '../graph-layout.js'
 import { buildEndpointGraph, endpointSize, layoutEndpoints } from './graph.js'
-const props = defineProps({ operations: Array, mappings: Array, mappingError: String })
+const props = defineProps({ operations: Array, mappings: Array, mappingError: String, initialOperationKey: String })
 defineEmits(['open-operation'])
 const search = ref('')
 const selectedId = ref('')
@@ -43,6 +44,8 @@ const positioned = computed(() => new Map(positions.value.map(node => [node.id, 
 const edgeIds = computed(() => new Set(edges.value.map(edge => edge.id)))
 const width = computed(() => Math.max(650, ...positions.value.map(node => node.x + endpointSize.width + 90)))
 const height = computed(() => Math.max(400, ...positions.value.map(node => node.y + 145)))
+const { autoFit, fit, center } = useGraphViewport(canvas, width, height, zoom)
+watch(() => props.initialOperationKey, key => { if (byId.value.has(key)) selectedId.value = key }, { immediate: true })
 watch(selected, value => {
   if (!value) {
     selectedId.value = ''
@@ -50,7 +53,7 @@ watch(selected, value => {
     direction.value = 'all'
   }
 })
-watch([search, connectedOnly], () => { focused.value = false })
+watch([search, connectedOnly], () => { focused.value = false; if (!filtered.value.some(node => node.id === selectedId.value)) selectedId.value = '' })
 watch([focused, search, direction, connectedOnly], resetCanvas, { flush: 'post' })
 function curve(edge) {
   const from = positioned.value.get(edge.from), to = positioned.value.get(edge.to)
@@ -60,6 +63,7 @@ function curve(edge) {
 }
 function connected(edge) { return !selectedId.value || edge.from === selectedId.value || edge.to === selectedId.value }
 function resetCanvas() {
+  if (autoFit.value) { fit(); return }
   if (!canvas.value) return
   const node = focused.value && positioned.value.get(selectedId.value)
   const left = node ? (node.x + endpointSize.width / 2) * zoom.value - canvas.value.clientWidth / 2 : 0
@@ -89,10 +93,12 @@ async function inspect(id) {
       </select></label>
       <label class="check"><input v-model="connectedOnly" type="checkbox"> Connected endpoints only</label>
       <button type="button" class="secondary" :disabled="!selected" :aria-pressed="focused" @click="focused = !focused">Focus on selected endpoint</button>
+      <button type="button" class="secondary" @click="fit">Fit to view</button>
+      <button type="button" class="secondary" :disabled="!selected" @click="center(positioned.get(selectedId), endpointSize)">Center selection</button>
       <div class="zoom" role="group" aria-label="Endpoint graph zoom">
-        <button type="button" class="secondary" :disabled="zoom <= .5" aria-label="Zoom out" @click="zoom = Math.max(.5, zoom - .25)">−</button>
-        <button type="button" class="secondary" aria-label="Reset zoom" @click="zoom = 1">{{ Math.round(zoom * 100) }}%</button>
-        <button type="button" class="secondary" :disabled="zoom >= 2" aria-label="Zoom in" @click="zoom = Math.min(2, zoom + .25)">+</button>
+        <button type="button" class="secondary" :disabled="zoom <= .5" aria-label="Zoom out" @click="autoFit = false; zoom = Math.max(.5, zoom - .25)">−</button>
+        <button type="button" class="secondary" aria-label="Reset zoom" @click="autoFit = false; zoom = 1">{{ Math.round(zoom * 100) }}%</button>
+        <button type="button" class="secondary" :disabled="zoom >= 2" aria-label="Zoom in" @click="autoFit = false; zoom = Math.min(2, zoom + .25)">+</button>
       </div>
     </div>
     <p class="legend">Response → Request · Arrows show Necto value mappings, independently of shared entity schemas.</p>
