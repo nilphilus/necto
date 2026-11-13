@@ -615,6 +615,8 @@ function removeScenario(id) {
           <div :inert="scenarioPending">
             <section v-show="settingsTab === 'presets'" class="preset-panel" aria-labelledby="presets-title">
               <h3 id="presets-title">Presets</h3>
+              <p class="muted">Presets supply shared values across requests. Saved requests keep inputs for one endpoint; scenarios replay a chain of requests.</p>
+              <p v-if="!presets.size" class="muted" role="status">No presets yet. Create one below, add values, then activate it for matching requests.</p>
               <form class="preset-actions" @submit.prevent="addPreset">
                 <label>New preset <input v-model="newPresetName" required></label>
                 <button type="submit" class="secondary">Add</button>
@@ -762,6 +764,17 @@ function removeScenario(id) {
                 </div>
               </form>
             </dialog>
+            <div v-if="!visiblePresetNames.length" class="preset-guidance">
+              <template v-if="current.operation.apiId !== 'local' && !current.operation.usePresets">
+                <span>Shared presets are disabled for this external API.</span>
+                <button type="button" class="secondary" @click="settingsTab = 'connections'; toggleSettings()">Manage connection</button>
+              </template>
+              <template v-else>
+                <span v-if="!presets.size">No presets yet. Reuse shared values across requests.</span>
+                <span v-else>No presets match this request. Your presets remain available for other requests.</span>
+                <button type="button" class="secondary" @click="settingsTab = 'presets'; toggleSettings()">{{ presets.size ? 'Manage presets' : 'Create preset' }}</button>
+              </template>
+            </div>
             <OperationRunner :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" @edit-preset="editActivePreset">
               <template #request-actions>
                 <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">
@@ -918,6 +931,8 @@ body { margin: 0; background: #eef2ee; }
 .work-area { overflow: auto; min-width: 0; padding: 1.5rem; background: var(--canvas); scroll-padding-block: 1rem; }
 .app-message { margin: 1rem; }
 .mapping-notice { margin: 0 0 1rem; }
+.preset-guidance { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; margin-bottom: .65rem; color: var(--muted); font-size: .75rem; }
+.preset-guidance button { padding: .2rem .4rem; font-size: inherit; }
 .preset-panel { min-width: 0; margin-inline: 0; display: grid; gap: .45rem; margin-bottom: 1rem; padding: .75rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); font-size: .85rem; }
 .preset-color-field { display: flex; align-items: center; gap: .5rem; }
 .preset-color-field input { width: 2.5rem; height: 1.75rem; padding: .15rem; cursor: pointer; }
