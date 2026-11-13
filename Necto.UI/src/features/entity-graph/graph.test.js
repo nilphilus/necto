@@ -61,6 +61,22 @@ test('schema titles are display names and references still use the original keys
   assert.equal(result.nodes.find(node => node.id === 'schema:Line').name, 'Line')
 })
 
+test('qualified and flattened schema keys have short labels while references retain their identity', () => {
+  const invoiceKey = 'Company.Product.Billing.Contracts.Invoice'
+  const lineKey = 'CompanyProductBillingContractsInvoiceLine'
+  const spec = { components: { schemas: {
+    [invoiceKey]: { properties: { line: ref(lineKey) } },
+    [lineKey]: { type: 'object' },
+  } } }
+  const result = buildEntityGraph(spec, [operation('GetInvoice', ref(invoiceKey))])
+  const invoice = result.nodes.find(node => node.schemaKey === invoiceKey)
+  const line = result.nodes.find(node => node.schemaKey === lineKey)
+  assert.equal(invoice.name, 'Invoice')
+  assert.equal(invoice.endpoints[0].operation.id, 'GetInvoice')
+  assert.ok(line.name.startsWith('…') && line.name.endsWith('InvoiceLine'))
+  assert.ok(result.edges.some(edge => edge.from === invoice.id && edge.to === line.id))
+})
+
 test('Necto mappings connect entities and associate consumers without a response schema', () => {
   const spec = { components: { schemas: {
     Invoice: { properties: { id: { type: 'integer' } } },

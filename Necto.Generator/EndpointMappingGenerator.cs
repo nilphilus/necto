@@ -309,8 +309,9 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
 
                 internal static RouteHandlerBuilder MapNectoEndpointMappings(
                     this IEndpointRouteBuilder endpoints, string pattern = "/necto/endpoint-mappings") =>
-                    endpoints.MapGet(pattern, () => Results.Json(Mappings, System.Text.Json.JsonSerializerOptions.Web))
-                        .ExcludeFromDescription();
+                    EndpointMappingsMetadata.Register(endpoints,
+                        endpoints.MapGet(pattern, () => Results.Json(Mappings, System.Text.Json.JsonSerializerOptions.Web))
+                            .ExcludeFromDescription());
             }
             """);
         context.AddSource("EndpointMappings.g.cs", code.ToString());
