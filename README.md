@@ -83,8 +83,9 @@ Necto generates suggestions for reusing response values in other API requests. T
 NuGet package includes a Roslyn source generator. Call
 `app.MapNectoEndpointMappings()` to expose the generated suggestions alongside
 your OpenAPI document. The default path is `/necto/endpoint-mappings`.
-Pass that path as `endpointMappingsPath` to `UseNectoUI` to display the
-suggestions next to the target operations.
+Necto UI discovers a single registered mappings route. For a custom JSON endpoint
+or multiple registered mappings routes, pass the desired path as
+`endpointMappingsPath` to `UseNectoUI` or `MapNectoUI`.
 
 Each mapping identifies a source and a target by their OpenAPI `operationId`.
 `source.eachItem` applies the selector to each element of a response array.
