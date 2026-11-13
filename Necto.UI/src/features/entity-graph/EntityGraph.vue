@@ -1,7 +1,8 @@
 <script setup>
 import { computed, nextTick, ref, watch, useId } from 'vue'
+import { useGraphViewport } from '../graph-viewport.js'
 import { buildEntityGraph, connectionPath, entitySize, groupConnections, layoutGraph } from './graph.js'
-const props = defineProps({ spec: Object, operations: Array, mappings: Array, mappingError: String, apis: { type: Array, default: () => [] } })
+const props = defineProps({ spec: Object, operations: Array, mappings: Array, mappingError: String, initialOperationKey: String, apis: { type: Array, default: () => [] } })
 defineEmits(['open-operation'])
 const search = ref('')
 const selectedId = ref('')
@@ -34,8 +35,10 @@ const connections = computed(() => groupConnections(visibleGraph.value.edges))
 const names = computed(() => new Map(graph.value.nodes.map(node => [node.id, node.name])))
 const width = computed(() => Math.max(620, ...positions.value.map(node => node.x + 305)))
 const height = computed(() => Math.max(380, ...positions.value.map(node => node.y + 125)))
+const { autoFit, fit, center } = useGraphViewport(canvas, width, height, zoom)
+watch(() => props.initialOperationKey, key => { selectedId.value = graph.value.nodes.find(node => node.endpoints.some(entry => entry.operation.key === key))?.id ?? '' }, { immediate: true })
 watch(selected, value => { if (!value) focused.value = false })
-watch(search, () => { focused.value = false })
+watch(search, () => { focused.value = false; if (!filtered.value.some(node => node.id === selectedId.value)) selectedId.value = '' })
 watch(() => props.spec, () => { selectedId.value = ''; search.value = '' })
 watch([focused, kind, search], () => canvas.value?.scrollTo(0, 0))
 async function selectEntity(id) {
@@ -63,10 +66,12 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
       <label>Find an entity <input v-model="search" type="search" placeholder="Invoice, Customer…"></label>
       <label>Connections <select v-model="kind" aria-label="Connections"><option value="all">All connections</option><option value="schema">Schema references</option><option value="mapping">Value flows</option></select></label>
       <button type="button" class="secondary" :disabled="!selected" :aria-pressed="focused" @click="focused = !focused">Focus on selected entity</button>
+      <button type="button" class="secondary" @click="fit">Fit to view</button>
+      <button type="button" class="secondary" :disabled="!selected" @click="center(byId.get(selectedId), entitySize)">Center selection</button>
       <div class="zoom" role="group" aria-label="Graph zoom">
-        <button type="button" class="secondary" :disabled="zoom <= .5" aria-label="Zoom out" @click="zoom = Math.max(.5, zoom - .25)">−</button>
-        <button type="button" class="secondary" aria-label="Reset zoom" @click="zoom = 1">{{ Math.round(zoom * 100) }}%</button>
-        <button type="button" class="secondary" :disabled="zoom >= 2" aria-label="Zoom in" @click="zoom = Math.min(2, zoom + .25)">+</button>
+        <button type="button" class="secondary" :disabled="zoom <= .5" aria-label="Zoom out" @click="autoFit = false; zoom = Math.max(.5, zoom - .25)">−</button>
+        <button type="button" class="secondary" aria-label="Reset zoom" @click="autoFit = false; zoom = 1">{{ Math.round(zoom * 100) }}%</button>
+        <button type="button" class="secondary" :disabled="zoom >= 2" aria-label="Zoom in" @click="autoFit = false; zoom = Math.min(2, zoom + .25)">+</button>
       </div>
     </div>
     <p class="legend"><span class="schema-key">— Schema reference</span><span class="mapping-key">┄ Value flow</span><span class="muted">Models come from OpenAPI; value flows come from Necto mappings.</span></p>

@@ -1,3 +1,4 @@
+import { jsonBodyIssue } from './bodyHelp.js'
 export const formatJson = value => JSON.stringify(value, null, 2)
 export const fieldKey = parameter => `${parameter.in}:${parameter.name}`
 export const supportedParameters = operation => operation.parameters.filter(
@@ -269,8 +270,8 @@ export function buildRequest(operation, configuration, draft, values = new Map()
     if (body.trim() || operation.requestBody.required) {
       try {
         JSON.parse(body)
-      } catch {
-        throw new Error('Enter a valid JSON request body.')
+      } catch (cause) {
+        throw new Error(jsonBodyIssue(body, cause))
       }
       options.body = body
       if (!values.has('header:content-type')) headers.set('Content-Type', content[0])

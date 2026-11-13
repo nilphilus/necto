@@ -17,7 +17,7 @@ import EndpointGraph from './features/endpoint-graph/EndpointGraph.vue'
 import EntityGraph from './features/entity-graph/EntityGraph.vue'
 import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
 import { useScenarios } from './features/scenarios/useScenarios.js'
-import { rememberBinding } from './features/scenarios/scenario.js'
+import { rememberBinding, snapshotScenario } from './features/scenarios/scenario.js'
 import { readRoute, routePath } from './features/routing/routes.js'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
 import { buildRequest, fieldKey, contextKey, hasPresetFor, migratePreset, presetInputs, resolveNamedRequestValues } from './features/request-runner/request.js'
@@ -37,6 +37,13 @@ const scenarioName = ref('')
 const scenarioDialog = ref(null)
 const requestSamples = ref(null)
 const editingScenarioId = ref('')
+const editingScenario = computed(() => scenarios.value.find(scenario => scenario.id === editingScenarioId.value))
+const scenarioDirty = computed(() => {
+  const saved = editingScenario.value
+  if (!saved) return false
+  try { return JSON.stringify(snapshotScenario(chain.value, saved.name, saved.id, valuesFor).steps) !== JSON.stringify(saved.steps) }
+  catch { return true }
+})
 const overwriteScenario = computed(() => scenarios.value.find(scenario =>
   scenario.id === editingScenarioId.value && scenario.name === scenarioName.value.trim()))
 const scenarioBusy = computed(() => scenarioPending.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
@@ -47,6 +54,7 @@ const mobilePresetsOpen = ref(false)
 const defaultPresetColor = '#287557'
 const activePresetNames = ref([])
 const settingsOpen = ref(false)
+const settingsTab = ref('presets')
 const skeletonWalking = ref(false)
 let stampClicks = 0
 let firstStampClick = 0
@@ -207,6 +215,7 @@ async function toggleSettings() {
 }
 
 async function editActivePreset(name) {
+  settingsTab.value = 'presets'
   editedPresetName.value = name
   settingsOpen.value = true
   await nextTick()
@@ -458,11 +467,6 @@ onMounted(() => {
 })
 onUnmounted(() => window.removeEventListener('popstate', restoreRoute))
 
-function selectGroup(name) {
-  const operation = groups.value.find(group => group.name === name)?.operations[0]
-  if (operation) selectOperation(operation, name)
-}
-
 function selectOperation(operation, group) {
   editingScenarioId.value = ''
   scenarioName.value = ''
@@ -516,6 +520,16 @@ function saveScenario() {
   }
   catch (cause) { scenarioError.value = cause.message }
 }
+function updateEditingScenario() {
+  if (!editingScenario.value) return
+  scenarioName.value = editingScenario.value.name
+  saveScenario()
+}
+function copyEditingScenario() {
+  scenarioName.value = editingScenario.value.name + ' copy'
+  scenarioDialog.value.showModal()
+}
+
 function openScenario(scenario) {
   const steps = scenarioStore.open(scenario, scenarioContext())
   if (!steps) return
@@ -593,9 +607,13 @@ function removeScenario(id) {
             <button ref="settingsCloseButton" type="button" class="secondary settings-icon" aria-label="Close settings" @click="closeSettings">
               <span aria-hidden="true">×</span>
             </button>
+            <nav class="settings-sections" aria-label="Settings sections">
+              <button type="button" class="secondary" :aria-pressed="settingsTab === 'presets'" @click="settingsTab = 'presets'">Presets</button>
+              <button type="button" class="secondary" :aria-pressed="settingsTab === 'connections'" @click="settingsTab = 'connections'">External APIs</button>
+            </nav>
           </div>
           <div :inert="scenarioPending">
-            <section class="preset-panel" aria-labelledby="presets-title">
+            <section v-show="settingsTab === 'presets'" class="preset-panel" aria-labelledby="presets-title">
               <h3 id="presets-title">Presets</h3>
               <form class="preset-actions" @submit.prevent="addPreset">
                 <label>New preset <input v-model="newPresetName" required></label>
@@ -618,16 +636,16 @@ function removeScenario(id) {
               </template>
               <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
             </section>
-            <ExternalApiSettings v-model:show="showExternalApis" :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
+            <ExternalApiSettings v-show="settingsTab === 'connections'" v-model:show="showExternalApis" :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
               :save="externalApis.saveConnection" :remove="externalApis.removeConnection" :test="externalApis.testConnection" />
           </div>
         </aside>
       </Transition>
       <p v-if="graphView === 'agent' && !configuration?.agentUrl" class="app-message">Bring your agent is not enabled on this server.</p>
       <AgentPanel :inert="settingsOpen" v-if="configuration?.agentUrl" v-show="graphView === 'agent'" :spec="spec" :configuration="configuration" :operations="operations" :mappings="endpointMappings" :apis="externalApis.contexts.value" :busy="mappingPending || externalPending" />
-      <EntityGraph :inert="settingsOpen" v-if="graphView === 'entities'" :spec="spec" :apis="externalApis.contexts.value" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
+      <EntityGraph :inert="settingsOpen" :initial-operation-key="current?.operation.key" v-if="graphView === 'entities'" :spec="spec" :apis="externalApis.contexts.value" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
-      <EndpointGraph :inert="settingsOpen" v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
+      <EndpointGraph :inert="settingsOpen" :initial-operation-key="current?.operation.key" v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <ScenarioPanel :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
         :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
@@ -645,9 +663,10 @@ function removeScenario(id) {
       <div :inert="settingsOpen" v-show="!graphView" class="layout" :class="{ 'presets-collapsed': presetsCollapsed, 'has-presets': visiblePresetNames.length }">
         <EndpointCatalog :inert="scenarioPending"
           :groups="groups"
+          :external-count="connections.length" :show-external="showExternalApis" :external-loading="externalPending"
+          @toggle-external="showExternalApis = $event"
           :active-group="current?.group ?? ''"
           :active-operation="current?.operation.key ?? ''"
-          @select-group="selectGroup"
           @select-operation="selectOperation"
         />
 
@@ -702,10 +721,15 @@ function removeScenario(id) {
                   </li>
                 </ol>
               </nav>
-              <button class="secondary save-scenario" type="button" aria-haspopup="dialog" @click="scenarioDialog.showModal()">
+              <button v-if="!editingScenario" class="secondary save-scenario" type="button" aria-haspopup="dialog" @click="scenarioDialog.showModal()">
                 Save scenario
               </button>
             </div>
+            <section v-if="editingScenario" class="scenario-edit-context" aria-label="Scenario editing">
+              <div><strong>Scenario: {{ editingScenario.name }}</strong><span>Step {{ currentIndex + 1 }}/{{ chain.length }}</span><span role="status" class="save-state" :class="{ dirty: scenarioDirty }">{{ scenarioDirty ? 'Unsaved changes' : 'All changes saved' }}</span></div>
+              <div class="scenario-edit-actions"><button type="button" class="primary" :disabled="scenarioBusy || !scenarioDirty" @click="updateEditingScenario">Update scenario</button><button type="button" class="secondary" :disabled="scenarioBusy" @click="copyEditingScenario">Save as copy</button></div>
+              <details><summary>Scenario steps ({{ chain.length }})</summary><ol><li v-for="(step, index) in chain" :key="index"><button type="button" :aria-current="index === currentIndex ? 'step' : undefined" @click="selectChainStep(index)">{{ index + 1 }}. {{ step.operation.method }} {{ step.operation.name }}</button></li></ol></details>
+            </section>
             <header class="endpoint-header">
               <p v-if="current.operation.apiId !== 'local'" class="external-api-label">{{ current.operation.apiName }} · {{ current.operation.apiId }}</p>
               <h2 id="endpoint-title" ref="endpointHeading" tabindex="-1">{{ current.operation.name }}</h2>
@@ -716,7 +740,7 @@ function removeScenario(id) {
               <p v-if="current.operation.description" class="muted">{{ current.operation.description }}</p>
             </header>
             <dialog :key="current.operation.key" ref="scenarioDialog" class="endpoint-dialog" aria-labelledby="save-scenario-title">
-              <h3 id="save-scenario-title">Save scenario</h3>
+              <h3 id="save-scenario-title">{{ editingScenario && !overwriteScenario ? 'Save scenario copy' : 'Save scenario' }}</h3>
               <form @submit.prevent="saveScenario">
                 <label class="dialog-field">Scenario name <input v-model="scenarioName" required autofocus maxlength="120" placeholder="Invoice details"></label>
                 <p v-if="scenarioError" class="error" role="alert">{{ scenarioError }}</p>
@@ -903,7 +927,10 @@ body { margin: 0; background: #eef2ee; }
   box-shadow: -.5rem 0 1.5rem #202b2729;
   overscroll-behavior: contain;
 }
-.settings-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.settings-sections { display: flex; flex-basis: 100%; gap: .4rem; margin-top: .65rem; }
+.settings-sections [aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.settings { padding-top: 0; }
+.settings-header { position: sticky; top: 0; z-index: 3; padding: 1rem 0; background: var(--canvas); display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--line); }
 .settings h2 { margin: 0; }
 .settings h3 { margin: 0; font-size: 1rem; }
 .settings .preset-panel { max-width: 48rem; gap: .85rem; justify-items: start; }
@@ -914,6 +941,13 @@ body { margin: 0; background: #eef2ee; }
   .settings-drawer-enter-active, .settings-drawer-leave-active { transition: none; }
 }
 .preset-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .6rem; }
+.scenario-edit-context { display: grid; gap: .6rem; padding: .8rem; margin-bottom: 1rem; border: 1px solid #b4cdc0; border-radius: .6rem; background: var(--accent-soft); font-size: .8rem; }
+.scenario-edit-context > div { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+.scenario-edit-context summary { cursor: pointer; }
+.scenario-edit-context ol { margin: .4rem 0 0; padding-left: 1.4rem; }
+.scenario-edit-context li button { padding: .25rem; text-align: left; }
+.scenario-edit-context [aria-current] { font-weight: 700; text-decoration: underline; }
+.save-state { padding: .2rem .4rem; border-radius: .3rem; background: var(--surface); }.save-state.dirty { background: #fff0cc; color: #755018; }
 .chain-header { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .55rem; margin-bottom: .5rem; }
 .breadcrumbs { min-width: 0; }
 .breadcrumbs ol { display: flex; flex-wrap: wrap; gap: .25rem; list-style: none; padding: 0; margin: 0; }

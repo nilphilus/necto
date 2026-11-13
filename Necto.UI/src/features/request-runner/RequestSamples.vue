@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { contextKey, fieldKey, jsonContent, supportedParameters } from './request.js'
 import { applySample, readSamples } from './samples.js'
 
@@ -12,13 +12,15 @@ const props = defineProps({
 
 const saved = ref({ samples: [], defaultName: '' })
 const name = ref('')
+const editing = ref('')
+const renameOnly = ref(false)
+const deleting = ref('')
+const selectedSample = computed(() => saved.value.samples.find(sample => sample.name === props.session.sampleName))
 const selectedFields = ref([])
 const makeDefault = ref(false)
 const storeDialog = ref(null)
 const storeOpen = ref(false)
 const error = ref('')
-const searchOpen = ref(false)
-const searchButton = ref(null)
 const searchInput = ref(null)
 const query = ref('')
 const page = ref(0)
@@ -58,18 +60,6 @@ watch(() => props.session, () => {
   showSelectedPage()
 }, { immediate: true })
 
-async function toggleSearch() {
-  searchOpen.value = !searchOpen.value
-  if (searchOpen.value) {
-    await nextTick()
-    searchInput.value?.focus()
-  } else {
-    query.value = ''
-    showSelectedPage()
-    searchButton.value?.focus()
-  }
-}
-
 function turnPage(direction) {
   page.value = (page.value + direction + pageCount.value) % pageCount.value
 }
@@ -79,8 +69,11 @@ function updateQuery(event) {
   page.value = 0
 }
 
-function openStoreDialog() {
+function openStoreDialog(existing = '', rename = false) {
   resetForm()
+  editing.value = typeof existing === 'string' ? existing : ''
+  renameOnly.value = rename
+  if (editing.value) { name.value = editing.value; makeDefault.value = saved.value.defaultName === editing.value }
   storeDialog.value.showModal()
   storeOpen.value = true
 }
@@ -95,8 +88,7 @@ function persist(update) {
     error.value = ''
     return true
   } catch (cause) {
-    error.value = cause.message === 'A sample with that name already exists.'
-      ? cause.message : 'Could not save samples in this browser.'
+    error.value = cause.message === 'A sample with that name already exists.' ? cause.message : 'Could not save samples in this browser.'
     return false
   }
 }
@@ -114,12 +106,14 @@ function storeSample() {
   }
   if (jsonContent(props.operation)) sample.body = props.session.body
   if (persist(current => {
-    if (current.samples.some(entry => entry.name === sampleName)) {
+    if (current.samples.some(entry => entry.name === sampleName && entry.name !== editing.value)) {
       throw new Error('A sample with that name already exists.')
     }
+    const original = current.samples.find(entry => entry.name === editing.value)
+    const replacement = renameOnly.value && original ? { ...original, name: sampleName } : sample
     return {
-      samples: [...current.samples, sample],
-      defaultName: makeDefault.value ? sampleName : current.defaultName,
+      samples: original ? current.samples.map(entry => entry.name === editing.value ? replacement : entry) : [...current.samples, replacement],
+      defaultName: makeDefault.value ? sampleName : current.defaultName === editing.value ? '' : current.defaultName,
     }
   })) {
     props.session.sampleName = sampleName
@@ -133,9 +127,17 @@ function loadSample(sampleName) {
   const sample = saved.value.samples.find(entry => entry.name === sampleName)
   if (!sample) return
   applySample(props.operation, props.session, sample)
-  props.session.result = null
+  if (props.session.result) props.session.resultStale = true
   props.session.error = ''
   error.value = ''
+}
+
+function deleteSelected() {
+  const sampleName = deleting.value
+  if (persist(current => ({ samples: current.samples.filter(sample => sample.name !== sampleName), defaultName: current.defaultName === sampleName ? '' : current.defaultName }))) {
+    if (props.session.sampleName === sampleName) props.session.sampleName = ''
+    deleting.value = ''; query.value = ''; page.value = 0
+  }
 }
 
 function toggleDefault(sampleName) {
@@ -151,13 +153,13 @@ function toggleDefault(sampleName) {
     <div v-if="saved.samples.length" class="sample-toolbar">
       <strong>Saved requests</strong>
       <div class="sample-controls">
-        <button ref="searchButton" type="button" class="secondary icon-button"
-          :aria-expanded="searchOpen" aria-label="Search saved requests" title="Search saved requests" @click="toggleSearch">
+        <button type="button" class="secondary icon-button"
+          aria-label="Focus saved request search" title="Search saved requests" @click="searchInput?.focus()">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 5 5"/></svg>
         </button>
-        <input v-if="searchOpen" ref="searchInput" :value="query" type="search" aria-label="Search by name"
+        <input ref="searchInput" :value="query" type="search" aria-label="Search by name"
           placeholder="Search by name" @input="updateQuery"
-          @keydown.enter.stop.prevent @keydown.esc.stop.prevent="toggleSearch">
+          @keydown.enter.stop.prevent @keydown.esc.stop.prevent="query = ''; page = 0">
         <template v-if="pageCount > 1">
           <button type="button" class="secondary icon-button" aria-label="Previous saved requests"
             title="Previous saved requests" @click="turnPage(-1)">‹</button>
@@ -167,6 +169,12 @@ function toggleDefault(sampleName) {
         </template>
       </div>
     </div>
+    <div v-if="selectedSample" class="sample-management" aria-label="Manage selected saved request">
+      <button type="button" class="secondary" :disabled="session.pending" @click="openStoreDialog(selectedSample.name)">Update selected</button>
+      <button type="button" class="secondary" :disabled="session.pending" @click="openStoreDialog(selectedSample.name, true)">Rename</button>
+      <button type="button" class="secondary" :disabled="session.pending" @click="deleting = selectedSample.name">Delete</button>
+    </div>
+    <div v-if="deleting" class="delete-confirmation" role="group" aria-label="Confirm saved request deletion"><span>Delete {{ deleting }}?</span><button type="button" class="secondary" @click="deleteSelected">Delete saved request</button><button type="button" class="secondary" @click="deleting = ''">Keep request</button></div>
     <ul v-if="visibleSamples.length" class="sample-tags">
       <li v-for="sample in visibleSamples" :key="sample.name" class="sample-tag"
         :class="{ selected: session.sampleName === sample.name }">
@@ -185,10 +193,10 @@ function toggleDefault(sampleName) {
   </section>
   <Teleport to="body">
     <dialog ref="storeDialog" class="endpoint-dialog" aria-labelledby="store-sample-title" @close="storeOpen = false">
-      <h3 id="store-sample-title">Store as sample</h3>
+      <h3 id="store-sample-title">{{ renameOnly ? 'Rename saved request' : editing ? 'Update saved request' : 'Store as sample' }}</h3>
       <form @submit.prevent="storeSample">
         <label class="dialog-field">Sample name <input v-model="name" required autofocus maxlength="120"></label>
-        <fieldset v-if="fields.length">
+        <fieldset v-if="fields.length && !renameOnly">
           <legend>Fields to store</legend>
           <label v-for="field in fields" :key="field.key">
             <input v-model="selectedFields" type="checkbox" :value="field.key">
@@ -199,7 +207,7 @@ function toggleDefault(sampleName) {
         <p v-if="error" class="error" role="alert">{{ error }}</p>
         <div class="dialog-actions">
           <button class="secondary" type="button" @click="storeDialog.close()">Cancel</button>
-          <button class="primary" type="submit">Save sample</button>
+          <button class="primary" type="submit">{{ editing ? 'Save changes' : 'Save sample' }}</button>
         </div>
       </form>
     </dialog>
@@ -209,6 +217,9 @@ function toggleDefault(sampleName) {
 <style scoped>
 .samples, .sample-toolbar, .sample-controls, .sample-tags { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; }
 .samples { margin-bottom: .6rem; padding-bottom: .35rem; border-bottom: 1px solid var(--line); font-size: .8rem; }
+.sample-management, .delete-confirmation { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.sample-management button { font-size: .75rem; }
+.delete-confirmation { flex-basis: 100%; padding: .5rem; background: var(--accent-soft); border-radius: .4rem; }
 .samples p { margin: 0; }
 .sample-toolbar { min-width: 0; }
 .sample-controls { min-width: 0; }
