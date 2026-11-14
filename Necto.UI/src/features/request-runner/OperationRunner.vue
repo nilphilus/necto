@@ -1,8 +1,10 @@
 <script setup>
 import { computed, nextTick, ref, watch, watchPostEffect } from 'vue'
 import { bodyFields, hasBodyExample } from './bodyHelp.js'
+import ImportedInputs from '../workbench/ImportedInputs.vue'
 import { effectiveTarget } from '../workbench/target.js'
 import { requestIdentity } from '../workbench/requestContext.js'
+
 
 import BodyEditor from '../workbench/BodyEditor.vue'
 import RequestTools from '../workbench/RequestToolsMenu.vue'
@@ -165,6 +167,7 @@ function parameterHint(parameter) {
       </div>
       <div v-show="!requestCompact" class="pane-body">
         <slot name="samples" />
+        <ImportedInputs :session="session" />
         <p v-if="!parameters.length && !operation.requestBody" class="muted empty">Ready to send. This endpoint has no inputs.</p>
 
         <div v-for="parameter in parameters" :key="fieldKey(parameter)" class="field">

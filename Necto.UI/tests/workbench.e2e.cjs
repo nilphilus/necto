@@ -174,9 +174,9 @@ const op = (name, extra = {}) => ({
   await p
     .getByRole('combobox', { name: 'Example', exact: true })
     .selectOption('other')
-  assert.match(await p.locator('textarea').inputValue(), /INV-99/)
+  assert.match(await p.locator('.request-pane textarea').inputValue(), /INV-99/)
   await p.getByRole('combobox', { name: 'Schema variant' }).selectOption('1')
-  assert.match(await p.locator('textarea').inputValue(), /number/)
+  assert.match(await p.locator('.request-pane textarea').inputValue(), /number/)
   await p
     .getByRole('combobox', { name: 'Body format' })
     .selectOption('application/xml')
