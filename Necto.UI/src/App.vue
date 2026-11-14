@@ -110,9 +110,14 @@ const current = computed(() => chain.value[currentIndex.value])
 const authorizedCount = computed(() => { const api = authentication.apis.get(current.value?.operation.apiId ?? 'local'); return Object.keys(api?.credentials ?? {}).length + (api?.access ? 1 : 0) })
 function openAuthorization(id = current.value?.operation.apiId ?? 'local') { authorizationApiId.value = id; authorizationOpen.value = true }
 async function closeAuthorization() { authorizationOpen.value = false; await nextTick(); authorizationButton.value?.focus() }
-function retryAuthorizedMetadata() {
-  void reloadCatalog()
-  for (const entry of connections.value) void externalApis.testConnection(entry.id)
+async function retryAuthorizedMetadata(id) {
+  if (typeof id === 'string' && id !== 'local') {
+    await externalApis.testConnection(id)
+    return { error: externalStatuses.get(id)?.error || '' }
+  }
+  await reloadCatalog()
+  if (typeof id !== 'string') await Promise.all(connections.value.map(entry => externalApis.testConnection(entry.id)))
+  return { error: error.value }
 }
 watch([spec, configuration, operations, connections, externalApis.contexts], () => {
   const activeIds = new Set(['local', ...connections.value.map(entry => entry.id)])
@@ -679,7 +684,7 @@ function removeScenario(id) {
       </div>
     </header>
 
-    <AuthorizationDialog v-if="authorizationOpen" :authentication="authentication" :api-id="authorizationApiId" @close="closeAuthorization" @retry="retryAuthorizedMetadata" />
+    <AuthorizationDialog v-if="authorizationOpen" :authentication="authentication" :api-id="authorizationApiId" @close="closeAuthorization" :retry-documentation="retryAuthorizedMetadata" />
     <p v-if="error" class="app-message error" role="alert">{{ error }} <button type="button" class="secondary" @click="retryAuthorizedMetadata">Retry documentation</button></p>
     <p v-else-if="!spec" class="app-message" role="status">Loading API documentation…</p>
     <template v-else>

@@ -21,18 +21,19 @@ const props = defineProps({
 const emit = defineEmits(['closed', 'edit-request'])
 const closeTarget = ref(null)
 function restoreFocus() { const target = closeTarget.value?.isConnected ? closeTarget.value : trigger.value; closeTarget.value = null; target?.focus(); emit('closed', target) }
-defineExpose({ openSection: section => { tab.value = section; dialog.value.showModal() } })
+const requestedSection = ref('Checks')
+function openSection(section) {
+  requestedSection.value = section
+  tab.value = ['Checks', 'Server', 'Options'].includes(section) ? 'Configure' : section
+  if (tab.value === 'Bindings' && !props.session.bindings?.length) tab.value = 'Contract'
+  dialog.value.showModal()
+}
+defineExpose({ openSection })
 const toolsId = useId()
 const trigger = ref(null)
 const sectionId = name => toolsId + '-' + name.toLowerCase()
-const sections = ['Contract','Code','Bindings','Checks','Server','Options','History']
-async function navigateTabs(event) {
-  if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key) || event.altKey || event.ctrlKey || event.metaKey) return
-  event.preventDefault()
-  const current = sections.indexOf(tab.value)
-  tab.value = sections[event.key === 'Home' ? 0 : event.key === 'End' ? sections.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + sections.length) % sections.length]
-  await nextTick(); document.getElementById(sectionId(tab.value) + '-tab')?.focus()
-}
+const sections = computed(() => ['Contract', 'Code', 'History', 'Configure', ...(props.session.bindings?.length ? ['Bindings'] : [])])
+watch(() => props.session.bindings?.length, length => { if (!length && tab.value === 'Bindings') tab.value = 'Contract' })
 
 const dialog = ref(null),
   tab = ref('Contract'),
@@ -128,26 +129,15 @@ function addCheck() {
         ✕
       </button>
     </header>
-    <nav role="tablist" aria-label="Request tool sections" @keydown="navigateTabs">
-      <button
-        v-for="item in sections"
-        :key="item"
-        type="button"
-        :id="sectionId(item) + '-tab'" role="tab" :aria-selected="tab === item" :aria-controls="sectionId(item)" :tabindex="tab === item ? 0 : -1"
-        @click="tab = item"
-      >
-        {{ item }}
-      </button>
-    </nav>
-    <label class="mobile-tool-select">Request tool section<select v-model="tab"><option v-for="section in ['Contract','Code','Bindings','Checks','Server','Options','History']" :key="section">{{ section }}</option></select></label>
+    <label class="tool-picker">Tool<select v-model="tab" aria-label="Change request tool"><option v-for="section in sections" :key="section" :value="section">{{ section === 'Configure' ? 'Configure request' : section }}</option></select></label>
     </div>
-    <section v-if="tab === 'Contract'" :id="sectionId('Contract')" role="tabpanel" :aria-labelledby="sectionId('Contract') + '-tab'" tabindex="0">
+    <section v-if="tab === 'Contract'" :id="sectionId('Contract')" role="region" aria-label="Contract" tabindex="0">
 
       <h3>{{ operation.summary || operation.name }}</h3>
       <div v-html="description" />
       <ContractPanel :operation="operation" />
     </section>
-    <section v-if="tab === 'Code'" :id="sectionId('Code')" role="tabpanel" :aria-labelledby="sectionId('Code') + '-tab'" tabindex="0">
+    <section v-if="tab === 'Code'" :id="sectionId('Code')" role="region" aria-label="Code" tabindex="0">
       <label v-if="session.result?.sentRequest">Request source<select v-model="codeSource"><option value="draft">Current draft</option><option value="sent">Request sent for this response</option></select></label>
 
       <label
@@ -167,7 +157,7 @@ function addCheck() {
       <div v-if="snippet.error" class="error" role="alert"><p>{{ snippet.error }}</p><button type="button" @click="fixInputs">Fix request inputs</button></div>
       <pre v-else tabindex="0">{{ snippet.code }}</pre>
     </section>
-    <section v-if="tab === 'Bindings'" :id="sectionId('Bindings')" role="tabpanel" :aria-labelledby="sectionId('Bindings') + '-tab'" tabindex="0">
+    <section v-if="tab === 'Bindings'" :id="sectionId('Bindings')" role="region" aria-label="Bindings" tabindex="0">
       <p>
         Scenario bindings normally use the selected array index. Match an object
         by a field to keep the scenario stable when the array order changes. A
@@ -207,7 +197,7 @@ function addCheck() {
         Select a mapped value from a response to create a binding.
       </p>
     </section>
-    <section v-if="tab === 'Checks'" :id="sectionId('Checks')" role="tabpanel" :aria-labelledby="sectionId('Checks') + '-tab'" tabindex="0">
+    <details v-if="tab === 'Configure'" :id="sectionId('Checks')" :open="requestedSection === 'Checks'" class="configure-group"><summary>Response checks</summary>
       <p>
         Checks run after each response. Paths use JSON Pointer, for example
         /lines/0/id.
@@ -246,8 +236,8 @@ function addCheck() {
       >
         Add check
       </button>
-    </section>
-    <section v-if="tab === 'Server'" :id="sectionId('Server')" role="tabpanel" :aria-labelledby="sectionId('Server') + '-tab'" tabindex="0">
+    </details>
+    <details v-if="tab === 'Configure'" :id="sectionId('Server')" :open="requestedSection === 'Server'" class="configure-group"><summary>API server</summary>
       <p>
         Choose for this request, or save as the default for this API.
         Credentials stay scoped to the origins approved in Authorize.
@@ -293,8 +283,9 @@ function addCheck() {
         operation.server?.url ||
         configuration?.apiBaseUrl
       }}</pre>
-    </section>
-    <section v-if="tab === 'Options'" :id="sectionId('Options')" role="tabpanel" :aria-labelledby="sectionId('Options') + '-tab'" tabindex="0">
+    </details>
+    <details v-if="tab === 'Configure'" :id="sectionId('Options')" :open="requestedSection === 'Options'" class="configure-group"><summary>Timeout and response budget</summary>
+      <label>Response budget (MiB)<input v-model.number="session.responseLimitMiB" type="number" min="1" max="512" placeholder="32" /></label><p>Text and JSON reception stops at this budget, including responses without Content-Length. Raising it can use substantially more memory during parsing. No automatic retry. Binary downloads and bounded SSE/NDJSON streams have separate handling.</p>
       <label
         >Timeout (milliseconds)<input
           v-model.number="session.timeout"
@@ -303,8 +294,8 @@ function addCheck() {
           max="600000"
       /></label>
       <p>Cancel is available beside Send while a request is running.</p>
-    </section>
-    <section v-if="tab === 'History'" :id="sectionId('History')" role="tabpanel" :aria-labelledby="sectionId('History') + '-tab'" tabindex="0">
+    </details>
+    <section v-if="tab === 'History'" :id="sectionId('History')" role="region" aria-label="History" tabindex="0">
       <HistoryPanel :history="history" :operation="operation" :session="session" @restored="fixInputs" />
 
     </section>
@@ -312,6 +303,10 @@ function addCheck() {
   </dialog>
 </template>
 <style scoped>
+.tool-picker { display:flex; align-items:center; gap:.5rem; margin:.5rem 0; font-size:.85rem; }
+.tool-picker select { flex:1; min-width:0; }
+.configure-group { padding:.6rem 0; border-bottom:1px solid var(--line); }
+.configure-group > summary { cursor:pointer; font-weight:600; }
 .mobile-tool-select {display:none}
 :global(body:has(.request-tools-dialog[open])) {overflow:hidden}
 .request-tools-dialog {overscroll-behavior:contain}
