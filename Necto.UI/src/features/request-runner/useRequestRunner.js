@@ -1,3 +1,4 @@
+import { executionOptions } from '../workbench/executionOptions.js'
 import { requestIdentity, captureSentRequest } from '../workbench/requestContext.js'
 import { useServerProfiles } from '../workbench/serverProfiles.js'
 import { markRaw, onScopeDispose, reactive, watch } from 'vue'
@@ -53,9 +54,11 @@ export function useRequestRunner(configuration, authentication) {
     const controller = new AbortController()
     running.add(controller)
     controllers.set(session, controller)
-    const timeout = setTimeout(() => controller.abort(new Error("Request timed out.")), Math.min(600000, Math.max(1, Number(session.timeout) || 30000)))
+    let timeout
     let request
     try {
+      const policy = executionOptions(session)
+      timeout = setTimeout(() => controller.abort(new Error("Request timed out.")), policy.timeout)
       validateAssertions(session.assertions ?? [])
       const identity = requestIdentity(buildRequest(operation, configuration.value, session, values), session)
       request = prepare(operation, session, values)
@@ -64,7 +67,7 @@ export function useRequestRunner(configuration, authentication) {
       request.options.signal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
       onRequest?.(redactedRequest(request))
       const started = performance.now()
-      const result = await sendRequest(request, { responseLimitBytes: (Number(session.responseLimitMiB) || 32) * 1024 * 1024, onProgress: progress => {
+      const result = await sendRequest(request, { responseLimitBytes: policy.responseLimitMiB * 1024 * 1024, onProgress: progress => {
         session.result = { ...progress, requestIdentity: identity, sentRequest, elapsed: Math.round(performance.now() - started) }
       } })
       if (result.json && typeof result.json === 'object') markRaw(result.json)

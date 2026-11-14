@@ -18,6 +18,7 @@ const trigger = ref(null),
   open = ref(false),
   style = ref({}),
   feedback = ref('');
+defineExpose({ revealInvalid: element => advanced.value.revealInvalid(element) })
 const prepared = computed(() => {
   try {
     return {
