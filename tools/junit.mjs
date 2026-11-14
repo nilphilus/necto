@@ -1,3 +1,4 @@
+import { failureDiagnostic } from './failure-diagnostic.mjs'
 const xml = (value) =>
   String(value ?? '')
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')
@@ -14,5 +15,5 @@ export function junitReport(report) {
   const skipped = report.steps.filter((step) =>
     ['skipped', 'waiting', 'cancelled'].includes(step.status)
   ).length;
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuite name="${xml(report.scenario)}" tests="${report.steps.length}" failures="${failures}" skipped="${skipped}">\n${report.steps.map((step) => `<testcase name="${xml(step.operation)}" time="${Math.max(0, (step.elapsed ?? 0) / 1000)}">${step.status === 'failed' || step.checks.some((check) => !check.passed) ? '<failure message="Scenario step failed"/>' : ['skipped', 'waiting', 'cancelled'].includes(step.status) ? '<skipped/>' : ''}</testcase>`).join('\n')}\n</testsuite>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuite name="${xml(report.scenario)}" tests="${report.steps.length}" failures="${failures}" skipped="${skipped}">\n${report.steps.map((step) => `<testcase name="${xml(step.operation)}" time="${Math.max(0, (step.elapsed ?? 0) / 1000)}">${step.status === 'failed' || step.checks.some((check) => !check.passed) ? `<failure type="${xml(failureDiagnostic(step.failure?.code).code)}" message="${xml(failureDiagnostic(step.failure?.code).message)}">${xml(JSON.stringify(failureDiagnostic(step.failure?.code, { responseLimitMiB: step.failure?.limitMiB, timeout: step.failure?.timeoutMs }, step.failure?.httpStatus)))}</failure>` : ['skipped', 'waiting', 'cancelled'].includes(step.status) ? '<skipped/>' : ''}</testcase>`).join('\n')}\n</testsuite>\n`;
 }

@@ -52,7 +52,7 @@ export async function readBoundedText(response, { signal, onProgress, responseLi
       bytes += chunk.value.byteLength
       if (bytes > limit) {
         await reader.cancel('Response budget exceeded')
-        throw new Error(`Response exceeded the ${Math.round(limit / 1024 / 1024)} MiB preview budget. Reception stopped; no partial JSON is shown. Change the budget in Tools → Configure request → Response budget before explicitly sending again.`)
+        throw Object.assign(new Error(`Response exceeded the ${Math.round(limit / 1024 / 1024)} MiB preview budget. Reception stopped; no partial JSON is shown. Change the budget in Tools → Configure request → Response budget before explicitly sending again.`), { code: 'RESPONSE_LIMIT_EXCEEDED' })
       }
       parts.push(decoder.decode(chunk.value, { stream: true }))
       if (performance.now() - updated > 100) { updated = performance.now(); onProgress?.({ bytes, total, limit }) }
