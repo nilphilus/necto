@@ -1,4 +1,5 @@
 <script setup>
+import MarkdownText from './MarkdownText.vue'
 import { computed, ref, watch } from 'vue';
 import ContractMedia from './ContractMedia.vue';
 const props = defineProps({ operation: Object, session: Object });
@@ -35,9 +36,7 @@ const type = (schema) => {
         Request body
         <small v-if="operation.requestBody.required">· required</small>
       </summary>
-      <p v-if="operation.requestBody.description">
-        {{ operation.requestBody.description }}
-      </p>
+      <MarkdownText v-if="operation.requestBody.description" :text="operation.requestBody.description" />
       <section
         v-for="(media, name) in operation.requestBody.content"
         :key="name"
@@ -62,7 +61,7 @@ const type = (schema) => {
         <dl>
           <template v-for="(header, name) in response.headers" :key="name"
             ><dt>{{ name }}</dt>
-            <dd>{{ operation.resolve(header)?.description }}</dd></template
+            <dd><MarkdownText :text="operation.resolve(header)?.description" /></dd></template
           >
         </dl>
       </details>
@@ -79,7 +78,7 @@ const type = (schema) => {
         }}<small v-if="parameter.required || parameter.in === 'path'">
           · required</small
         >
-        <p v-if="parameter.description">{{ parameter.description }}</p>
+        <MarkdownText v-if="parameter.description" :text="parameter.description" />
         <p v-if="operation.resolve(parameter.schema)?.enum">
           Allowed:
           {{ JSON.stringify(operation.resolve(parameter.schema).enum) }}

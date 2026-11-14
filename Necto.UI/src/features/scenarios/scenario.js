@@ -126,7 +126,7 @@ export function prepareScenario(scenario, { operations, links, configuration, cr
     try {
       for (const binding of step.bindings) {
         const origin = plan[binding.sourceStep].operation
-        const valid = links.some(link => link.from.key === origin.key && link.to.key === step.operation.key &&
+        const valid = links.some(link => !link.navigationOnly && !Object.hasOwn(link, 'constant') && link.from.key === origin.key && link.to.key === step.operation.key &&
           link.location === binding.location && link.name === binding.name && matchesPath(
             [...sourcePath(link.source), ...(link.source.property === null ? [] : [link.source.property])], binding.path))
         if (!valid) throw new Error(`The mapping from step ${binding.sourceStep + 1} (${pathLabel(binding.path)}) to ${binding.location}:${binding.name ?? 'body'} is no longer available.`)

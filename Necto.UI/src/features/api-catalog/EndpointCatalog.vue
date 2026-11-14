@@ -1,4 +1,5 @@
 <script setup>
+import DescriptionHelp from '../workbench/DescriptionHelp.vue'
 import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
@@ -79,6 +80,7 @@ function toggleGroup(name) {
           <span>{{ group.name }}</span>
           <small>{{ group.operations.length }}</small>
         </button>
+        <DescriptionHelp :label="'About group ' + group.name" :description="group.description" />
       </h3>
       <ul v-show="isExpanded(group.name)" :id="group.id">
         <li v-for="operation in group.operations" :key="operation.key">

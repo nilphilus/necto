@@ -1,12 +1,12 @@
 <script setup>
+import { exampleDrafts } from './openapiExamples.js'
 import { applyContractExample } from './contractExample.js'
 import HistoryPanel from './HistoryPanel.vue'
 import ContractPanel from './ContractPanel.vue'
 import { computed, ref, useId, nextTick, watch } from 'vue'
 
 
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import MarkdownText from './MarkdownText.vue'
 import { buildRequest } from '../request-runner/request.js'
 import { requestSnippet } from './snippets.js'
 import { assertionKinds } from './assertions.js'
@@ -74,9 +74,6 @@ const snippet = computed(() => {
   }
 })
 watch(() => props.operation.key, () => dialog.value?.close())
-const description = computed(() =>
-  DOMPurify.sanitize(marked.parse(props.operation.description ?? ''))
-)
 watch([snippet, language], () => { copied.value = false; error.value = '' })
 async function fixInputs() {
   const runner = dialog.value.closest('.runner')
@@ -89,6 +86,7 @@ async function fixInputs() {
 async function useExample(example) {
   try {
     applyContractExample(props.session, props.operation, example)
+    exampleDrafts.delete(props.session)
     emit('edit-request')
     await nextTick()
     closeTarget.value = dialog.value.closest('.runner')?.querySelector('textarea')
@@ -156,7 +154,7 @@ function addCheck() {
     <section v-if="tab === 'Contract'" :id="sectionId('Contract')" role="region" aria-label="Contract" tabindex="0">
 
       <h3>{{ operation.summary || operation.name }}</h3>
-      <div v-html="description" />
+      <MarkdownText :text="operation.description" />
       <ContractPanel :operation="operation" :session="session" @use-example="useExample" /><p v-if="error" role="alert" class="error">{{ error }}</p>
     </section>
     <section v-if="tab === 'Code'" :id="sectionId('Code')" role="region" aria-label="Code" tabindex="0">
