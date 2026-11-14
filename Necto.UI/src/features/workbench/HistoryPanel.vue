@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
+import { historySummary } from './historySummary.js';
 import { diffValues } from './history.js';
 import { requestFromHistory, restoreHistoryDraft } from './historySnapshot.js';
 import { requestSnippet } from './snippets.js';
@@ -27,8 +28,12 @@ const changes = computed(() => {
     comparable.value[0];
   return a && b ? diffValues(a.payload, b.payload) : null;
 });
-const label = (entry) =>
-  `${new Date(entry.at).toLocaleTimeString()} · ${entry.status ?? 'No response'} · ${entry.elapsed ?? '—'} ms`;
+const summaries = computed(() => new Map(entries.value.map(entry => [entry.id, historySummary(entry, props.operation)])))
+const multipleTargets = computed(() => new Set([...summaries.value.values()].map(summary => summary.target).filter(Boolean)).size > 1)
+const label = (entry) => {
+  const summary = summaries.value.get(entry.id)
+  return `${new Date(entry.at).toLocaleTimeString()} · ${entry.status ?? 'No response'} · ${entry.elapsed ?? '—'} ms${summary?.input ? ' · ' + summary.input : ''}${multipleTargets.value && summary?.target ? ' · ' + summary.target : ''}`
+}
 function restore(entry) {
   if (props.session.pending) return;
   restoreHistoryDraft(props.session, entry.snapshot);
