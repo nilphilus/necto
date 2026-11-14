@@ -14,8 +14,13 @@ const props = defineProps({
   values: Map,
   configuration: Object,
   history: Object,
+  hideTrigger: Boolean,
   prepare: Function
 })
+const emit = defineEmits(['closed', 'edit-request'])
+const closeTarget = ref(null)
+function restoreFocus() { const target = closeTarget.value?.isConnected ? closeTarget.value : trigger.value; closeTarget.value = null; target?.focus(); emit('closed', target) }
+defineExpose({ openSection: section => { tab.value = section; dialog.value.showModal() } })
 const changes = computed(() => {
   const entries = props.history?.forOperation(props.operation.key) ?? []
   return entries.length > 1 &&
@@ -66,10 +71,12 @@ const description = computed(() =>
 watch([snippet, language], () => { copied.value = false; error.value = '' })
 async function fixInputs() {
   const runner = dialog.value.closest('.runner')
-  dialog.value.close()
+  emit('edit-request')
   await nextTick()
-  runner?.querySelector('input:invalid, textarea:invalid, textarea, input:not([readonly]):not([type=checkbox])')?.focus()
+  closeTarget.value = runner?.querySelector('input:invalid, textarea:invalid, textarea, input:not([readonly]):not([type=checkbox])')
+  dialog.value.close()
 }
+
 async function copy() {
   if (snippet.value.error) return
   try {
@@ -112,10 +119,9 @@ function addCheck() {
 }
 </script>
 <template>
-  <button ref="trigger" type="button" class="secondary" aria-haspopup="dialog" :aria-controls="toolsId" @click="dialog.showModal()">
-    Tools
-  </button>
-  <dialog :id="toolsId" ref="dialog" :aria-label="`Request tools: ${operation.method} ${operation.path}`" @close="trigger?.focus()" @click="$event.target === dialog && dialog.close()">
+  <button v-if="!hideTrigger" ref="trigger" type="button" class="secondary" aria-haspopup="dialog" :aria-controls="toolsId" @click="dialog.showModal()">Tools</button>
+  <dialog :id="toolsId" ref="dialog" :aria-label="`Request tools: ${operation.method} ${operation.path}`" @close="restoreFocus" @click="$event.target === dialog && dialog.close()">
+
     <header>
       <strong>{{ operation.method }} {{ operation.path }}</strong
       ><button
