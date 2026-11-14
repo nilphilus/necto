@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { junitReport } from './junit.mjs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 import {
@@ -115,11 +116,13 @@ async function main() {
       throw new Error(`Missing value for ${key}`)
     else args[key] = process.argv[++index]
   }
-  if (!args['--scenario'] || !args['--document'] || !args['--base-url'])
+  if (!args['--base-url'] || !args['--bundle'] && (!args['--scenario'] || !args['--document']))
     throw new Error(
-      'Usage: node tools/necto-run.mjs --scenario scenario.json --document openapi.yaml --base-url https://api.example.com [--mappings mappings.json] [--name scenario-name] [--bearer-env TOKEN_ENV] [--allow-writes] [--report report.json]'
+      'Usage: node tools/necto-run.mjs --bundle necto-ci.json --base-url URL [--junit report.xml] OR --scenario scenario.json --document openapi.yaml --base-url https://api.example.com [--mappings mappings.json] [--name scenario-name] [--bearer-env TOKEN_ENV] [--allow-writes] [--report report.json]'
     )
-  const saved = JSON.parse(await readFile(args['--scenario'], 'utf8'))
+  const bundle = args['--bundle'] ? JSON.parse(await readFile(args['--bundle'], 'utf8')) : undefined
+  if (bundle && (bundle.format !== 'necto-ci-bundle' || bundle.version !== 1 || !bundle.scenario || !bundle.document || !Array.isArray(bundle.mappings))) throw new Error('Invalid CI bundle.')
+  const saved = bundle?.scenario ?? JSON.parse(await readFile(args['--scenario'], 'utf8'))
   const candidates =
     saved.format === 'necto-workspace'
       ? saved.entries.flatMap((entry) => entry.value.scenarios ?? [])
@@ -131,8 +134,8 @@ async function main() {
       : undefined
   if (!scenario) throw new Error('Select a scenario with --name.')
   const baseUrl = args['--base-url'],
-    parsed = parseDocument(await readFile(args['--document'], 'utf8'))
-  const document = await bundleReferences(
+    parsed = parseDocument(bundle ? JSON.stringify(bundle.document) : await readFile(args['--document'], 'utf8'))
+  const document = bundle ? parsed : await bundleReferences(
     parsed,
     new URL('/openapi.json', baseUrl).href
   )
@@ -150,9 +153,10 @@ async function main() {
     allowWrites: args['--allow-writes'],
     mappings: args['--mappings']
       ? JSON.parse(await readFile(args['--mappings'], 'utf8'))
-      : []
+      : bundle?.mappings ?? []
   })
   const text = JSON.stringify(report, null, 2) + '\n'
+  if (args['--junit']) await writeFile(args['--junit'], junitReport(report))
   if (args['--report']) await writeFile(args['--report'], text)
   process.stdout.write(text)
   process.exitCode = report.status === 'completed' ? 0 : 1
