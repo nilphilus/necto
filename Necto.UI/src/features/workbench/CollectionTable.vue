@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue';
 import { tableColumns, tableCell, discoverTableColumns, contractTableColumns } from './collectionTable.js';
 import { pageRange, PREVIEW_PAGE_SIZE } from '../request-runner/preview.js';
 import PreviewPager from '../request-runner/PreviewPager.vue';
@@ -13,7 +13,32 @@ const props = defineProps({
   status: [String, Number],
   contentType: String
 });
-defineEmits(['select', 'inspect']);
+const emit = defineEmits(['select', 'inspect']);
+const rowMenu = ref(null), rowMenuElement = ref(null)
+let menuTrigger
+async function openRowMenu(row, event) {
+  menuTrigger = event.currentTarget
+  const rect = menuTrigger.getBoundingClientRect()
+  rowMenu.value = { row, top: Math.max(8, Math.min(rect.bottom + 4, innerHeight - 130)), left: Math.max(8, Math.min(rect.right - 180, innerWidth - 190)) }
+  await nextTick(); rowMenuElement.value?.querySelector('button')?.focus()
+}
+function closeRowMenu(focus = true) { rowMenu.value = null; if (focus && menuTrigger?.isConnected) menuTrigger.focus() }
+function chooseRow(action) {
+  const row = rowMenu.value.row
+  closeRowMenu(action === 'select')
+  emit(action, row.path)
+}
+function outsideMenu(event) { if (rowMenu.value && !rowMenuElement.value?.contains(event.target) && event.target !== menuTrigger) closeRowMenu(false) }
+function resizeMenu() { closeRowMenu(false) }
+function menuKeys(event) {
+  if (!['ArrowDown','ArrowUp','Home','End'].includes(event.key)) return
+  event.preventDefault()
+  const buttons = [...rowMenuElement.value.querySelectorAll('button')], index = buttons.indexOf(document.activeElement)
+  buttons[event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus()
+}
+onMounted(() => { document.addEventListener('pointerdown', outsideMenu); window.addEventListener('resize', resizeMenu) })
+onScopeDispose(() => { document.removeEventListener('pointerdown', outsideMenu); window.removeEventListener('resize', resizeMenu) })
+watch([() => props.value, () => props.path], () => closeRowMenu(false))
 const page = ref(1),
   selectedColumns = ref([]);
 const columns = ref([]), cursor = ref(25), discovering = ref(false)
@@ -76,7 +101,7 @@ const active = (path) =>
     </details>
     <PreviewPager :range="range" label="Rows" @change="page = $event" />
     <div
-      class="table-scroll"
+      class="table-scroll" @scroll="closeRowMenu(false)"
       tabindex="0"
       aria-label="Collection response table"
     >
@@ -98,8 +123,9 @@ const active = (path) =>
             <td v-for="name in visibleColumns" :key="name">
               {{ tableCell(row.value?.[name]) }}
             </td>
-            <td>
-              <button
+            <td class="row-actions">
+              <button type="button" class="mobile-row-trigger" :aria-label="`Actions for row ${row.index + 1}`" aria-haspopup="menu" :aria-expanded="rowMenu?.row.index === row.index" @click="openRowMenu(row, $event)">⋯</button>
+              <span class="desktop-row-actions"><button
                 v-if="selectable(row.path)"
                 type="button"
                 :aria-pressed="active(row.path)"
@@ -113,20 +139,28 @@ const active = (path) =>
                 @click="$emit('inspect', row.path)"
               >
                 Inspect
-              </button>
+              </button></span>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
+    <Teleport to="body"><div v-if="rowMenu" ref="rowMenuElement" class="row-action-menu" role="menu" :aria-label="`Actions for row ${rowMenu.row.index + 1}`" :style="{top:rowMenu.top+'px',left:rowMenu.left+'px'}" @keydown.esc.stop.prevent="closeRowMenu()" @keydown="menuKeys" @keydown.tab="closeRowMenu(false)">
+      <button v-if="selectable(rowMenu.row.path)" type="button" role="menuitem" :aria-label="`Select row ${rowMenu.row.index + 1}`" @click="chooseRow('select')">{{ active(rowMenu.row.path) ? 'Selected object' : 'Select object' }}</button>
+      <button type="button" role="menuitem" :aria-label="`Inspect row ${rowMenu.row.index + 1}`" @click="chooseRow('inspect')">Inspect row</button>
+    </div></Teleport>
   </div>
 </template>
 <style scoped>
+.mobile-row-trigger { display:none; }
+.row-action-menu { position:fixed; z-index:50; width:180px; padding:.35rem; display:grid; gap:.25rem; border:1px solid var(--line); border-radius:.4rem; background:var(--surface); color:var(--text); box-shadow:0 6px 20px #0003; }
+.row-action-menu button { text-align:left; min-height:44px; padding:.45rem .6rem; color:inherit; border-color:var(--line); }
 @media(max-width:720px) {
+  .desktop-row-actions { display:none; }
+  .mobile-row-trigger { display:inline-block; min-width:44px; min-height:44px; font-size:1.1rem; padding:0; margin:0; }
   th:last-child, td:last-child { position:sticky; right:0; background:#254737; box-shadow:-2px 0 3px #0003; white-space:nowrap; }
   th:last-child { z-index:2; }
   tr.selected td:last-child { background:#315947; }
-  td:last-child button { min-height:2.5rem; padding:.35rem .45rem; }
 }
 
 .collection-table {
