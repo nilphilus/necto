@@ -1,13 +1,12 @@
 <script setup>
+import TransferPreview from './TransferPreview.vue'
 import { computed, ref } from 'vue'
 import {
   exportWorkspace,
-  inspectWorkspace,
-  importWorkspace
+  inspectWorkspace
 } from './workspace.js'
 const props = defineProps({ importDocument: Function, operations: Array })
 const includeBodies = ref(false),
-  overwrite = ref(false),
   preview = ref(null),
   message = ref(''),
   error = ref('')
@@ -64,15 +63,7 @@ async function inspect(event) {
     preview.value = null
   }
 }
-function apply() {
-  try {
-    const count = importWorkspace(preview.value, localStorage, overwrite.value)
-    message.value = `Imported ${count} entries. Reload Necto to use the updated workspace.`
-    preview.value = null
-  } catch (cause) {
-    error.value = cause.message
-  }
-}
+function imported(count) { message.value = `Imported ${count} items. Reload Necto to use the updated workspace.`; preview.value = null }
 async function loadDocument(event) {
   try {
     await props.importDocument(
@@ -113,16 +104,7 @@ async function loadDocument(event) {
         {{ unavailable }} steps refer to operations outside the current catalog.
         Enable the matching API before running them.
       </p>
-      <p>
-        {{ preview.entries.length }} entries ·
-        {{ preview.entries.filter((entry) => entry.conflict).length }} conflicts
-      </p>
-      <label
-        ><input v-model="overwrite" type="checkbox" /> Replace existing entries
-        with the same storage key</label
-      ><button type="button" @click="apply">
-        Import {{ overwrite ? 'and replace conflicts' : 'new entries only' }}
-      </button>
+      <TransferPreview :workspace="preview" @applied="imported" />
     </div>
     <h3>OpenAPI document</h3>
     <p>
