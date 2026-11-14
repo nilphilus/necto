@@ -122,6 +122,13 @@ const active = (path) =>
   </div>
 </template>
 <style scoped>
+@media(max-width:720px) {
+  th:last-child, td:last-child { position:sticky; right:0; background:#254737; box-shadow:-2px 0 3px #0003; white-space:nowrap; }
+  th:last-child { z-index:2; }
+  tr.selected td:last-child { background:#315947; }
+  td:last-child button { min-height:2.5rem; padding:.35rem .45rem; }
+}
+
 .collection-table {
   border: 1px solid var(--line);
   border-radius: 0.5rem;
