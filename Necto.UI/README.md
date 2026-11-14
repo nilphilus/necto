@@ -1,16 +1,27 @@
 # Necto UI
 
-Necto UI is a Vue application for browsing and running the operations in an OpenAPI JSON document. The Necto NuGet package includes the compiled frontend in its assembly.
+Necto UI is a Vue application for browsing and running the operations in an OpenAPI JSON or YAML document. The Necto NuGet package includes the compiled frontend in its assembly.
+
+## Necto 0.3.0
+
+- **Authorize** loads protected OpenAPI documents and authenticates requests with Bearer, Basic, API keys, browser sessions or OAuth2/OIDC PKCE. Credentials stay in tab memory and are scoped to approved API origins.
+- Send multipart uploads, URL-encoded forms, JSON, text/XML and binary files. Inspect exposed response headers and download original binary bytes.
+- Use **Tools** for readable contracts, masked cURL/fetch/C# code, server selection, timeout, checks and history. Edited inputs clearly distinguish the previous response from the current draft.
+- Inspect stream events with the normal JSON preview, select mapped objects and continue to related requests. Object collections also offer an optional paginated table.
+- Restore draft inputs from history and compare selected responses. Import a cURL command as a reviewed draft without executing it.
+- Import/export named workspace items and individual scenarios; generate a CI bundle with JSON/JUnit reports. The CI runner currently requires the repository checkout and UI dependencies, and supports one local, file-free API scenario per run.
+
+See the [workbench and CI guide](https://github.com/nilphilus/necto/blob/v0.3.0/docs/api-workbench/README.md) and [authentication guide](https://github.com/nilphilus/necto/blob/v0.3.0/docs/authentication/README.md). OpenAPI 3.2 and Swagger 2.0 conversion have explicit support limits; this is not a full JSON Schema conformance claim.
+
 
 Browse collapsible groups by tag and switch the sidebar between operation names and paths. Selecting an endpoint in the sidebar opens its request and response page and starts a separate chain. Send with the button or with Ctrl+Enter (⌘+Enter on macOS) while focused in the operation's workspace. Drafts and responses from direct sidebar visits stay available when you revisit those endpoints.
 
-When endpoint mappings are configured, **Continue from this response** shows related operations and values. Each related request has editable fields with dropdown suggestions from the response. Type to filter the suggestions, choose a value, or enter a value that is not listed. Use **Send** for GET/HEAD requests with complete valid inputs. **Open request** is always available, including POST/PUT/PATCH/DELETE and incomplete requests; it opens an editable form with the selected values without sending a request. Request parameter inputs offer the same suggestions. Each related request gets its own step in the breadcrumb trail. Select an earlier step to restore its request and response and continue along another branch.
+When endpoint mappings are configured, **Next request** shows related operations and values. Each related request has editable fields with dropdown suggestions from the response. Type to filter the suggestions, choose a value, or enter a value that is not listed. Use **Send** for GET/HEAD requests with complete valid inputs. **Open request** is always available, including POST/PUT/PATCH/DELETE and incomplete requests; it opens an editable form with the selected values without sending a request. Request parameter inputs offer the same suggestions. Each related request gets its own step in the breadcrumb trail. Select an earlier step to restore its request and response and continue along another branch.
 
 ## Response preview
 
 JSON responses open in **Preview**, with colors for keys, strings, numbers,
-booleans and null. **Raw** shows pages of the original response text. Other response
-formats remain plain text.
+booleans and null. **Raw** shows pages of the original response text. Text/XML remains available as raw text. Binary responses preserve their original bytes for download; SSE/NDJSON responses update incrementally with bounded previews.
 
 Objects with generated mappings to available requests have a **Select** button.
 For example, run **Invoice lines**, select the second item, and choose **Edit**
@@ -20,7 +31,7 @@ This also works with nested objects and arrays. **Clear selection** restores all
 to the response and stays when revisiting a breadcrumb; sending again replaces
 it. Preview and colors work even without endpoint mappings.
 
-Response data is shown before continuation forms. On wide request panels, **Next request** sits alongside Preview so selecting an object and following a request stay in view together. On narrower panels it follows the response and can be collapsed. Requests without mappings use the full response width.
+Response data is shown before continuation forms. **Next request** shares the response toolbar. On wide screens, related requests can be pinned beside the response; narrower screens open them on demand. Requests without mappings use the full response width.
 
 ## Large responses
 
@@ -55,7 +66,7 @@ These are a development baseline, not a cross-device performance guarantee.
 
 ## Saved scenarios
 
-Build a request chain using **Continue from this response**, then open
+Build a request chain using **Next request**, then open
 **Save scenario** next to the request breadcrumbs, enter a name, and choose **Save current
 chain**. Browse saved chains in the **Scenarios** workspace. Scenarios are stored locally in the browser, scoped to the host OpenAPI
 URL. A scenario can contain up to 100 steps.
@@ -82,8 +93,7 @@ request presets are preselected and you can clear or change the selection.
 Selected presets override matching saved inputs and response bindings for that
 run. The last selected preset wins when values overlap. Preset-controlled inputs, values recorded as response bindings, and response
 bodies are not copied into scenario storage. Manually entered request inputs, including
-JSON bodies, are stored as supplied; request presets are suitable for reusable
-authentication values. External API preset opt-in rules still apply.
+JSON bodies, are stored as supplied; use **Authorize** for credentials and request presets for reusable nonsecret context. External API preset opt-in rules still apply.
 
 Before any request is sent, Necto checks operation availability, configured
 bindings, required inputs and JSON body syntax. Actual response values are
@@ -95,8 +105,7 @@ Requests run sequentially. The latest run appears under its scenario, with
 side-by-side **Request** and **Response** columns for each step. Scroll
 horizontally for later steps. Values copied from a response into a later request
 share a color. Hover or focus a value to see its connections, or click to keep
-them visible while scrolling. HTTP errors, network failures and unavailable
-response values stop later steps. Run details are kept in memory for the
+them visible while scrolling. HTTP errors stop later steps unless explicitly accepted by a matching status check. Failed checks, network failures and unavailable response values stop the run. Run details are kept in memory for the
 current workspace. **Stop scenario**
 aborts the active browser request/background parser and prevents later steps;
 it cannot undo work already received by the API. Running a scenario explicitly
