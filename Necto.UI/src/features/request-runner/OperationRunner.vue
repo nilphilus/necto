@@ -48,6 +48,12 @@ const displayedBody = computed({
 const relatedPinned = ref(false)
 const pinnedToolsHost = ref(null)
 const form = ref(null)
+const responsePreview = ref(null), nextRequests = ref(null)
+async function searchResponse(query) {
+  nextRequests.value?.closeForSearch()
+  await nextTick()
+  await responsePreview.value?.searchWholeResponse(query)
+}
 const bodyEditor = ref(null)
 const responsePane = ref(null)
 
@@ -242,8 +248,8 @@ function parameterHint(parameter) {
           <p v-if="responseStale" class="muted response-stale" role="status">{{ session.error ? (session.result?.incomplete ? 'Response reception did not complete. No complete preview is available.' : 'The latest request did not complete. Showing the previous response.') : 'Inputs changed. This response belongs to the previous request.' }}</p>
           <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }">
           <div class="response-body">
-            <ResponsePreview :result="session.result" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="responseStale">
-              <template #actions><NextRequestsPanel v-if="hasRelated" :operation-key="operation.key" :pin-target="pinnedToolsHost" @pin="relatedPinned = $event"><slot name="related" /></NextRequestsPanel></template>
+            <ResponsePreview ref="responsePreview" :result="session.result" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="responseStale">
+              <template #actions><NextRequestsPanel ref="nextRequests" v-if="hasRelated" :operation-key="operation.key" :pin-target="pinnedToolsHost" @pin="relatedPinned = $event"><slot name="related" :search-response="searchResponse" /></NextRequestsPanel></template>
             </ResponsePreview>
 
           </div>

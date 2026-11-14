@@ -75,3 +75,12 @@ test('exact matches do not ignore trailing line breaks', async () => {
   const result = await search(['invoice', 'invoice\n', 'invoice\r\n'], { query: 'invoice', exact: true })
   assert.equal(result.total, 1)
 })
+
+test('related-field search does not select an unrelated value at the same number', async () => {
+ const data=[{id:574,total:1042},{id:1042,total:1510}]
+ const result=await search(data,{query:'1042',scope:'values',field:'id'})
+ assert.equal(result.total,1);assert.deepEqual(result.matches[0].path,[1,'id'])
+ const last=await search(data,{query:'1042',scope:'values',field:'id',page:999,knownTotal:1})
+ assert.deepEqual(last.matches[0].path,[1,'id'])
+ assert.equal((await search(data,{query:'1042',scope:'values'})).total,2)
+})
