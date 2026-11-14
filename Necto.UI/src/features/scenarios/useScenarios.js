@@ -17,7 +17,7 @@ export function useScenarios(configuration, { undoDuration = 30000 } = {}) {
   onScopeDispose(stop)
   function loadStored(storageKey, reset = false) {
     const previous = scenarios.value
-    if (reset) { forgetDeletion(); stop(); runs.clear(); scenarios.value = []; error.value = '' }
+    if (reset) { stop(); runs.clear(); scenarios.value = []; error.value = '' }
     if (!storageKey) return
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey))
@@ -34,6 +34,7 @@ export function useScenarios(configuration, { undoDuration = 30000 } = {}) {
       scenarios.value = next; error.value = ''
     } catch(cause) { error.value = `Could not load saved scenarios. ${cause.message}` }
   }
+  watch(key, forgetDeletion, { flush: 'sync' })
   watch(key, storageKey => loadStored(storageKey, true), { immediate: true })
   onWorkspaceImport(key, storageKey => loadStored(storageKey))
   function persist(next) {
