@@ -87,12 +87,12 @@ export function useRequestRunner(configuration, authentication) {
       if (session.result) session.resultStale = true
       session.error = controller.signal.aborted ? controller.signal.reason?.message ?? 'Request canceled.' : signal?.aborted ? 'Request canceled.' : cause.message
       try { history.add(operation, request, undefined, session.error, session) } catch { /* Metadata retention is optional. */ }
-      if (session.result?.reception) { session.result.reception.receiving = false; session.result.reception.error = session.error }
       if (session.result?.receiving) session.result.receiving = false
       if (session.result?.stream) { session.result.stream.done = true; session.result.stream.reason = session.error }
 
       return null
     } finally {
+      if (session.result?.reception) { session.result.reception.receiving = false; session.result.reception.error = session.error }
       clearTimeout(timeout)
       controllers.delete(session)
       running.delete(controller)
