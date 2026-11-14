@@ -1,0 +1,11 @@
+{
+  "observations": [
+    {
+      "separateDraft": true,
+      "separateScenarios": true,
+      "serverWorkspaceRestored": true,
+      "explicitUpdateRetainsScenarios": true
+    }
+  ],
+  "errors": []
+}

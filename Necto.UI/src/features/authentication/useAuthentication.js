@@ -7,7 +7,7 @@ export function useAuthentication() {
   const fingerprint = scheme => JSON.stringify([scheme?.type, scheme?.scheme?.toLowerCase(), scheme?.in, scheme?.name, scheme?.openIdConnectUrl, scheme?.flows?.authorizationCode?.authorizationUrl, scheme?.flows?.authorizationCode?.tokenUrl])
   function register(input) {
     const previous = apis.get(input.id)
-    const signature = JSON.stringify([input.configuration.openApiUrl, input.configuration.apiBaseUrl, input.configuration.overrideServer])
+    const signature = JSON.stringify([input.configuration.openApiUrl, input.configuration.apiBaseUrl, input.configuration.overrideServer, input.configuration.workspaceId])
     const retain = previous && (previous.signature === signature || previous.bootstrap && httpOrigin(previous.configuration.openApiUrl) === httpOrigin(input.configuration.openApiUrl))
     const schemes = { ...(retain && !input.document ? previous.schemes : {}), ...input.schemes }
     const credentials = retain ? Object.fromEntries(Object.entries(previous.credentials).filter(([name]) => schemes[name] && fingerprint(previous.schemes[name]) === fingerprint(schemes[name]))) : {}

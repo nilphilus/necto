@@ -1,0 +1,56 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { effectScope, nextTick, ref } from 'vue'
+import { importedWorkspaceId, workspaceIdentity } from './workspaceIdentity.js'
+import { useScenarios } from '../scenarios/useScenarios.js'
+import { useRequestRunner } from '../request-runner/useRequestRunner.js'
+import { useAuthentication } from '../authentication/useAuthentication.js'
+test('distinct logical API separates storage and drafts without changing transport URL', async () => {
+  const stored = new Map(); globalThis.localStorage = { getItem: key => stored.get(key) ?? null, setItem: (key,value) => stored.set(key,value) }
+  const configuration = ref({ openApiUrl: 'https://example.test/openapi.json' })
+  stored.set('necto:scenarios:'+configuration.value.openApiUrl, JSON.stringify({version:1,scenarios:[]}))
+  const scope=effectScope(); let runner,scenarios
+  scope.run(()=>{runner=useRequestRunner(configuration);scenarios=useScenarios(configuration)})
+  const operation={key:'GET /lookup',apiId:'local',parameters:[]}
+  runner.sessionFor(operation).fields.reference='OLD'
+  const id=importedWorkspaceId(configuration.value,'Partner ledger')
+  assert.equal(id,importedWorkspaceId(configuration.value,'Partner ledger'))
+  assert.notEqual(id,importedWorkspaceId(configuration.value,'Other API'))
+  configuration.value={...configuration.value,workspaceId:id}; await nextTick()
+  assert.equal(workspaceIdentity(configuration.value),id)
+  assert.equal(configuration.value.openApiUrl,'https://example.test/openapi.json')
+  assert.equal(runner.sessionFor(operation).fields.reference,undefined)
+  assert.deepEqual(scenarios.scenarios.value,[])
+  scope.stop()
+})
+test('same workspace retains credentials; a separate API drops them',()=>{
+ const store=useAuthentication(), scheme={type:'http',scheme:'bearer'}, configuration={openApiUrl:'https://example.test/openapi.json'}
+ const register=config=>store.register({id:'local',configuration:config,schemes:{bearer:scheme},origins:['https://example.test']})
+ register(configuration);store.save('local','bearer',scheme,{token:'synthetic',origins:['https://example.test']})
+ register(configuration);assert.ok(store.apis.get('local').credentials.bearer)
+ register({...configuration,workspaceId:importedWorkspaceId(configuration,'Partner')});assert.deepEqual(store.apis.get('local').credentials,{})
+ assert.throws(()=>importedWorkspaceId(configuration,' '),/workspace name/)
+})
+
+test('a canceled request from the previous workspace cannot repopulate the new history', async () => {
+ globalThis.localStorage={getItem:()=>null,setItem:()=>{}}
+ const configuration=ref({openApiUrl:'https://example.test/openapi.json',apiBaseUrl:'https://example.test'}), scope=effectScope()
+ let runner;scope.run(()=>runner=useRequestRunner(configuration))
+ const previous=globalThis.fetch
+ globalThis.fetch=async(url,options)=>new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true}))
+ try {
+  const operation={key:'GET /lookup',apiId:'local',method:'GET',path:'/lookup',parameters:[]}
+  const pending=runner.run(operation,runner.sessionFor(operation),new Map())
+  configuration.value={...configuration.value,workspaceId:importedWorkspaceId(configuration.value,'Partner')}
+  await pending;assert.equal(runner.history.entries.length,0)
+ }finally{scope.stop();globalThis.fetch=previous}
+})
+
+test('scenario preflight resolves the currently selected server without executing',async()=>{
+ const { scenarioTargets }=await import('./scenarioTargets.js')
+ const operation={key:'GET /lookup',apiId:'local',apiName:'Partner',method:'GET',path:'/lookup',parameters:[],tags:['Other'],servers:[{url:'https://partner.test/v2'}]}
+ const scenario={version:1,id:'s',name:'s',steps:[{operationKey:operation.key,apiId:'local',method:'GET',path:'/lookup',name:'Lookup',fields:{},body:'',bindings:[],serverIndex:0}]}
+ const targets=scenarioTargets(scenario,{operations:[operation],links:[],configuration:{openApiUrl:'https://example.test/openapi.json'},createSession:()=>({}),valuesFor:()=>new Map()})
+ assert.match(targets[0].target,/partner.test\/v2/);assert.equal(targets[0].operation,'GET /lookup')
+ assert.ok(scenarioTargets(scenario,{operations:[],configuration:{}})[0].error)
+})

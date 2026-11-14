@@ -1,3 +1,4 @@
+import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { executionOptions } from '../workbench/executionOptions.js'
 import { requestIdentity, captureSentRequest } from '../workbench/requestContext.js'
 import { useServerProfiles } from '../workbench/serverProfiles.js'
@@ -16,6 +17,7 @@ export function useRequestRunner(configuration, authentication) {
   onScopeDispose(cancel)
   useServerProfiles(configuration, () => { for (const controller of running) controller.abort(new Error('API server changed. Send the request again.')) })
   const sessions = reactive(new Map())
+  watch(() => workspaceIdentity(configuration.value), (next, previous) => { if (previous && next !== previous) { cancel(); sessions.clear() } }, { flush: 'sync' })
 
   function createSession(operation) {
     return reactive({
@@ -56,6 +58,7 @@ export function useRequestRunner(configuration, authentication) {
     controllers.set(session, controller)
     let timeout
     let request
+    const workspaceAtStart = workspaceIdentity(configuration.value)
     try {
       const policy = executionOptions(session)
       timeout = setTimeout(() => controller.abort(new Error("Request timed out.")), policy.timeout)
@@ -74,12 +77,12 @@ export function useRequestRunner(configuration, authentication) {
       session.resultStale = false
       session.result = { ...result, requestIdentity: identity, sentRequest, elapsed: Math.round(performance.now() - started) }
       session.result.assertions = evaluateAssertions(session.assertions ?? [], session.result)
-      try { history.add(operation, request, session.result, '', session) } catch { /* History must not change the outcome of a sent request. */ }
+      try { if (workspaceIdentity(configuration.value) === workspaceAtStart) history.add(operation, request, session.result, '', session) } catch { /* History must not change the outcome of a sent request. */ }
       return session.result
     } catch (cause) {
       if (session.result) session.resultStale = true
       session.error = controller.signal.aborted ? controller.signal.reason?.message ?? 'Request canceled.' : signal?.aborted ? 'Request canceled.' : cause.message
-      try { history.add(operation, request, undefined, session.error, session) } catch { /* Metadata retention is optional. */ }
+      try { if (workspaceIdentity(configuration.value) === workspaceAtStart) history.add(operation, request, undefined, session.error, session) } catch { /* Metadata retention is optional. */ }
       if (session.result?.receiving) session.result.receiving = false
       if (session.result?.stream) { session.result.stream.done = true; session.result.stream.reason = session.error }
 
