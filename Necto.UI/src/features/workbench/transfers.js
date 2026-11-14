@@ -1,6 +1,6 @@
 import { exportWorkspace, inspectWorkspace } from './workspace.js'
 const clone = value => JSON.parse(JSON.stringify(value))
-function type(key) { return key.split(':')[1] }
+function type(key) { const kind = key.split(':')[1]; return kind === 'request-samples' ? 'samples' : kind }
 function records(entry) {
   const value = entry.value, kind = type(entry.key)
   if (kind === 'scenarios') return value.scenarios.map(item => ({ id: item.id, label: item.name, value: item }))

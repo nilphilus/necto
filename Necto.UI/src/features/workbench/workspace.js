@@ -17,7 +17,7 @@ function safeUrl(value) {
   }
 }
 const allowed = (key) =>
-  /^necto:(scenarios|samples|environments|external-apis|servers):/.test(key)
+  /^necto:(scenarios|samples|request-samples|environments|external-apis|servers):/.test(key)
 function scrub(value, includeBodies, key = '') {
   if (sensitiveName(key)) return undefined
   if (Array.isArray(value))
@@ -91,7 +91,7 @@ export function inspectWorkspace(text, storage) {
       if (value.version !== 1 || !Array.isArray(value.scenarios))
         throw new Error('Invalid scenario collection.')
       value.scenarios.forEach(validateScenario)
-    } else if (entry.key.startsWith('necto:samples:')) {
+    } else if ((entry.key.startsWith('necto:samples:') || entry.key.startsWith('necto:request-samples:'))) {
       if (
         !Array.isArray(value.samples) ||
         typeof value.defaultName !== 'string'
