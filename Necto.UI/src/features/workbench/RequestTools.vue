@@ -27,11 +27,14 @@ const dialog = ref(null),
   tab = ref('Contract'),
   language = ref('curl'),
   error = ref(''),
-  copied = ref(false)
+  copied = ref(false),
+  codeSource = ref('draft')
 const snippet = computed(() => {
   try {
     return requestSnippet(
-      props.prepare
+      codeSource.value === 'sent' && props.session.result?.sentRequest
+        ? props.session.result.sentRequest
+        : props.prepare
         ? props.prepare(props.operation, props.session, props.values)
         : buildRequest(
             props.operation,
@@ -154,6 +157,7 @@ function addCheck() {
       </details>
     </section>
     <section v-if="tab === 'Code'">
+      <label v-if="session.result?.sentRequest">Request source<select v-model="codeSource"><option value="draft">Current draft</option><option value="sent">Request sent for this response</option></select></label>
       <label
         >Language
         <select v-model="language">
