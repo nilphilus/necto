@@ -3,9 +3,11 @@ import assert from 'node:assert/strict'
 import { readBoundedText } from './response.js'
 test('budget counts UTF-8 bytes without Content-Length and cancels before parsing', async () => {
   let canceled = false
+  const updates = []
   const response = new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('€€')); }, cancel() { canceled = true } }))
-  await assert.rejects(readBoundedText(response, { responseLimitBytes: 5 }), /budget/)
+  await assert.rejects(readBoundedText(response, { responseLimitBytes: 5, onProgress: update => updates.push(update) }), /budget/)
   assert.equal(canceled, true)
+  assert.equal(updates.at(-1).bytes, 6)
 })
 test('chunk boundaries preserve multibyte text and report actual byte count', async () => {
   const bytes = new TextEncoder().encode('a€b'), updates = []

@@ -58,8 +58,11 @@ export async function readBoundedText(response, { signal, onProgress, responseLi
       if (performance.now() - updated > 100) { updated = performance.now(); onProgress?.({ bytes, total, limit }) }
     }
     parts.push(decoder.decode())
-    onProgress?.({ bytes, total, limit })
+    onProgress?.({ bytes, total, limit, phase: 'parsing' })
     return { text: parts.join(''), bytes }
+  } catch (error) {
+    onProgress?.({ bytes, total, limit })
+    throw error
   } finally {
     signal?.removeEventListener('abort', abort)
     reader.releaseLock()
