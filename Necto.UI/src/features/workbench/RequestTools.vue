@@ -29,7 +29,19 @@ function openSection(section) {
   if (tab.value === 'Bindings' && !props.session.bindings?.length) tab.value = 'Contract'
   dialog.value.showModal()
 }
-defineExpose({ openSection })
+const optionsMessage = ref('')
+async function revealInvalid(element) {
+  if (!element?.isConnected) return
+  const group = ['Checks', 'Server', 'Options'].find(name => document.getElementById(sectionId(name))?.contains(element))
+  requestedSection.value = group ?? 'Options'
+  tab.value = 'Configure'
+  optionsMessage.value = element.validationMessage || 'Check request settings.'
+  if (!dialog.value.open) dialog.value.showModal()
+  await nextTick()
+  element.focus()
+}
+function validateOption(event) { optionsMessage.value = event.target.validity?.valid ? '' : event.target.validationMessage }
+defineExpose({ openSection, revealInvalid })
 const toolsId = useId()
 const trigger = ref(null)
 const sectionId = name => toolsId + '-' + name.toLowerCase()
@@ -294,14 +306,15 @@ function addCheck() {
         configuration?.apiBaseUrl
       }}</pre>
     </details>
-    <details v-if="tab === 'Configure'" :id="sectionId('Options')" :open="requestedSection === 'Options'" class="configure-group"><summary>Timeout and response budget</summary>
-      <label>Response budget (MiB)<input v-model.number="session.responseLimitMiB" type="number" min="1" max="512" placeholder="32" /></label><p>Text and JSON reception stops at this budget, including responses without Content-Length. Raising it can use substantially more memory during parsing. No automatic retry. Binary downloads and bounded SSE/NDJSON streams have separate handling.</p>
+    <details v-if="tab === 'Configure'" :id="sectionId('Options')" :open="requestedSection === 'Options'" class="configure-group" @input="validateOption"><summary>Timeout and response budget</summary>
+      <p v-if="optionsMessage" role="alert" class="error">{{ optionsMessage }}</p>
+      <label>Response budget (MiB)<input v-model.number="session.responseLimitMiB" type="number" min="1" max="512" step="1" required placeholder="32" /></label><p>Text and JSON reception stops at this budget, including responses without Content-Length. Raising it can use substantially more memory during parsing. No automatic retry. Binary downloads and bounded SSE/NDJSON streams have separate handling.</p>
       <label
         >Timeout (milliseconds)<input
           v-model.number="session.timeout"
           type="number"
           min="1"
-          max="600000"
+          max="600000" required step="1"
       /></label>
       <p>Cancel is available beside Send while a request is running.</p>
     </details>
@@ -313,6 +326,8 @@ function addCheck() {
   </dialog>
 </template>
 <style scoped>
+.configure-group .error { color:#a12626; font-weight:600; }
+.configure-group input:invalid { border-color:#a12626; }
 .tool-picker { display:flex; align-items:center; gap:.5rem; margin:.5rem 0; font-size:.85rem; }
 .tool-picker select { flex:1; min-width:0; }
 .configure-group { padding:.6rem 0; border-bottom:1px solid var(--line); }
