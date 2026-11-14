@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref, useId, watch } from 'vue'
+import { computed, nextTick, ref, markRaw, useId, watch } from 'vue'
 import { responseFilename } from '../workbench/response.js'
 import PreviewPager from './PreviewPager.vue'
 import { pageRange, TEXT_PAGE_SIZE } from './preview.js'
@@ -29,10 +29,10 @@ const schedulePreviewHeight = usePreviewHeight()
 watch([raw, textPage, focusPath], () => nextTick(schedulePreviewHeight))
 let navigationId = 0
 const previewValue = computed(() => valueAtPath(props.result.json, focusPath.value))
-const text = computed(() => props.result.rawText ?? props.result.text ?? '')
+const text = computed(() => props.result.stream?.view?.selectedIndex !== undefined ? JSON.stringify(props.result.json, null, 2) : props.result.rawText ?? props.result.text ?? '')
 const range = computed(() => pageRange(text.value.length, textPage.value, TEXT_PAGE_SIZE))
 const visibleText = computed(() => text.value.slice(range.value.start, range.value.end))
-watch(() => props.result, () => { textPage.value = 1; raw.value = false; navigation.value = null; focusPath.value = []; navigationId++ })
+watch(() => props.result, (result, previous) => { if (result.stream?.view && result.stream.view === previous?.stream?.view) return; textPage.value = 1; raw.value = false; navigation.value = null; focusPath.value = []; navigationId++ })
 async function reveal(match, scroll = true) {
   const id = ++navigationId
   navigation.value = match ? { ...match, id } : null
@@ -46,10 +46,17 @@ async function reveal(match, scroll = true) {
     preview.value?.querySelector('[data-search-target="true"]')
   element?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' })
 }
+function selectPath(path) { props.result.selectedPath = path; if (props.result.stream?.view) props.result.stream.view.selectedPath = path }
+function inspectEvent(event) {
+  props.result.stream.view.selectedIndex = event.index
+  props.result.json = event.data && typeof event.data === 'object' ? markRaw(event.data) : event.data
+  selectPath(undefined); raw.value = false; focusPath.value = []; textPage.value = 1; navigation.value = null
+}
+function backToStream() { props.result.stream.view.selectedIndex = undefined; props.result.json = undefined; selectPath(undefined); raw.value = false; focusPath.value = []; textPage.value = 1 }
 function fullResponse() { focusPath.value = []; navigation.value = null; navigationId++ }
 
 function download() {
-  const url = URL.createObjectURL(props.result.binary ?? new Blob([text.value], { type: props.result.contentType || 'text/plain' }))
+  const url = URL.createObjectURL(props.result.binary ?? new Blob([props.result.rawText ?? props.result.text ?? text.value], { type: props.result.contentType || 'text/plain' }))
   const link = document.createElement('a')
   link.href = url; link.download = responseFilename(props.result)
   link.click()
@@ -82,18 +89,19 @@ function download() {
     <div v-if="result.selectedPath" class="selection-toolbar">
       <span role="status" class="selection-label">{{ selectionLabel(operation, result) }}</span>
       <details class="selection-path"><summary>JSON path</summary><code>{{ pathLabel(result.selectedPath) }}</code></details>
-      <button type="button" @click="result.selectedPath = undefined">Clear selection</button>
+      <button type="button" @click="selectPath(undefined)">Clear selection</button>
     </div>
     <div v-show="searchOpen" :id="searchId" ref="finderPanel" @keydown.esc.stop.prevent="toggleSearch(false)">
-      <PayloadSearch v-if="result.json !== undefined" :result="result" :selectors="selectors" @reveal="reveal" @select="result.selectedPath = $event" />
+      <PayloadSearch v-if="result.json !== undefined" :result="result" :selectors="selectors" @reveal="reveal" @select="selectPath($event)" />
     </div>
     <div v-if="focusPath.length && !raw" class="preview-toolbar"><code>Focused object: {{ pathLabel(focusPath) }}</code><button type="button" @click="fullResponse">Back to full response</button></div>
     <div v-if="result.json !== undefined" v-show="!raw" ref="preview" class="json-preview" tabindex="0" aria-label="JSON response preview">
-      <JsonNode :key="JSON.stringify(focusPath)" :value="previewValue" :path="focusPath" :root="true" :navigation="navigation" :selectors="selectors" :selected="result.selectedPath" @select="result.selectedPath = $event" />
+      <JsonNode :key="JSON.stringify(focusPath)" :value="previewValue" :path="focusPath" :root="true" :navigation="navigation" :selectors="selectors" :selected="result.selectedPath" @select="selectPath($event)" />
     </div>
-    <p v-if="result.stream" role="status">{{ streamEvents.length }} events · {{ result.stream.done ? "Finished" : "Receiving…" }}<template v-if="result.stream.limited"> · Preview limit reached; connection closed.</template></p>
-    <details v-for="event in streamEvents" :key="event.index"><summary>{{ event.index + 1 }} · {{ event.event }} {{ event.id }} {{ event.error }}</summary><pre>{{ JSON.stringify(event.data, null, 2) }}</pre></details>
-    <div v-if="!result.stream && text && (raw || result.json === undefined)" class="raw-preview">
+    <div v-if="result.stream?.view?.selectedIndex !== undefined" class="preview-toolbar"><strong>Event {{ result.stream.view.selectedIndex + 1 }}</strong><button type="button" @click="backToStream">Back to stream</button></div>
+    <p v-if="result.stream" role="status">{{ streamEvents.length }} events · {{ result.stream.reason ? "Interrupted" : result.stream.done ? "Finished" : "Receiving…" }}<template v-if="result.stream.limited"> · Preview limit reached; connection closed.</template></p>
+    <details v-for="event in streamEvents" v-show="result.stream?.view?.selectedIndex === undefined" :key="event.index"><summary>{{ event.index + 1 }} · {{ event.event }} {{ event.id }} {{ event.error }}</summary><button type="button" :disabled="!!event.error" @click="inspectEvent(event)">Inspect event {{ event.index + 1 }}</button><pre>{{ JSON.stringify(event.data, null, 2) }}</pre></details>
+    <div v-if="(!result.stream || result.stream.view?.selectedIndex !== undefined) && text && (raw || result.json === undefined)" class="raw-preview">
       <PreviewPager :range="range" label="Text characters" @change="textPage = $event" />
       <pre tabindex="0"><code>{{ visibleText }}</code></pre>
     </div>
