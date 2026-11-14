@@ -1,7 +1,8 @@
 <script setup>
 import SchemaTree from './SchemaTree.vue'
 import { diffValues } from './history.js'
-import { computed, ref, nextTick, watch } from 'vue'
+import { computed, ref, useId, nextTick, watch } from 'vue'
+
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { buildRequest } from '../request-runner/request.js'
@@ -23,6 +24,17 @@ const changes = computed(() => {
     ? diffValues(entries[1].payload, entries[0].payload)
     : null
 })
+const toolsId = useId()
+const trigger = ref(null)
+const sectionId = name => toolsId + '-' + name.toLowerCase()
+const sections = ['Contract','Code','Bindings','Checks','Server','Options','History']
+async function navigateTabs(event) {
+  if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key) || event.altKey || event.ctrlKey || event.metaKey) return
+  event.preventDefault()
+  const current = sections.indexOf(tab.value)
+  tab.value = sections[event.key === 'Home' ? 0 : event.key === 'End' ? sections.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + sections.length) % sections.length]
+  await nextTick(); document.getElementById(sectionId(tab.value) + '-tab')?.focus()
+}
 const dialog = ref(null),
   tab = ref('Contract'),
   language = ref('curl'),
@@ -100,10 +112,10 @@ function addCheck() {
 }
 </script>
 <template>
-  <button type="button" class="secondary" @click="dialog.showModal()">
+  <button ref="trigger" type="button" class="secondary" aria-haspopup="dialog" :aria-controls="toolsId" @click="dialog.showModal()">
     Tools
   </button>
-  <dialog ref="dialog" @click="$event.target === dialog && dialog.close()">
+  <dialog :id="toolsId" ref="dialog" :aria-label="`Request tools: ${operation.method} ${operation.path}`" @close="trigger?.focus()" @click="$event.target === dialog && dialog.close()">
     <header>
       <strong>{{ operation.method }} {{ operation.path }}</strong
       ><button
@@ -114,26 +126,18 @@ function addCheck() {
         ✕
       </button>
     </header>
-    <nav>
+    <nav role="tablist" aria-label="Request tool sections" @keydown="navigateTabs">
       <button
-        v-for="item in [
-          'Contract',
-          'Code',
-          'Bindings',
-          'Checks',
-          'Server',
-          'Options',
-          'History'
-        ]"
+        v-for="item in sections"
         :key="item"
         type="button"
-        :aria-pressed="tab === item"
+        :id="sectionId(item) + '-tab'" role="tab" :aria-selected="tab === item" :aria-controls="sectionId(item)" :tabindex="tab === item ? 0 : -1"
         @click="tab = item"
       >
         {{ item }}
       </button>
     </nav>
-    <section v-if="tab === 'Contract'">
+    <section v-if="tab === 'Contract'" :id="sectionId('Contract')" role="tabpanel" :aria-labelledby="sectionId('Contract') + '-tab'" tabindex="0">
       <h3>{{ operation.summary || operation.name }}</h3>
       <div v-html="description" />
       <details v-if="operation.requestBody">
@@ -164,8 +168,9 @@ function addCheck() {
         <pre>{{ JSON.stringify(operation.parameters, null, 2) }}</pre>
       </details>
     </section>
-    <section v-if="tab === 'Code'">
+    <section v-if="tab === 'Code'" :id="sectionId('Code')" role="tabpanel" :aria-labelledby="sectionId('Code') + '-tab'" tabindex="0">
       <label v-if="session.result?.sentRequest">Request source<select v-model="codeSource"><option value="draft">Current draft</option><option value="sent">Request sent for this response</option></select></label>
+
       <label
         >Language
         <select v-model="language">
@@ -183,7 +188,7 @@ function addCheck() {
       <div v-if="snippet.error" class="error" role="alert"><p>{{ snippet.error }}</p><button type="button" @click="fixInputs">Fix request inputs</button></div>
       <pre v-else tabindex="0">{{ snippet.code }}</pre>
     </section>
-    <section v-if="tab === 'Bindings'">
+    <section v-if="tab === 'Bindings'" :id="sectionId('Bindings')" role="tabpanel" :aria-labelledby="sectionId('Bindings') + '-tab'" tabindex="0">
       <p>
         Scenario bindings normally use the selected array index. Match an object
         by a field to keep the scenario stable when the array order changes. A
@@ -223,7 +228,7 @@ function addCheck() {
         Select a mapped value from a response to create a binding.
       </p>
     </section>
-    <section v-if="tab === 'Checks'">
+    <section v-if="tab === 'Checks'" :id="sectionId('Checks')" role="tabpanel" :aria-labelledby="sectionId('Checks') + '-tab'" tabindex="0">
       <p>
         Checks run after each response. Paths use JSON Pointer, for example
         /lines/0/id.
@@ -263,7 +268,7 @@ function addCheck() {
         Add check
       </button>
     </section>
-    <section v-if="tab === 'Server'">
+    <section v-if="tab === 'Server'" :id="sectionId('Server')" role="tabpanel" :aria-labelledby="sectionId('Server') + '-tab'" tabindex="0">
       <p>
         Choose for this request, or save as the default for this API.
         Credentials stay scoped to the origins approved in Authorize.
@@ -310,7 +315,7 @@ function addCheck() {
         configuration?.apiBaseUrl
       }}</pre>
     </section>
-    <section v-if="tab === 'Options'">
+    <section v-if="tab === 'Options'" :id="sectionId('Options')" role="tabpanel" :aria-labelledby="sectionId('Options') + '-tab'" tabindex="0">
       <label
         >Timeout (milliseconds)<input
           v-model.number="session.timeout"
@@ -320,7 +325,7 @@ function addCheck() {
       /></label>
       <p>Cancel is available beside Send while a request is running.</p>
     </section>
-    <section v-if="tab === 'History'">
+    <section v-if="tab === 'History'" :id="sectionId('History')" role="tabpanel" :aria-labelledby="sectionId('History') + '-tab'" tabindex="0">
       <p>
         Last 20 requests, kept in memory. Body snapshots and diffs are bounded;
         large bodies are omitted.
@@ -378,7 +383,7 @@ nav {
   flex-wrap: wrap;
   margin: 0.75rem 0;
 }
-nav [aria-pressed='true'] {
+nav [aria-selected='true'] {
   background: var(--accent-soft);
   color: var(--accent);
 }
