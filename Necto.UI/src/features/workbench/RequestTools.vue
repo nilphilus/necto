@@ -1,4 +1,5 @@
 <script setup>
+import { applyContractExample } from './contractExample.js'
 import HistoryPanel from './HistoryPanel.vue'
 import ContractPanel from './ContractPanel.vue'
 import { computed, ref, useId, nextTick, watch } from 'vue'
@@ -73,6 +74,15 @@ async function fixInputs() {
   dialog.value.close()
 }
 
+async function useExample(example) {
+  try {
+    applyContractExample(props.session, props.operation, example)
+    emit('edit-request')
+    await nextTick()
+    closeTarget.value = dialog.value.closest('.runner')?.querySelector('textarea')
+    dialog.value.close()
+  } catch(cause) { error.value = cause.message }
+}
 async function copy() {
   if (snippet.value.error) return
   try {
@@ -135,7 +145,7 @@ function addCheck() {
 
       <h3>{{ operation.summary || operation.name }}</h3>
       <div v-html="description" />
-      <ContractPanel :operation="operation" />
+      <ContractPanel :operation="operation" :session="session" @use-example="useExample" /><p v-if="error" role="alert" class="error">{{ error }}</p>
     </section>
     <section v-if="tab === 'Code'" :id="sectionId('Code')" role="region" aria-label="Code" tabindex="0">
       <label v-if="session.result?.sentRequest">Request source<select v-model="codeSource"><option value="draft">Current draft</option><option value="sent">Request sent for this response</option></select></label>
