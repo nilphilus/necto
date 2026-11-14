@@ -11,6 +11,9 @@ import { valueAtPath, pathLabel } from '../payload-search/search.js'
 import JsonNode from './JsonNode.vue'
 import { selectionLabel } from './selection.js'
 const props = defineProps({ result: { type: Object, required: true }, selectors: { type: Array, default: () => [] }, operation: Object, pending: Boolean, stale: Boolean })
+const responseTarget = computed(() => {
+  try { const url = new URL(props.result.sentRequest.url); return url.host + url.pathname } catch { return 'Target not retained' }
+})
 const searchOpen = ref(false)
 const finderButton = ref(null)
 const finderPanel = ref(null)
@@ -86,6 +89,7 @@ function download() {
   <div class="response-preview" @keydown.ctrl.f.prevent.stop="toggleSearch(true)" @keydown.meta.f.prevent.stop="toggleSearch(true)">
     <div class="preview-toolbar" aria-label="Response tools">
       <h3>{{ result.incomplete ? (result.receiving ? 'Response in progress' : 'Incomplete response') : pending || stale ? 'Last response' : 'Response' }}</h3>
+      <details v-if="operation" class="mobile-response-context" @keydown.esc.stop.prevent="$event.currentTarget.open = false; $event.currentTarget.querySelector('summary').focus()"><summary :title="`${operation.method} ${operation.path} · ${responseTarget}`"><strong>{{ operation.method }} {{ operation.path }}</strong><small>{{ responseTarget }}</small></summary><div><strong>{{ pending || stale ? 'Last response' : 'Response' }} · {{ operation.method }} {{ operation.path }}</strong><code>{{ responseTarget }}</code></div></details>
       <span class="status" :class="{ failed: !result.ok || (result.incomplete && !result.receiving) }" role="status">{{ result.status }} {{ result.statusText }}</span>
       <span>{{ result.elapsed }} ms</span>
       <slot name="actions" />
@@ -134,6 +138,14 @@ function download() {
 </template>
 
 <style scoped>
+.mobile-response-context { display:none; position:relative; min-width:0; }
+.mobile-response-context summary { cursor:pointer; max-width:11rem; }
+.mobile-response-context summary strong, .mobile-response-context small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mobile-response-context small { font-size:.65rem; }
+.mobile-response-context > div { position:absolute; left:0; top:100%; width:min(18rem, 75vw); z-index:6; padding:.6rem; background:var(--surface); border:1px solid var(--line); border-radius:.4rem; overflow-wrap:anywhere; }
+.mobile-response-context code { display:block; white-space:normal; margin-top:.3rem; }
+@media(max-width:720px) { .mobile-response-context { display:block; } .preview-toolbar:has(.mobile-response-context) > h3 { display:none; } }
+
 .preview-toolbar h3 { margin: 0; font-size: .85rem; }
 .status { padding: .15rem .35rem; border-radius: .3rem; background: #ddf3e8; color: #125f41; }
 .status.failed { background: #ffe3e2; color: #8f2225; }
