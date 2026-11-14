@@ -50,7 +50,7 @@ export function useRequestRunner(configuration, authentication) {
   async function run(operation, session, values, { signal, onRequest } = {}) {
     if (session.pending) return
     session.error = ''
-    session.responseProgress = null
+    if (session.result) delete session.result.reception
     session.pending = true
     const controller = new AbortController()
     running.add(controller)
@@ -73,12 +73,11 @@ export function useRequestRunner(configuration, authentication) {
         // Retain one completed result while a normal response is received/parsed.
         // Streaming responses keep their existing live event preview.
         if (progress.incomplete) {
-          session.responseProgress = update
           if (!session.result || session.result.incomplete || session.result.stream && !session.result.stream.done) session.result = update
+          else session.result.reception = update
         } else session.result = update
       } })
       if (result.json && typeof result.json === 'object') markRaw(result.json)
-      session.responseProgress = null
       session.resultStale = false
       session.result = { ...result, requestIdentity: identity, sentRequest, elapsed: Math.round(performance.now() - started) }
       session.result.assertions = evaluateAssertions(session.assertions ?? [], session.result)
@@ -88,7 +87,7 @@ export function useRequestRunner(configuration, authentication) {
       if (session.result) session.resultStale = true
       session.error = controller.signal.aborted ? controller.signal.reason?.message ?? 'Request canceled.' : signal?.aborted ? 'Request canceled.' : cause.message
       try { history.add(operation, request, undefined, session.error, session) } catch { /* Metadata retention is optional. */ }
-      if (session.responseProgress) { session.responseProgress.receiving = false; session.responseProgress.error = session.error }
+      if (session.result?.reception) { session.result.reception.receiving = false; session.result.reception.error = session.error }
       if (session.result?.receiving) session.result.receiving = false
       if (session.result?.stream) { session.result.stream.done = true; session.result.stream.reason = session.error }
 
