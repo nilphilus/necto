@@ -150,11 +150,14 @@ function operationOrigins(entries, config) {
   }
   return [...origins]
 }
-watch(authentication.revision, () => {
-  scenarioStore.stop(); scenarioRuns.clear(); scenarioState.steps = []; scenarioState.error = ''; scenarioState.status = 'idle'
-  for (const session of [...sessions.values(), ...chain.value.map(step => step.session)]) { session.result = null; session.error = '' }
-  void reloadCatalog()
-})
+onUnmounted(authentication.onChange(ids => {
+  const affected = steps => steps.some(step => ids.includes(step.operation.apiId ?? 'local'))
+  if (affected(scenarioState.steps)) { scenarioStore.stop(); scenarioState.steps = []; scenarioState.error = ''; scenarioState.status = 'idle' }
+  for (const [id, execution] of scenarioRuns) if (affected(execution.steps)) scenarioRuns.delete(id)
+  for (const session of [...sessions.values(), ...chain.value.map(step => step.session)]) if (ids.includes(session.apiId ?? 'local')) { session.result = null; session.error = '' }
+  for (const [key, entry] of historyEntries) if (affected(entry.steps)) historyEntries.delete(key)
+  if (ids.includes('local')) void reloadCatalog()
+}))
 
 const requestValues = computed(() => current.value ? valuesFor(current.value.operation) : new Map())
 const visiblePresetNames = computed(() => {
