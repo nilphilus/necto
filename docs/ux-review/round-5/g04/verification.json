@@ -1,0 +1,50 @@
+{
+  "note": "Actual CLI module with mocked fetch; no external requests.",
+  "results": [
+    {
+      "cause": "budget",
+      "canceled": true,
+      "output": {
+        "version": 1,
+        "scenario": "CI failure diagnostic",
+        "status": "failed",
+        "steps": [
+          {
+            "step": 1,
+            "operation": "GET /invoices",
+            "status": "failed",
+            "checks": [],
+            "error": "Response exceeded the configured preview budget.",
+            "failure": {
+              "code": "RESPONSE_LIMIT_EXCEEDED",
+              "message": "Response exceeded the configured preview budget.",
+              "limitMiB": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "cause": "network",
+      "canceled": false,
+      "output": {
+        "version": 1,
+        "scenario": "CI failure diagnostic",
+        "status": "failed",
+        "steps": [
+          {
+            "step": 1,
+            "operation": "GET /invoices",
+            "status": "failed",
+            "checks": [],
+            "error": "Could not receive the response. Check connectivity, TLS and redirect policy.",
+            "failure": {
+              "code": "NETWORK_ERROR",
+              "message": "Could not receive the response. Check connectivity, TLS and redirect policy."
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
