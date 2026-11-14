@@ -1,3 +1,4 @@
+import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { parseDocument, bundleReferences } from '../workbench/document.js'
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
@@ -48,7 +49,7 @@ export function useExternalApis(configuration, authentication) {
   const revision = ref(0)
   const changedApiId = ref(''), changedApiIds = ref([])
   const jobs = new Map()
-  const storageKey = computed(() => configuration.value?.openApiUrl && `necto:external-apis:${configuration.value.openApiUrl}`)
+  const storageKey = computed(() => workspaceIdentity(configuration.value) && `necto:external-apis:${workspaceIdentity(configuration.value)}`)
 
   function stop(id) {
     jobs.get(id)?.controller.abort()
@@ -88,7 +89,7 @@ export function useExternalApis(configuration, authentication) {
       if (jobs.get(id) === job) jobs.delete(id)
     }
   }
-  watch(() => configuration.value?.openApiUrl, url => {
+  watch(() => workspaceIdentity(configuration.value), url => {
     if (!url) return
     for (const id of jobs.keys()) stop(id)
     loaded.clear(); statuses.clear(); connections.value = []; show.value = false

@@ -6,6 +6,7 @@ import {
   inspectWorkspace
 } from './workspace.js'
 const props = defineProps({ importDocument: Function, operations: Array, documentSource: Object, restoreDocument: Function })
+const documentAssociation = ref('separate'), workspaceName = ref('')
 const includeBodies = ref(false),
   preview = ref(null),
   message = ref(''),
@@ -67,7 +68,8 @@ function imported(count) { message.value = `Imported ${count} items. Available n
 async function loadDocument(event) {
   try {
     await props.importDocument(
-      await readFile(event.target.files[0], 5 * 1024 * 1024), event.target.files[0].name
+      await readFile(event.target.files[0], 5 * 1024 * 1024), event.target.files[0].name,
+      { association: documentAssociation.value, workspaceName: workspaceName.value.trim() || event.target.files[0].name }
     )
     message.value = 'API document loaded for this session.'
     error.value = ''
@@ -107,13 +109,24 @@ async function loadDocument(event) {
       <TransferPreview :workspace="preview" @applied="imported" />
     </div>
     <h3>OpenAPI document</h3>
-    <p v-if="documentSource">Source: {{ documentSource.name }}</p>
+    <p v-if="documentSource">Source: {{ documentSource.name }}<template v-if="documentSource.workspaceName"> · Workspace: {{ documentSource.workspaceName }}</template></p>
     <button v-if="documentSource?.kind === 'import'" type="button" @click="restoreDocument">Return to server document</button>
     <p>
       Load JSON or YAML for this session. Supports Swagger 2.0 conversion,
       OpenAPI 3.0/3.1 and common 3.2 operations. External references require
       HTTP(S) access and CORS; credentials are omitted.
     </p>
+    <label>Document association
+      <select v-model="documentAssociation">
+        <option value="separate">Open another API in a separate workspace</option>
+        <option value="current">Update the contract of the current API</option>
+      </select>
+    </label>
+    <template v-if="documentAssociation === 'separate'">
+      <label>API workspace name<input v-model="workspaceName" maxlength="200" placeholder="Defaults to file name" /></label>
+      <p>Drafts, saved requests, scenarios, presets and server choices are separate. Use the same workspace name when reopening this API.</p>
+    </template>
+    <p v-else>Keep this API’s workspace and credentials. Existing workflows will use the imported contract and its servers.</p>
     <label
       >Local API document<input
         type="file"

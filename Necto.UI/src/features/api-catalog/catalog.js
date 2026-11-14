@@ -1,3 +1,4 @@
+import { importedWorkspaceId } from '../workbench/workspaceIdentity.js'
 import { computed, onMounted, onScopeDispose, ref } from 'vue'
 import { parseDocument, bundleReferences } from '../workbench/document.js'
 import { useExternalApis } from '../external-apis/connections.js'
@@ -118,7 +119,9 @@ export function useCatalog(authentication) {
       if (version === generation && !signal.aborted) error.value = `Could not load the API documentation. ${cause.message}`
     }
   }
-  async function importDocument(text, name = 'Local API document') {
+  async function importDocument(text, name = 'Local API document', { association = 'separate', workspaceName = name } = {}) {
+    if (!['separate', 'current'].includes(association)) throw new Error('Choose how to associate this API document.')
+    const workspaceId = association === 'separate' ? importedWorkspaceId(configuration.value, workspaceName) : configuration.value.workspaceId
     const version = ++generation
     controller?.abort()
     controller = new AbortController()
@@ -126,8 +129,9 @@ export function useCatalog(authentication) {
     const imported = parseDocument(text)
     const bundled = await bundleReferences(imported, configuration.value.openApiUrl, (url, options) => fetch(url, { ...options, signal }))
     if (version !== generation) return
+    if (association === 'separate') configuration.value = { ...configuration.value, workspaceId, overrideServer: false, serverProfiles: {}, endpointMappingsUrl: undefined }
     spec.value = bundled
-    documentSource.value = { kind: 'import', name }
+    documentSource.value = { kind: 'import', name, workspaceName: association === 'separate' ? workspaceName.trim() : documentSource.value.workspaceName }
     error.value = ''
   }
   onMounted(reload)
