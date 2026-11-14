@@ -127,6 +127,7 @@ onUnmounted(() => {
       <button type="button" @click="inspect('Configure')">Configure request</button>
       <button v-if="session.bindings?.length" type="button" @click="inspect('Bindings')">Bindings ({{ session.bindings.length }})</button>
 
+
     </div></Teleport
   >
   <RequestTools
