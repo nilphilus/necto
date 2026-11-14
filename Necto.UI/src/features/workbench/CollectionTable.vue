@@ -1,4 +1,5 @@
 <script setup>
+import { tablePreferenceKey, rememberColumns } from './previewPreferences.js'
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue';
 import { tableColumns, tableCell, discoverTableColumns, contractTableColumns } from './collectionTable.js';
 import { pageRange, PREVIEW_PAGE_SIZE } from '../request-runner/preview.js';
@@ -6,6 +7,7 @@ import PreviewPager from '../request-runner/PreviewPager.vue';
 import { matchesPath } from '../related-endpoints/mappings.js';
 const props = defineProps({
   value: Array,
+  presentation: Object,
   path: Array,
   selectors: Array,
   selected: Array,
@@ -41,6 +43,7 @@ onScopeDispose(() => { document.removeEventListener('pointerdown', outsideMenu);
 watch([() => props.value, () => props.path], () => closeRowMenu(false))
 const page = ref(1),
   selectedColumns = ref([]);
+const preferenceKey = computed(() => tablePreferenceKey(props.operation, props.path, props.value))
 const columns = ref([]), cursor = ref(25), discovering = ref(false)
 let discoveryId = 0
 function mergeColumns(names) { columns.value = [...new Set([...columns.value, ...names])].slice(0, 100) }
@@ -78,10 +81,13 @@ watch(
     mergeColumns(props.path?.length ? [] : contractTableColumns(props.operation, props.status, props.contentType))
     mergeColumns(tableColumns(props.value))
     cursor.value = Math.min(25, props.value.length)
-    selectedColumns.value = columns.value.slice(0, 6);
+    const saved = props.presentation?.tables?.[preferenceKey.value]
+    if (saved) mergeColumns(saved)
+    selectedColumns.value = saved ? [...saved] : columns.value.slice(0, 6);
   },
   { immediate: true }
 );
+watch(selectedColumns, names => rememberColumns(props.presentation, preferenceKey.value, names), { deep: true })
 const selectable = (path) =>
   props.selectors.some((template) => matchesPath(template, path));
 const active = (path) =>
