@@ -13,8 +13,11 @@ const props = defineProps({
   values: Map,
   configuration: Object,
   history: Object,
+  hideTrigger: Boolean,
   prepare: Function
 })
+defineEmits(['closed'])
+defineExpose({ openSection: section => { tab.value = section; dialog.value.showModal() } })
 const changes = computed(() => {
   const entries = props.history?.forOperation(props.operation.key) ?? []
   return entries.length > 1 &&
@@ -89,10 +92,10 @@ function addCheck() {
 }
 </script>
 <template>
-  <button type="button" class="secondary" @click="dialog.showModal()">
+  <button v-if="!hideTrigger" type="button" class="secondary" @click="dialog.showModal()">
     Tools
   </button>
-  <dialog ref="dialog" @click="$event.target === dialog && dialog.close()">
+  <dialog ref="dialog" @close="$emit('closed')" @click="$event.target === dialog && dialog.close()">
     <header>
       <strong>{{ operation.method }} {{ operation.path }}</strong
       ><button

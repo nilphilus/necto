@@ -124,8 +124,10 @@ const op = (name, extra = {}) => ({
   const send = () =>
     p.getByRole('button', { name: 'Send request', exact: true }).click()
   const done = () => p.locator('.status').filter({ hasText: '200' }).waitFor()
-  const tools = () =>
-    p.getByRole('button', { name: 'Tools', exact: true }).click()
+  const tools = async () => {
+    await p.getByRole('button', { name: 'Tools', exact: true }).click()
+    await p.locator('.tools-menu').getByRole('button', { name: 'Contract', exact: true }).click()
+  }
   const close = () =>
     p.getByRole('button', { name: 'Close request tools' }).click()
   if (output) await fs.mkdir(output, { recursive: true })
