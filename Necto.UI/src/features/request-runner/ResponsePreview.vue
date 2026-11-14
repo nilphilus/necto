@@ -22,8 +22,11 @@ async function toggleSearch(open = !searchOpen.value) {
   else finderButton.value?.focus()
 }
 const table = ref(false)
-const tableAvailable = computed(() => tableColumns(previewValue.value).length > 0)
-function inspectRow(path) { focusPath.value = path; table.value = false; raw.value = false; navigation.value = null }
+const tableReturn = ref(null)
+const tableValue = computed(() => tableReturn.value?.value ?? previewValue.value)
+const tablePath = computed(() => tableReturn.value?.path ?? focusPath.value)
+const tableAvailable = computed(() => tableColumns(tableValue.value).length > 0)
+function inspectRow(path) { tableReturn.value ??= { value: previewValue.value, path: focusPath.value }; focusPath.value = path; table.value = false; raw.value = false; navigation.value = null }
 const raw = ref(false)
 const streamEvents = computed(() => props.result.stream?.events ?? [])
 const textPage = ref(1)
@@ -37,7 +40,7 @@ const previewValue = computed(() => valueAtPath(props.result.json, focusPath.val
 const text = computed(() => props.result.stream?.view?.selectedIndex !== undefined ? JSON.stringify(props.result.json, null, 2) : props.result.rawText ?? props.result.text ?? '')
 const range = computed(() => pageRange(text.value.length, textPage.value, TEXT_PAGE_SIZE))
 const visibleText = computed(() => text.value.slice(range.value.start, range.value.end))
-watch(() => props.result, (result, previous) => { if (result.stream?.view && result.stream.view === previous?.stream?.view) return; textPage.value = 1; raw.value = false; table.value = false; navigation.value = null; focusPath.value = []; navigationId++ })
+watch(() => props.result, (result, previous) => { if (result.stream?.view && result.stream.view === previous?.stream?.view) return; textPage.value = 1; raw.value = false; table.value = false; tableReturn.value = null; navigation.value = null; focusPath.value = []; navigationId++ })
 
 async function reveal(match, scroll = true) {
   const id = ++navigationId
@@ -59,7 +62,15 @@ function inspectEvent(event) {
   selectPath(undefined); raw.value = false; table.value = false; focusPath.value = []; textPage.value = 1; navigation.value = null
 }
 function backToStream() { props.result.stream.view.selectedIndex = undefined; props.result.json = undefined; selectPath(undefined); raw.value = false; table.value = false; focusPath.value = []; textPage.value = 1 }
-function fullResponse() { table.value = false; focusPath.value = []; navigation.value = null; navigationId++ }
+function showTable() { if (tableReturn.value) fullResponse(); else { table.value = true; raw.value = false } }
+function fullResponse() {
+  const previous = tableReturn.value
+  focusPath.value = previous?.path ?? []
+  table.value = Boolean(previous)
+  raw.value = false
+  tableReturn.value = null
+  navigation.value = null; navigationId++
+}
 
 
 function download() {
@@ -81,7 +92,7 @@ function download() {
       <template v-if="result.json !== undefined">
         <button type="button" :aria-pressed="!raw && !table" @click="raw = false; table = false">Preview</button>
         <button type="button" :aria-pressed="raw" @click="raw = true">Raw</button>
-        <button v-if="tableAvailable" type="button" :aria-pressed="table && !raw" @click="table = true; raw = false">Table</button>
+        <button v-if="tableAvailable" type="button" :aria-pressed="table && !raw" @click="showTable">Table</button>
         <button ref="finderButton" type="button" :aria-expanded="searchOpen" :aria-controls="searchId" title="Find in response (Ctrl or ⌘ + F while the preview is focused)" @click="toggleSearch()">Find</button>
       </template>
       <details class="response-details" @keydown.esc.stop.prevent="$event.currentTarget.open = false; $event.currentTarget.querySelector('summary').focus()">
@@ -102,8 +113,8 @@ function download() {
     <div v-show="searchOpen" :id="searchId" ref="finderPanel" @keydown.esc.stop.prevent="toggleSearch(false)">
       <PayloadSearch v-if="result.json !== undefined" :result="result" :selectors="selectors" @reveal="reveal" @select="selectPath($event)" />
     </div>
-    <div v-if="focusPath.length && !raw" class="preview-toolbar"><code>Focused object: {{ pathLabel(focusPath) }}</code><button type="button" @click="fullResponse">Back to full response</button></div>
-    <CollectionTable v-if="tableAvailable && table && !raw" :value="previewValue" :path="focusPath" :selectors="selectors" :selected="result.selectedPath" @select="selectPath($event)" @inspect="inspectRow" />
+    <div v-if="focusPath.length && !raw" class="preview-toolbar"><code>Focused object: {{ pathLabel(focusPath) }}</code><button type="button" @click="fullResponse">{{ tableReturn ? 'Back to table' : 'Back to full response' }}</button></div>
+    <CollectionTable v-if="tableAvailable" v-show="table && !raw" :value="tableValue" :path="tablePath" :selectors="selectors" :selected="result.selectedPath" @select="selectPath($event)" @inspect="inspectRow" />
     <div v-if="result.json !== undefined" v-show="!raw && !table" ref="preview" class="json-preview" tabindex="0" aria-label="JSON response preview">
       <JsonNode :key="JSON.stringify(focusPath)" :value="previewValue" :path="focusPath" :root="true" :navigation="navigation" :selectors="selectors" :selected="result.selectedPath" @select="selectPath($event)" />
 
