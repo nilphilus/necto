@@ -51,7 +51,7 @@ async function retryMetadata() {
   try {
     const outcome = await props.retryDocumentation(selectedApi.value)
     if (outcome?.error) { error.value = outcome.error; feedback.value = 'Credentials applied, but documentation is still unavailable.' }
-    else feedback.value = 'API documentation loaded. You can close this window and explore the API.'
+    else feedback.value = outcome?.message ?? 'API documentation loaded. You can close this window and explore the API.'
   } catch (cause) { error.value = cause.message; feedback.value = '' }
   finally { pending.value = false }
 }
