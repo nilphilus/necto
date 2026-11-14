@@ -42,6 +42,7 @@ const displayedBody = computed({
   set: body => { props.session.body = body },
 })
 const relatedPinned = ref(false)
+const pinnedToolsHost = ref(null)
 const form = ref(null)
 const bodyEditor = ref(null)
 const responsePane = ref(null)
@@ -234,11 +235,12 @@ function parameterHint(parameter) {
         <template v-if="session.result">
           <p v-if="session.resultStale" class="muted response-stale" role="status">Inputs changed. Showing the previous response until you send again.</p>
           <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }">
-          <NextRequestsPanel v-if="hasRelated" :operation-key="operation.key" @pin="relatedPinned = $event"><slot name="related" /></NextRequestsPanel>
           <div class="response-body">
-            <ResponsePreview :result="session.result" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="session.resultStale" />
+            <ResponsePreview :result="session.result" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="session.resultStale">
+              <template #actions><NextRequestsPanel v-if="hasRelated" :operation-key="operation.key" :pin-target="pinnedToolsHost" @pin="relatedPinned = $event"><slot name="related" /></NextRequestsPanel></template>
+            </ResponsePreview>
           </div>
-
+          <div v-if="hasRelated" v-show="relatedPinned" ref="pinnedToolsHost" class="pinned-tools-host"></div>
           </div>
         </template>
         <p v-else class="muted empty">
@@ -313,7 +315,7 @@ function parameterHint(parameter) {
 
 @container (min-width: 48rem) {
   .response-content.related-pinned { grid-template-columns: minmax(0, 1fr) 17rem; }
-  .response-content.related-pinned :deep(.next-requests) { grid-column: 2; grid-row: 1; position: sticky; top: 1rem; max-height: calc(100dvh - 10rem); overflow: auto; }
+  .response-content.related-pinned .pinned-tools-host { grid-column: 2; grid-row: 1; position: sticky; top: 1rem; max-height: calc(100dvh - 10rem); overflow: auto; }
 }
 .response-type { margin: 0 0 .35rem; color: var(--muted); font-size: .74rem; overflow-wrap: anywhere; }
 pre { overflow: auto; max-height: 28rem; margin: 0; padding: .8rem; border-radius: .45rem; background: #182420; color: #e7f3eb; }
