@@ -1,5 +1,6 @@
 <script setup>
 import { executionOptions } from '../workbench/executionOptions.js'
+import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { payloadSnapshot } from '../workbench/body.js'
 import { computed, ref, watch } from 'vue'
 import { contextKey, fieldKey, jsonContent, supportedParameters } from './request.js'
@@ -44,6 +45,15 @@ try {
 } catch {
   error.value = 'Could not load saved requests in this browser.'
 }
+
+onWorkspaceImport(() => props.storageKey, () => {
+  try {
+    const active = saved.value.samples.find(sample => sample.name === props.session.sampleName)
+    const next = readSamples(localStorage, props.storageKey)
+    if (active && JSON.stringify(active) !== JSON.stringify(next.samples.find(sample => sample.name === active.name))) props.session.sampleName = undefined
+    saved.value = next; error.value = ''; showSelectedPage()
+  } catch { error.value = 'Could not refresh imported saved requests.' }
+})
 
 function resetForm() {
   name.value = ''
