@@ -14,7 +14,7 @@ const value = computed(() => props.resolve(props.schema) ?? {})
     <summary>
       <code>{{ name }}</code> ·
       {{
-        value.type || (value.oneOf ? 'oneOf' : value.anyOf ? 'anyOf' : 'object')
+        (Array.isArray(value.type) ? value.type.join(' | ') : value.type) || (value.oneOf ? 'oneOf' : value.anyOf ? 'anyOf' : 'object')
       }}
       <span v-if="required"> · required</span
       ><span v-if="value.format"> · {{ value.format }}</span
