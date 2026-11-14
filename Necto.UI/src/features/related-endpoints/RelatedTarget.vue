@@ -3,7 +3,7 @@ import RequestSendIcon from '../request-runner/RequestSendIcon.vue'
 import { computed, reactive, watch } from 'vue'
 import ValueInput from './ValueInput.vue'
 const props = defineProps({ target: Object, canSend: Function })
-const emit = defineEmits(['follow', 'edit-preset'])
+const emit = defineEmits(['follow', 'edit-preset', 'search-response'])
 const drafts = reactive({})
 const fields = computed(() => {
   const groups = new Map()
@@ -36,6 +36,11 @@ const choices = computed(() => fields.value.filter(field => drafts[field.key] !=
   }
   return { location: field.location, name: field.name, value, binding: match?.binding, sourceResult: match?.sourceResult }
 }))
+function searchField(field) {
+  const names = new Set(field.choices.map(choice => choice.binding?.path.at(-1)))
+  const name = [...names][0]
+  return names.size === 1 && typeof name === 'string' ? name : ''
+}
 const quickSend = computed(() => ['GET', 'HEAD'].includes(props.target.operation.method) && !props.target.operation.requestBody)
 const ready = computed(() => props.canSend(props.target.operation, choices.value))
 </script>
@@ -57,7 +62,7 @@ const ready = computed(() => props.canSend(props.target.operation, choices.value
         :aria-label="'Send ' + target.operation.name">Send <RequestSendIcon /></button>
       <div v-if="fields.length" class="fields">
         <div v-for="(field, index) in fields" :key="field.key" class="field">
-          <ValueInput v-model="drafts[field.key]" :choices="field.choices" dropdown placeholder="Type or choose a value…">
+          <ValueInput v-model="drafts[field.key]" :choices="field.choices" dropdown searchable-response @search-response="emit('search-response', { query: $event, field: searchField(field) })" placeholder="Type or choose a value…">
             <template #label>{{ field.name ?? 'body' }} <small>{{ field.location }}</small></template>
             <template v-if="index === 0 && quickSend" #trailing>
               <button type="submit" class="send send-joined" :disabled="!ready"

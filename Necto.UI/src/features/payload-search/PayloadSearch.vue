@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, toRef, watch } from 'vue'
+import { computed, nextTick, ref, toRef, watch } from 'vue'
 import { usePayloadSearch } from './usePayloadSearch.js'
 import { pathLabel, selectableOwner, SEARCH_PAGE_SIZE, MAX_QUERY_LENGTH } from './search.js'
 import { pageRange } from '../request-runner/preview.js'
@@ -7,14 +7,20 @@ import PreviewPager from '../request-runner/PreviewPager.vue'
 const props = defineProps({ result: Object, selectors: Array })
 const emit = defineEmits(['reveal', 'select'])
 const finder = usePayloadSearch(toRef(props, 'result'))
-const { query, scope, caseSensitive, exact, state } = finder
+const { query, scope, caseSensitive, exact, field, state } = finder
+defineExpose({ setQuery: async value => {
+  const request = typeof value === 'object' ? value : { query: value }
+  scope.value = 'values'; field.value = request.field ?? ''; query.value = String(request.query)
+  await nextTick()
+  finder.search(1)
+} })
 const active = ref(0)
 const optionsOpen = ref(false)
 const resultsOpen = ref(false)
 function submitSearch() { if (!state.pending) state.total ? next(1) : finder.search() }
 let desired = 'first'
 let scrollOnResults = false
-watch([query, scope, caseSensitive, exact], () => { scrollOnResults = false })
+watch([query, scope, caseSensitive, exact, field], () => { scrollOnResults = false })
 finder.onResults(() => {
   active.value = desired === 'last' ? Math.max(0, state.matches.length - 1) : 0
   desired = 'first'
@@ -36,6 +42,7 @@ function select(row, index) { emit('select', row.owner); reveal(index) }
   <section class="payload-search" aria-label="Find in response">
     <form class="search-bar" @submit.prevent="submitSearch">
       <label class="query"><span class="sr-only">Search JSON</span><input v-model="query" type="search" :maxlength="MAX_QUERY_LENGTH" placeholder="Find in response…" autocomplete="off" @keydown.shift.enter.prevent="state.total && next(-1)"></label>
+      <span v-if="field" class="field-filter">Field: {{ field }} <button type="button" aria-label="Search all fields" @click="field = ''">All fields</button></span>
       <span v-if="state.total && !state.pending" class="match-count">{{ current.toLocaleString() }}/{{ state.total.toLocaleString() }}</span>
       <button type="button" class="secondary" aria-label="Previous match" :disabled="state.pending || !state.total || current <= 1" @click="next(-1)">↑</button>
       <button type="button" class="secondary" aria-label="Next match" :disabled="state.pending || !state.total || current >= state.total" @click="next(1)">↓</button>

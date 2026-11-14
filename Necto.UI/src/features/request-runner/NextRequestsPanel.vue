@@ -2,6 +2,11 @@
 import { onMounted, onScopeDispose, ref, useId, watch } from 'vue'
 const props = defineProps({ operationKey: String, pinTarget: Object })
 const emit = defineEmits(['pin'])
+let restoreFocus = true
+function open() { restoreFocus = true; dialog.value.showModal() }
+function closed() { if (restoreFocus) trigger.value?.focus(); restoreFocus = true }
+function closeForSearch() { restoreFocus = false; dialog.value?.close(); if (pinned.value) pin(false) }
+defineExpose({ closeForSearch })
 const pinned = ref(false)
 const wide = ref(false)
 const dialog = ref(null)
@@ -25,9 +30,9 @@ onScopeDispose(() => media?.removeEventListener('change', resize))
 
     </template>
     <div v-show="pinned" ref="pinnedContent"></div>
-    <button v-if="!pinned" ref="trigger" type="button" class="secondary next-request-trigger" aria-haspopup="dialog" :aria-controls="id" @click="dialog.showModal()">Next request</button>
+    <button v-if="!pinned" ref="trigger" type="button" class="secondary next-request-trigger" aria-haspopup="dialog" :aria-controls="id" @click="open">Next request</button>
     <Teleport to="body">
-      <dialog :id="id" ref="dialog" class="next-request-dialog" :aria-labelledby="id + '-title'" @click="$event.target === dialog && close()" @close="trigger?.focus()">
+      <dialog :id="id" ref="dialog" class="next-request-dialog" :aria-labelledby="id + '-title'" @click="$event.target === dialog && close()" @close="closed">
         <header><h3 :id="id + '-title'">Next request</h3><button v-if="wide" type="button" class="secondary" @click="pin(true)">Pin beside response</button><button type="button" class="secondary" aria-label="Close next requests" @click="close">Close</button></header>
         <div ref="dialogContent"></div>
       </dialog>
