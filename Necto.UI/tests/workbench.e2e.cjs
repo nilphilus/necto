@@ -276,7 +276,7 @@ const op = (name, extra = {}) => ({
     await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
     true
   )
-  await p.getByRole('button', { name: 'Contract', exact: true }).click()
+  await p.getByRole('combobox', { name: 'Request tool section' }).selectOption('Contract')
   if (output) await p.screenshot({ path: path.join(output, 'mobile.png') })
   await close()
   await p.getByRole('button', { name: 'Settings', exact: true }).click()
