@@ -1,3 +1,4 @@
+import {exportWorkspace} from './workspace.js'
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {planTransfer,applyTransfer,exportScenario} from './transfers.js'
@@ -15,3 +16,5 @@ test('merging does not erase credentials from unrelated existing local items',()
 test('item transfer rolls back earlier collections when a later write fails',()=>{const store=storage();const set=store.setItem;store.setItem=(key,value)=>{if(key.endsWith(':fail'))throw new Error('Quota');set(key,value)};const plan=planTransfer({format:'necto-workspace',version:1,entries:[{key:'necto:servers:ok',value:{local:{url:'https://api.test'}}},{key:'necto:servers:fail',value:{local:{url:'https://api.test'}}}]},store);assert.throws(()=>applyTransfer(plan,store),/Quota/);assert.equal(store.length,0)})
 
 test('actual request-samples storage keys export and merge as named requests',()=>{const sampleKey='necto:request-samples:["https://api.test/openapi.json","GET /x"]';const saved={samples:[{name:'Existing',fields:{'query:id':'42'}}],defaultName:'Existing'};const store=storage({[sampleKey]:JSON.stringify(saved)});const plan=planTransfer({format:'necto-workspace',version:1,entries:[{key:sampleKey,value:{samples:[{name:'New',fields:{'query:id':'43'}}],defaultName:''}}]},store);assert.equal(plan[0].kind,'samples');applyTransfer(plan,store);assert.deepEqual(JSON.parse(store.getItem(sampleKey)).samples.map(item=>item.name),['Existing','New']);assert.equal(JSON.parse(store.getItem(sampleKey)).defaultName,'Existing')})
+
+test('saved-request export preserves the structured API/operation scope key',()=>{const sampleKey='necto:request-samples:["https://api.test/openapi.json","GET /x"]';const store=storage({[sampleKey]:JSON.stringify({samples:[{name:'Request',fields:{}}],defaultName:''})});assert.equal(exportWorkspace(store).entries[0].key,sampleKey)})

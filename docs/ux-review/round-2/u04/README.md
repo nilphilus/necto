@@ -4,6 +4,6 @@ Import now previews named scenarios, requests, presets, API connections and serv
 
 Scenarios have their own Export action and a body-inclusion choice. Export remains versioned and excludes auth sessions/upload bytes. Imported settings retain their API-document scope and require reload to activate, as before.
 
-Validation: production build, 121 unit tests including merge/copy/export/rollback and preservation of unrelated credentials; browser keeps scenarios A/B while adding C and downloads a single-scenario file.
+Validation: production build, 122 unit tests including merge/copy/export/rollback and preservation of unrelated credentials; browser keeps scenarios A/B while adding C and downloads a single-scenario file.
 
 ![Named-item import preview](import-items.png)
