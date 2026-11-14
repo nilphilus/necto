@@ -636,6 +636,10 @@ function inspectScenario(index, execution) {
   scenarioError.value = ''
   enterScenario(visible, execution.id, execution.name, index)
 }
+function undoRemoveScenario() {
+  try { scenarioStore.undoRemove() }
+  catch (cause) { scenarioError.value = cause.message }
+}
 function removeScenario(id) {
   try { scenarioStore.remove(id) }
   catch (cause) { scenarioError.value = cause.message }
@@ -749,7 +753,7 @@ function removeScenario(id) {
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <ScenarioPanel :api-url="configuration?.openApiUrl" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
 
-        :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
+        :deleted="scenarioStore.deleted.value" @undo-remove="undoRemoveScenario" :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"
         @remove="removeScenario" @stop="scenarioStore.stop" @inspect="inspectScenario" />
       <section :inert="settingsOpen" v-if="!graphView && activePresetNames.length" class="active-presets" aria-label="Active presets">

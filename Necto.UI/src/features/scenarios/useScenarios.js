@@ -2,19 +2,22 @@ import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 import { executeScenario, prepareScenario, snapshotScenario, validateScenario } from './scenario.js'
 
-export function useScenarios(configuration) {
+export function useScenarios(configuration, { undoDuration = 30000 } = {}) {
   const scenarios = ref([])
   const error = ref('')
   const state = reactive({ id: '', name: '', status: 'idle', steps: [], error: '' })
   const runs = reactive(new Map())
-  const pending = ref(false)
+  const pending = ref(false), deleted = ref(null)
+  let deletedSnapshot, undoTimer
+  function forgetDeletion() { clearTimeout(undoTimer); deletedSnapshot = undefined; deleted.value = null }
+  onScopeDispose(forgetDeletion)
   let controller
   const key = computed(() => configuration.value?.openApiUrl && `necto:scenarios:${configuration.value.openApiUrl}`)
   const stop = () => controller?.abort()
   onScopeDispose(stop)
   function loadStored(storageKey, reset = false) {
     const previous = scenarios.value
-    if (reset) { stop(); runs.clear(); scenarios.value = []; error.value = '' }
+    if (reset) { forgetDeletion(); stop(); runs.clear(); scenarios.value = []; error.value = '' }
     if (!storageKey) return
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey))
@@ -51,9 +54,28 @@ export function useScenarios(configuration) {
   }
   function remove(id) {
     if (pending.value) return
+    const index = scenarios.value.findIndex(item => item.id === id)
+    if (index < 0) return
+    const snapshot = JSON.parse(JSON.stringify(scenarios.value[index]))
     persist(scenarios.value.filter(item => item.id !== id))
+    forgetDeletion()
+    deletedSnapshot = { key: key.value, index, scenario: snapshot }
+    deleted.value = { id: snapshot.id, name: snapshot.name }
+    undoTimer = setTimeout(forgetDeletion, undoDuration)
     runs.delete(id)
     if (state.id === id) { state.id = ''; state.name = ''; state.steps = []; state.status = 'idle'; state.error = '' }
+  }
+  function undoRemove() {
+    if (pending.value || !deletedSnapshot) return
+    if (deletedSnapshot.key !== key.value) { forgetDeletion(); return }
+    const { scenario, index } = deletedSnapshot
+    if (scenarios.value.some(item => item.id === scenario.id || item.name === scenario.name)) throw new Error('A scenario with this name or ID already exists. Undo would overwrite it.')
+    const next = [...scenarios.value]
+    next.splice(Math.min(index, next.length), 0, scenario)
+    persist(next)
+    // Restore only the saved definition; never restore or execute a previous run.
+    forgetDeletion()
+    return scenario
   }
   function open(scenario, context) {
     if (pending.value) return
@@ -87,5 +109,5 @@ export function useScenarios(configuration) {
       if (runs.get(scenario.id) === execution) Object.assign(state, outcome)
     } finally { pending.value = false; controller = undefined }
   }
-  return { scenarios, error, state, runs, pending, save, remove, open, run, stop }
+  return { scenarios, error, state, runs, pending, deleted, save, remove, undoRemove, open, run, stop }
 }
