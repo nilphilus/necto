@@ -1,18 +1,27 @@
+import { useServerProfiles } from '../workbench/serverProfiles.js'
 import { markRaw, onScopeDispose, reactive, watch } from 'vue'
 import { redactedRequest } from '../authentication/authentication.js'
+import { evaluateAssertions, validateAssertions } from '../workbench/assertions.js'
+import { useRequestHistory } from '../workbench/history.js'
 import { buildRequest, initialBody, sendRequest } from './request.js'
 
 export function useRequestRunner(configuration, authentication) {
   const running = new Set()
-  const cancel = () => { for (const controller of running) controller.abort(new Error('Authentication changed. Send the request again.')) }
+  const controllers = new WeakMap()
+  const history = useRequestHistory()
+  const cancel = () => { history.clear(); for (const controller of running) controller.abort(new Error('Authentication changed. Send the request again.')) }
   if (authentication) watch(authentication.revision, cancel, { flush: 'sync' })
   onScopeDispose(cancel)
+  useServerProfiles(configuration, () => { for (const controller of running) controller.abort(new Error('API server changed. Send the request again.')) })
   const sessions = reactive(new Map())
 
   function createSession(operation) {
     return reactive({
       apiId: operation.apiId ?? 'local',
       fields: {},
+      assertions: [],
+      serverValues: {},
+      timeout: 30000,
       bindings: [],
       body: initialBody(operation),
       result: null,
@@ -28,31 +37,48 @@ export function useRequestRunner(configuration, authentication) {
     return sessions.get(operation.key)
   }
 
+  function prepare(operation, session, values) {
+    const request = buildRequest(operation, configuration.value, session, values)
+    const api = authentication?.apis.get(operation.apiId ?? 'local')
+    if (api && !api.origins?.includes(request.url.origin)) authentication.register({ ...api, origins: [...(api.origins ?? []), request.url.origin] })
+    return authentication ? authentication.apply(request, operation) : request
+  }
+
   async function run(operation, session, values, { signal, onRequest } = {}) {
     if (session.pending) return
     session.error = ''
     session.pending = true
     const controller = new AbortController()
     running.add(controller)
+    controllers.set(session, controller)
+    const timeout = setTimeout(() => controller.abort(new Error("Request timed out.")), Math.min(600000, Math.max(1, Number(session.timeout) || 30000)))
+    let request
     try {
-      const draft = buildRequest(operation, configuration.value, session, values)
-      const request = authentication ? authentication.apply(draft, operation) : draft
+      validateAssertions(session.assertions ?? [])
+      request = prepare(operation, session, values)
       request.options.signal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
       onRequest?.(redactedRequest(request))
       const started = performance.now()
-      const result = await sendRequest(request)
+      const result = await sendRequest(request, { onProgress: progress => {
+        session.result = { ...progress, elapsed: Math.round(performance.now() - started) }
+      } })
       if (result.json && typeof result.json === 'object') markRaw(result.json)
       session.resultStale = false
       session.result = { ...result, elapsed: Math.round(performance.now() - started) }
+      session.result.assertions = evaluateAssertions(session.assertions ?? [], session.result)
+      try { history.add(operation, request, session.result) } catch { /* History must not change the outcome of a sent request. */ }
       return session.result
     } catch (cause) {
-      session.error = signal?.aborted ? 'Request canceled.' : cause.message
+      session.error = controller.signal.aborted ? controller.signal.reason?.message ?? 'Request canceled.' : signal?.aborted ? 'Request canceled.' : cause.message
+      try { history.add(operation, request, undefined, session.error) } catch { /* Metadata retention is optional. */ }
       return null
     } finally {
+      clearTimeout(timeout)
+      controllers.delete(session)
       running.delete(controller)
       session.pending = false
     }
   }
 
-  return { sessions, sessionFor, createSession, run }
+  return { sessions, sessionFor, createSession, run, prepare, history, cancel: session => controllers.get(session)?.abort(new Error('Request canceled.')) }
 }

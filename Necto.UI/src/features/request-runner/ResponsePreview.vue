@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, useId, watch } from 'vue'
+import { responseFilename } from '../workbench/response.js'
 import PreviewPager from './PreviewPager.vue'
 import { pageRange, TEXT_PAGE_SIZE } from './preview.js'
 import { usePreviewHeight } from './usePreviewHeight.js'
@@ -19,6 +20,7 @@ async function toggleSearch(open = !searchOpen.value) {
   else finderButton.value?.focus()
 }
 const raw = ref(false)
+const streamEvents = computed(() => props.result.stream?.events ?? [])
 const textPage = ref(1)
 const navigation = ref(null)
 const focusPath = ref([])
@@ -47,9 +49,9 @@ async function reveal(match, scroll = true) {
 function fullResponse() { focusPath.value = []; navigation.value = null; navigationId++ }
 
 function download() {
-  const url = URL.createObjectURL(new Blob([text.value], { type: props.result.contentType || 'text/plain' }))
+  const url = URL.createObjectURL(props.result.binary ?? new Blob([text.value], { type: props.result.contentType || 'text/plain' }))
   const link = document.createElement('a')
-  link.href = url; link.download = props.result.json === undefined ? 'response.txt' : 'response.json'
+  link.href = url; link.download = responseFilename(props.result)
   link.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
@@ -69,8 +71,9 @@ function download() {
       <details class="response-details" @keydown.esc.stop.prevent="$event.currentTarget.open = false; $event.currentTarget.querySelector('summary').focus()">
         <summary>Details</summary>
         <div class="response-details-content">
-          <p>{{ result.contentType || 'Body' }} · {{ text.length.toLocaleString() }} characters</p>
+          <p>{{ result.contentType || 'Body' }} · {{ result.binary ? `${result.binary.size.toLocaleString()} bytes` : `${text.length.toLocaleString()} characters` }}</p>
           <button type="button" @click="download">Download response</button>
+          <dl><template v-for="(value, name) in result.headers" :key="name"><dt>{{ name }}</dt><dd>{{ value }}</dd></template></dl>
           <p v-if="result.json !== undefined">Preview pagination does not change the API response. Select a mapped object to fill related request fields.</p>
         </div>
       </details>
@@ -87,11 +90,15 @@ function download() {
     <div v-if="result.json !== undefined" v-show="!raw" ref="preview" class="json-preview" tabindex="0" aria-label="JSON response preview">
       <JsonNode :key="JSON.stringify(focusPath)" :value="previewValue" :path="focusPath" :root="true" :navigation="navigation" :selectors="selectors" :selected="result.selectedPath" @select="result.selectedPath = $event" />
     </div>
-    <div v-if="text && (raw || result.json === undefined)" class="raw-preview">
+    <p v-if="result.stream" role="status">{{ streamEvents.length }} events · {{ result.stream.done ? "Finished" : "Receiving…" }}<template v-if="result.stream.limited"> · Preview limit reached; connection closed.</template></p>
+    <details v-for="event in streamEvents" :key="event.index"><summary>{{ event.index + 1 }} · {{ event.event }} {{ event.id }} {{ event.error }}</summary><pre>{{ JSON.stringify(event.data, null, 2) }}</pre></details>
+    <div v-if="!result.stream && text && (raw || result.json === undefined)" class="raw-preview">
       <PreviewPager :range="range" label="Text characters" @change="textPage = $event" />
       <pre tabindex="0"><code>{{ visibleText }}</code></pre>
     </div>
-    <p v-if="!text && result.json === undefined" class="muted empty">Empty response body.</p>
+    <p v-if="result.binary">Binary response · {{ result.binary?.size?.toLocaleString() }} bytes. Use Details to download the original file.</p>
+    <ul v-if="result.assertions?.length"><li v-for="(check, index) in result.assertions" :key="index">{{ check.passed ? "✓" : "✗" }} {{ check.label }} · {{ check.actual }}</li></ul>
+    <p v-if="!text && result.json === undefined && !result.binary && !result.stream" class="muted empty">Empty response body.</p>
   </div>
 </template>
 
@@ -102,6 +109,10 @@ function download() {
 .response-details { position: relative; margin-left: auto; }
 .response-details summary { cursor: pointer; padding: .25rem .4rem; }
 .response-details-content { position: absolute; right: 0; top: 100%; width: min(22rem, 75vw); padding: .6rem; z-index: 5; border: 1px solid var(--line); border-radius: .4rem; background: var(--surface); box-shadow: 0 6px 20px #20352c20; overflow-wrap: anywhere; }
+.response-details-content { max-height: min(60dvh, 32rem); overflow:auto; }
+.response-details-content dl {font-size:.75rem}
+.response-details-content dd {margin:0 0 .5rem;white-space:pre-wrap}
+.response-details-content dt {font-weight:600}
 .response-details-content p { margin: .2rem 0 .5rem; }
 .selection-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-bottom: .35rem; font-size: .75rem; }
 .selection-toolbar button { padding: .2rem .4rem; border: 1px solid var(--line); }

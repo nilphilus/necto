@@ -1,10 +1,12 @@
 <script setup>
 import { computed, nextTick, ref, watch, watchPostEffect } from 'vue'
 import { bodyFields, hasBodyExample } from './bodyHelp.js'
+import BodyEditor from '../workbench/BodyEditor.vue'
+import RequestTools from '../workbench/RequestTools.vue'
 import ResponsePreview from './ResponsePreview.vue'
 import RequestSendIcon from './RequestSendIcon.vue'
 import NextRequestsPanel from './NextRequestsPanel.vue'
-import { applyBodyPresets, contextKey, fieldKey, jsonContent, presetSource, supportedParameters } from './request.js'
+import { applyBodyPresets, contextKey, fieldKey, jsonContent, presetSource, supportedParameters, requestUrl } from './request.js'
 
 const props = defineProps({
   operation: { type: Object, required: true },
@@ -13,12 +15,26 @@ const props = defineProps({
   values: { type: Map, required: true },
   selectors: { type: Array, default: () => [] },
   hasRelated: Boolean,
+  cancel: Function,
+  prepare: Function,
+  configuration: Object,
+  history: Object,
 })
 
 const emit = defineEmits(['edit-preset'])
+const activeHost = computed(() => {
+  try {
+    const server = props.operation.servers?.[props.session.serverIndex]
+    const operation = server ? { ...props.operation, requestServer: { ...server, values: props.session.serverValues } } : props.operation
+    const configuration = props.operation.configuration
+      ? { ...props.operation.configuration, serverProfiles: props.configuration?.serverProfiles }
+      : props.configuration ?? {}
+    return requestUrl(operation, configuration).host
+  } catch { return '' }
+})
 const parameters = computed(() => supportedParameters(props.operation))
-const content = computed(() => jsonContent(props.operation))
-const bodyPresetResult = computed(() => applyBodyPresets(props.operation, props.session.body, props.values))
+const content = computed(() => jsonContent(props.operation, props.session.mediaType))
+const bodyPresetResult = computed(() => applyBodyPresets(props.operation, props.session.body, props.values, props.session.mediaType))
 const effectiveBody = computed(() => bodyPresetResult.value.body)
 const editingBody = ref(false)
 const displayedBody = computed({
@@ -26,7 +42,6 @@ const displayedBody = computed({
   set: body => { props.session.body = body },
 })
 const relatedPinned = ref(false)
-const unsupported = computed(() => props.operation.requestBody && !content.value)
 const form = ref(null)
 const bodyEditor = ref(null)
 const responsePane = ref(null)
@@ -108,7 +123,7 @@ watch([() => props.session, () => props.session.result], async ([session, result
 function sendShortcut(event) {
   if (!(event.ctrlKey || event.metaKey) || event.isComposing) return
   event.preventDefault()
-  if (!event.repeat && !props.session.pending && !unsupported.value) form.value.requestSubmit()
+  if (!event.repeat && !props.session.pending) form.value.requestSubmit()
 }
 
 function parameterHint(parameter) {
@@ -121,15 +136,17 @@ function parameterHint(parameter) {
   <div class="runner" :class="{ 'request-compact': requestCompact }" @keydown.enter="sendShortcut">
     <form ref="form" class="request-pane" @submit.prevent="run(operation, session)">
       <header class="pane-header">
-        <h3>Request</h3>
+        <h3 :title="activeHost">Request <small class="active-host">{{ activeHost }}</small></h3>
         <button v-if="requestCompact" type="button" class="secondary" @click="editRequest">Edit request</button>
         <div class="request-actions">
           <slot name="request-actions" />
+          <RequestTools :operation="operation" :session="session" :values="values" :configuration="configuration" :prepare="prepare" :history="history" />
+          <button v-if="session.pending && cancel" type="button" @click="cancel(session)">Cancel</button>
           <button v-if="session.result && !requestCompact" type="button" class="secondary focus-response" @click="focusResponse">Focus response</button>
           <button
             class="primary"
             type="submit"
-            :disabled="session.pending || unsupported"
+            :disabled="session.pending"
             aria-keyshortcuts="Control+Enter Meta+Enter"
             title="Send request (Ctrl or ⌘ + Enter)"
           >{{ session.pending ? 'Sending…' : 'Send request' }} <RequestSendIcon v-if="!session.pending" /></button>
@@ -139,7 +156,8 @@ function parameterHint(parameter) {
       <div v-if="requestCompact" class="request-summary" aria-label="Request summary">
         <span v-for="input in inputSummary" :key="input.key"><code>{{ input.name }}</code>: <span class="summary-value">{{ input.value }}</span><button v-if="input.source" type="button" class="preset-link" @click="emit('edit-preset', input.source)">{{ input.source }}</button></span>
         <span v-if="content">JSON body · {{ effectiveBody.length.toLocaleString() }} characters</span>
-        <span v-if="!inputSummary.length && !content">No inputs</span>
+        <span v-if="operation.requestBody && !content">Body · {{ session.mediaType || Object.keys(operation.requestBody.content)[0] }}</span>
+        <span v-if="!inputSummary.length && !operation.requestBody">No inputs</span>
       </div>
       <div v-show="!requestCompact" class="pane-body">
         <slot name="samples" />
@@ -170,6 +188,7 @@ function parameterHint(parameter) {
           <slot v-else name="choices" :location="parameter.in" :parameter-name="parameter.name" />
         </div>
 
+        <BodyEditor v-if="operation.requestBody" :operation="operation" :session="session">
         <div v-if="content" class="field">
           <p class="body-origin"><strong>{{ session.sampleName ? 'Saved request' : hasBodyExample(content[1], operation.resolve) ? 'OpenAPI example' : 'Generated template' }}</strong><span v-if="!session.sampleName && !hasBodyExample(content[1], operation.resolve)"> · Fill placeholder values before sending. API validation may require different values.</span></p>
           <details v-if="content[1].schema" class="body-schema"><summary>Body fields and requirements</summary><dl><template v-for="field in bodyFields(operation, content[1].schema)" :key="field.path"><dt><code>{{ field.path }}</code></dt><dd>{{ field.rules }}</dd></template></dl><small>Requirements published by this API. Additional business rules may apply.</small></details>
@@ -192,7 +211,7 @@ function parameterHint(parameter) {
           <slot name="choices" location="body" />
         </div>
 
-        <p v-if="unsupported" class="muted">This request needs a body format other than JSON.</p>
+        </BodyEditor>
         <p v-if="session.error" class="error" role="alert">{{ session.error }}</p>
       </div>
     </form>
@@ -255,6 +274,7 @@ function parameterHint(parameter) {
   padding: .55rem .8rem;
   border-bottom: 1px solid var(--line);
 }
+.active-host {display:inline-block;max-width:18rem;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;font-weight:400;color:var(--muted);font-size:.7rem}
 .pane-header h3 { margin: 0; font-size: .88rem; }
 .request-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
 .request-actions button, .request-actions :slotted(button) { font-size: .84rem; }

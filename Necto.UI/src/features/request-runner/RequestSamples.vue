@@ -1,4 +1,5 @@
 <script setup>
+import { payloadSnapshot } from '../workbench/body.js'
 import { computed, ref, watch } from 'vue'
 import { contextKey, fieldKey, jsonContent, supportedParameters } from './request.js'
 import { applySample, readSamples } from './samples.js'
@@ -101,10 +102,12 @@ function storeSample() {
   }
   const sample = {
     name: sampleName,
+    ...payloadSnapshot(props.session),
+    assertions: props.session.assertions ?? [],
     fields: Object.fromEntries(fields.value.filter(field => selectedFields.value.includes(field.key))
       .map(field => [field.key, field.value])),
   }
-  if (jsonContent(props.operation)) sample.body = props.session.body
+  if (props.operation.requestBody) sample.body = props.session.body
   if (persist(current => {
     if (current.samples.some(entry => entry.name === sampleName && entry.name !== editing.value)) {
       throw new Error('A sample with that name already exists.')

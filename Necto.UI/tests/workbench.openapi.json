@@ -1,0 +1,297 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Necto workbench",
+    "version": "1"
+  },
+  "paths": {
+    "/invoices": {
+      "get": {
+        "operationId": "Invoices",
+        "summary": "Invoices",
+        "tags": ["Workbench"],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id"],
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "reference": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "**Explore your API.** Select an invoice, reuse its values, then inspect the response. <img src=\"x\" onerror=\"window.injected=true\">"
+      }
+    },
+    "/upload": {
+      "post": {
+        "operationId": "Upload invoice",
+        "summary": "Upload invoice",
+        "tags": ["Workbench"],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id"],
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "reference": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file", "reference"],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "reference": {
+                    "type": "string",
+                    "example": "INV-42"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/form": {
+      "post": {
+        "operationId": "Form invoice",
+        "summary": "Form invoice",
+        "tags": ["Workbench"],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id"],
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "reference": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reference": {
+                    "type": "string",
+                    "example": "INV-42"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/raw": {
+      "post": {
+        "operationId": "Raw invoice",
+        "summary": "Raw invoice",
+        "tags": ["Workbench"],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id"],
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "reference": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "text/plain": {
+              "example": "hello"
+            },
+            "application/xml": {
+              "example": "<invoice id=\"42\"/>"
+            },
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "application/json": {
+              "examples": {
+                "standard": {
+                  "summary": "Standard invoice",
+                  "value": {
+                    "reference": "INV-42"
+                  }
+                },
+                "other": {
+                  "summary": "Another invoice",
+                  "value": {
+                    "reference": "INV-99"
+                  }
+                }
+              },
+              "schema": {
+                "oneOf": [
+                  {
+                    "title": "Reference invoice",
+                    "type": "object",
+                    "required": ["reference"],
+                    "properties": {
+                      "reference": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "title": "Number invoice",
+                    "type": "object",
+                    "required": ["number"],
+                    "properties": {
+                      "number": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/binary": {
+      "get": {
+        "operationId": "Download invoice",
+        "summary": "Download invoice",
+        "tags": ["Workbench"],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id"],
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "reference": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stream": {
+      "get": {
+        "operationId": "Stream invoices",
+        "summary": "Stream invoices",
+        "tags": ["Workbench"],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id"],
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "reference": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/slow": {
+      "get": {
+        "operationId": "Slow request",
+        "summary": "Slow request",
+        "tags": ["Workbench"],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id"],
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "reference": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

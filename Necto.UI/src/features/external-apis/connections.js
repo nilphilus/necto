@@ -1,3 +1,4 @@
+import { parseDocument, bundleReferences } from '../workbench/document.js'
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 
 export function httpUrl(value, label, base) {
@@ -23,13 +24,13 @@ export function normalizeConnection(input) {
 
 const signature = entry => JSON.stringify([entry.openApiUrl, entry.endpointMappingsUrl, entry.apiBaseUrl])
 export async function loadConnection(entry, signal, authentication) {
-  const read = async url => {
-    const options = { signal, headers: { Accept: 'application/json' }, credentials: 'omit' }
+  const read = async (url, apiDocument = false) => {
+    const options = { signal, headers: { Accept: apiDocument ? 'application/json, application/yaml, text/yaml' : 'application/json' }, credentials: 'omit' }
     const response = await (authentication?.metadataFetch(url, entry.id, options) ?? fetch(url, options))
     if (!response.ok) throw new Error(`HTTP ${response.status} loading ${url}`)
-    return response.json()
+    return apiDocument && response.text ? bundleReferences(parseDocument(await response.text()), url, (url, options) => fetch(url, { ...options, signal })) : response.json()
   }
-  const [document, mappings] = await Promise.all([read(entry.openApiUrl), read(entry.endpointMappingsUrl)])
+  const [document, mappings] = await Promise.all([read(entry.openApiUrl, true), read(entry.endpointMappingsUrl)])
   if (!document?.openapi || typeof document.paths !== 'object' || !document.paths) throw new Error('Expected an OpenAPI document with paths.')
   if (!Array.isArray(mappings) || mappings.some(mapping => !mapping?.source?.operationId || !mapping?.target?.operationId)) {
     throw new Error('Expected a list of Necto endpoint mappings.')
