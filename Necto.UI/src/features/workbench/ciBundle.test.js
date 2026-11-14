@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCiBundle, ciCommand } from './ciBundle.js';
+import { createCiBundle, ciCommand, ciSetup } from './ciBundle.js';
 import { junitReport } from '../../../../tools/junit.mjs';
 const scenario = {
   version: 1,
@@ -101,3 +101,11 @@ test('downloaded-style bundle runs through the CLI and writes JSON and JUnit', a
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('CI onboarding pins the UI version and commands quote targets for the chosen shell', () => {
+  assert.match(ciSetup('0.3.0'), /checkout --detach v0.3.0/)
+  assert.match(ciSetup('0.3.0'), /--frozen-lockfile/)
+  assert.throws(() => ciSetup('main; exit'), /version/)
+  assert.match(ciCommand("https://api.test/O'Neil", {shell:'powershell'}), /'https:\/\/api.test\/O''Neil'/)
+  assert.match(ciCommand("https://api.test/O'Neil"), /'\\''/)
+})
