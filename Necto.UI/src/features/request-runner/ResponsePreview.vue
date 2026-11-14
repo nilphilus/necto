@@ -63,6 +63,7 @@ function download() {
       <h3>{{ pending || stale ? 'Last response' : 'Response' }}</h3>
       <span class="status" :class="{ failed: !result.ok }" role="status">{{ result.status }} {{ result.statusText }}</span>
       <span>{{ result.elapsed }} ms</span>
+      <slot name="actions" />
       <template v-if="result.json !== undefined">
         <button type="button" :aria-pressed="!raw" @click="raw = false">Preview</button>
         <button type="button" :aria-pressed="raw" @click="raw = true">Raw</button>
