@@ -75,7 +75,6 @@ export function useRequestRunner(configuration, authentication) {
       onRequest?.(redactedRequest(request))
       const started = performance.now()
       const result = await sendRequest(request, { responseLimitBytes: policy.responseLimitMiB * 1024 * 1024, onProgress: progress => {
-        if (invalidated()) return
         session.result = { ...progress, requestIdentity: identity, sentRequest, elapsed: Math.round(performance.now() - started) }
       } })
       if (invalidated()) return null
