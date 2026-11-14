@@ -1,7 +1,7 @@
 <script setup>
 import SchemaTree from './SchemaTree.vue'
 import { diffValues } from './history.js'
-import { computed, ref } from 'vue'
+import { computed, ref, nextTick, watch } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { buildRequest } from '../request-runner/request.js'
@@ -27,11 +27,14 @@ const dialog = ref(null),
   tab = ref('Contract'),
   language = ref('curl'),
   error = ref(''),
-  copied = ref(false)
+  copied = ref(false),
+  codeSource = ref('draft')
 const snippet = computed(() => {
   try {
-    return requestSnippet(
-      props.prepare
+    return { code: requestSnippet(
+      codeSource.value === 'sent' && props.session.result?.sentRequest
+        ? props.session.result.sentRequest
+        : props.prepare
         ? props.prepare(props.operation, props.session, props.values)
         : buildRequest(
             props.operation,
@@ -40,17 +43,25 @@ const snippet = computed(() => {
             props.values
           ),
       language.value
-    )
+    ), error: '' }
   } catch (cause) {
-    return cause.message
+    return { code: '', error: cause.message }
   }
 })
 const description = computed(() =>
   DOMPurify.sanitize(marked.parse(props.operation.description ?? ''))
 )
+watch([snippet, language], () => { copied.value = false; error.value = '' })
+async function fixInputs() {
+  const runner = dialog.value.closest('.runner')
+  dialog.value.close()
+  await nextTick()
+  runner?.querySelector('input:invalid, textarea:invalid, textarea, input:not([readonly]):not([type=checkbox])')?.focus()
+}
 async function copy() {
+  if (snippet.value.error) return
   try {
-    await navigator.clipboard.writeText(snippet.value)
+    await navigator.clipboard.writeText(snippet.value.code)
     copied.value = true
   } catch {
     error.value = 'Clipboard unavailable. Select and copy the code below.'
@@ -154,6 +165,7 @@ function addCheck() {
       </details>
     </section>
     <section v-if="tab === 'Code'">
+      <label v-if="session.result?.sentRequest">Request source<select v-model="codeSource"><option value="draft">Current draft</option><option value="sent">Request sent for this response</option></select></label>
       <label
         >Language
         <select v-model="language">
@@ -161,14 +173,15 @@ function addCheck() {
           <option value="fetch">JavaScript fetch</option>
           <option value="csharp">C# HttpClient</option>
         </select></label
-      ><button type="button" @click="copy">
+      ><button type="button" :disabled="!!snippet.error" @click="copy">
         {{ copied ? 'Copied' : 'Copy code' }}
       </button>
       <p>
         Credentials are masked. Review body and URL values before sharing.
         Uploads use file placeholders.
       </p>
-      <pre tabindex="0">{{ snippet }}</pre>
+      <div v-if="snippet.error" class="error" role="alert"><p>{{ snippet.error }}</p><button type="button" @click="fixInputs">Fix request inputs</button></div>
+      <pre v-else tabindex="0">{{ snippet.code }}</pre>
     </section>
     <section v-if="tab === 'Bindings'">
       <p>
