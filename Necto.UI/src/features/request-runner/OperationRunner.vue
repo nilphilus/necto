@@ -2,12 +2,14 @@
 import { computed, nextTick, ref, watch, watchPostEffect } from 'vue'
 import { bodyFields, hasBodyExample } from './bodyHelp.js'
 import { effectiveTarget } from '../workbench/target.js'
+import { requestIdentity } from '../workbench/requestContext.js'
+
 import BodyEditor from '../workbench/BodyEditor.vue'
 import RequestTools from '../workbench/RequestTools.vue'
 import ResponsePreview from './ResponsePreview.vue'
 import RequestSendIcon from './RequestSendIcon.vue'
 import NextRequestsPanel from './NextRequestsPanel.vue'
-import { applyBodyPresets, contextKey, fieldKey, jsonContent, presetSource, supportedParameters, requestUrl } from './request.js'
+import { applyBodyPresets, contextKey, fieldKey, jsonContent, presetSource, supportedParameters, requestUrl, buildRequest } from './request.js'
 
 const props = defineProps({
   operation: { type: Object, required: true },
@@ -24,6 +26,14 @@ const props = defineProps({
 
 const emit = defineEmits(['edit-preset'])
 const target = computed(() => { try { return effectiveTarget(props.operation, props.configuration, props.session, props.values) } catch { return null } })
+const responseStale = computed(() => {
+  if (!props.session.result) return false
+  if (props.session.resultStale) return true
+  if (!props.session.result.requestIdentity) return Boolean(props.session.resultStale)
+  try { return requestIdentity(buildRequest(props.operation, props.configuration ?? {}, props.session, props.values), props.session) !== props.session.result.requestIdentity }
+  catch { return true }
+})
+
 const parameters = computed(() => supportedParameters(props.operation))
 const content = computed(() => jsonContent(props.operation, props.session.mediaType))
 const bodyPresetResult = computed(() => applyBodyPresets(props.operation, props.session.body, props.values, props.session.mediaType))
@@ -225,11 +235,11 @@ function parameterHint(parameter) {
 
       <div class="pane-body">
         <template v-if="session.result">
-          <p v-if="session.resultStale" class="muted response-stale" role="status">Inputs changed. Showing the previous response until you send again.</p>
+          <p v-if="responseStale" class="muted response-stale" role="status">{{ session.error ? 'The latest request did not complete. Showing the previous response.' : 'Inputs changed. This response belongs to the previous request.' }}</p>
           <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }">
           <NextRequestsPanel v-if="hasRelated" :operation-key="operation.key" @pin="relatedPinned = $event"><slot name="related" /></NextRequestsPanel>
           <div class="response-body">
-            <ResponsePreview :result="session.result" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="session.resultStale" />
+            <ResponsePreview :result="session.result" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="responseStale" />
           </div>
 
           </div>
