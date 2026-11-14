@@ -48,6 +48,7 @@ function runScenario(scenario) {
           <button type="button" class="secondary" :disabled="pending" :aria-label="'Delete scenario ' + scenario.name" @click="emit('remove', scenario.id)">Delete</button>
         </div>
         <form v-if="runId === scenario.id" class="run-form" @submit.prevent="runScenario(scenario)">
+          <slot name="run-targets" :scenario="scenario" :preset-names="selectedPresets" />
           <fieldset v-if="presetNames.length" :disabled="busy">
             <legend>Presets for this run</legend>
             <div class="preset-options">
