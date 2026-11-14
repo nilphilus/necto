@@ -152,7 +152,7 @@ function operationOrigins(entries, config) {
 }
 watch(authentication.revision, () => {
   scenarioStore.stop(); scenarioRuns.clear(); scenarioState.steps = []; scenarioState.error = ''; scenarioState.status = 'idle'
-  for (const session of [...sessions.values(), ...chain.value.map(step => step.session)]) { session.result = null; session.error = '' }
+  for (const session of [...sessions.values(), ...chain.value.map(step => step.session)]) { session.result = null; session.responseProgress = null; session.error = '' }
   void reloadCatalog()
 })
 
