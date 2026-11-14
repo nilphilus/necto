@@ -12,3 +12,5 @@ test('replacement upload with same metadata changes identity',()=>{
  const first=new Blob(['a']),second=new Blob(['b']), req=request('42')
  assert.notEqual(requestIdentity(req,{binaryFile:first}),requestIdentity(req,{binaryFile:second}))
 })
+
+test('non-BMP body edits invalidate the previous request identity',()=>{const a=request('42'),b=request('42');a.options.body='{"note":"😀"}';b.options.body='{"note":"😃"}';assert.notEqual(requestIdentity(a),requestIdentity(b))})

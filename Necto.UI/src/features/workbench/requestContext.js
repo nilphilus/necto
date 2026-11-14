@@ -4,7 +4,7 @@ let nextFile = 0
 function fileId(file) { if (!files.has(file)) files.set(file, ++nextFile); return files.get(file) }
 export function requestIdentity(request, draft = {}) {
   let first = 2166136261, second = 5381
-  function add(value) { for (const character of String(value)) { const code = character.charCodeAt(0); first = Math.imul(first ^ code, 16777619); second = Math.imul(second, 33) ^ code } first = Math.imul(first ^ 0, 16777619) }
+  function add(value) { const text = String(value); for (let index = 0; index < text.length; index++) { const code = text.charCodeAt(index); first = Math.imul(first ^ code, 16777619); second = Math.imul(second, 33) ^ code } first = Math.imul(first ^ 0, 16777619) }
   add(request.options.method); add(request.url.href)
   for (const [name, value] of request.options.headers) { add(name); add(value) }
   const body = request.options.body
