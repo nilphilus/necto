@@ -2,16 +2,27 @@
 import ScenarioCi from '../workbench/ScenarioCi.vue'
 import ScenarioExport from '../workbench/ScenarioExport.vue'
 
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { pathLabel } from './scenario.js'
 import ScenarioTrace from './ScenarioTrace.vue'
 const props = defineProps({ scenarios: Array, state: Object, pending: Boolean, busy: Boolean, error: String,
-  presetNames: Array, activePresetNames: Array, runs: Map, apiUrl: String, document: Object, mappings: Array, configuration: Object })
+  presetNames: Array, activePresetNames: Array, runs: Map, apiUrl: String, document: Object, mappings: Array, configuration: Object, deleted: Object })
 
-const emit = defineEmits(['open', 'run', 'remove', 'stop', 'inspect'])
+const emit = defineEmits(['open', 'run', 'remove', 'stop', 'inspect', 'undo-remove'])
 const runId = ref('')
 const selectedPresets = ref([])
-const list = ref(null)
+const list = ref(null), undoButton = ref(null), title = ref(null)
+async function deleteScenario(id) {
+  emit('remove', id)
+  await nextTick(); undoButton.value?.focus()
+}
+async function undoDeletion() {
+  const id = props.deleted?.id
+  emit('undo-remove')
+  await nextTick()
+  const row = [...(list.value?.children ?? [])].find(item => item.dataset.scenarioId === id)
+  row?.querySelector('button[aria-label^="Open scenario"]')?.focus()
+}
 defineExpose({ showProgress: () => list.value?.querySelector('[data-current-run]')?.scrollIntoView({ block: 'nearest', behavior: 'instant' }) })
 
 function configureRun(scenario) {
@@ -27,10 +38,13 @@ function runScenario(scenario) {
 </script>
 <template>
   <section class="scenario-panel work-area" aria-labelledby="scenarios-title">
-    <h2 id="scenarios-title">Scenarios</h2>
+    <h2 id="scenarios-title" ref="title" tabindex="-1">Scenarios</h2>
+    <div v-if="deleted" class="deletion-feedback" role="status">Deleted “{{ deleted.name }}”.
+      <button ref="undoButton" type="button" class="secondary" :disabled="pending" @click="undoDeletion">Undo delete</button>
+    </div>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <ul ref="list" class="saved-list">
-      <li v-for="scenario in scenarios" :key="scenario.id">
+      <li v-for="scenario in scenarios" :key="scenario.id" :data-scenario-id="scenario.id">
         <div class="saved-title"><strong>{{ scenario.name }}</strong><span class="muted">{{ scenario.steps.length }} steps</span><ScenarioExport :scenario="scenario" :api-url="apiUrl" /><ScenarioCi :scenario="scenario" :document="document" :mappings="mappings" :configuration="configuration" /></div>
 
         <details class="review"><summary>Review steps</summary>
@@ -45,7 +59,7 @@ function runScenario(scenario) {
           <button type="button" class="secondary" :disabled="busy" :aria-label="'Open scenario ' + scenario.name" @click="emit('open', scenario)">Open</button>
           <button type="button" class="primary" :disabled="busy" :aria-expanded="runId === scenario.id"
             :aria-label="'Configure run for ' + scenario.name" @click="configureRun(scenario)">Run…</button>
-          <button type="button" class="secondary" :disabled="pending" :aria-label="'Delete scenario ' + scenario.name" @click="emit('remove', scenario.id)">Delete</button>
+          <button type="button" class="secondary" :disabled="pending" :aria-label="'Delete scenario ' + scenario.name" @click="deleteScenario(scenario.id)">Delete</button>
         </div>
         <form v-if="runId === scenario.id" class="run-form" @submit.prevent="runScenario(scenario)">
           <slot name="run-targets" :scenario="scenario" :preset-names="selectedPresets" />
@@ -83,6 +97,7 @@ function runScenario(scenario) {
   </section>
 </template>
 <style scoped>
+.deletion-feedback { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-bottom: .75rem; font-size: .85rem; }
 .scenario-panel { flex: 1; min-height: 0; }
 .scenario-panel h2 { margin: 0 0 1rem; }
 .scenario-panel p { margin: 0; font-size: .8rem; }
