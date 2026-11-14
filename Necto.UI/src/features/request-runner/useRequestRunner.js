@@ -23,6 +23,7 @@ export function useRequestRunner(configuration, authentication) {
       assertions: [],
       serverValues: {},
       timeout: 30000,
+      responseLimitMiB: 32,
       bindings: [],
       body: initialBody(operation),
       result: null,
@@ -63,7 +64,7 @@ export function useRequestRunner(configuration, authentication) {
       request.options.signal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
       onRequest?.(redactedRequest(request))
       const started = performance.now()
-      const result = await sendRequest(request, { onProgress: progress => {
+      const result = await sendRequest(request, { responseLimitBytes: (Number(session.responseLimitMiB) || 32) * 1024 * 1024, onProgress: progress => {
         session.result = { ...progress, requestIdentity: identity, sentRequest, elapsed: Math.round(performance.now() - started) }
       } })
       if (result.json && typeof result.json === 'object') markRaw(result.json)
@@ -76,6 +77,7 @@ export function useRequestRunner(configuration, authentication) {
       if (session.result) session.resultStale = true
       session.error = controller.signal.aborted ? controller.signal.reason?.message ?? 'Request canceled.' : signal?.aborted ? 'Request canceled.' : cause.message
       try { history.add(operation, request, undefined, session.error, session) } catch { /* Metadata retention is optional. */ }
+      if (session.result?.receiving) session.result.receiving = false
       if (session.result?.stream) { session.result.stream.done = true; session.result.stream.reason = session.error }
 
       return null
