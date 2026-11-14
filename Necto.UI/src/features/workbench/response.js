@@ -188,6 +188,8 @@ async function readStream(response, metadata, signal, onProgress) {
   }
 }
 export async function sendRequest(request, { onProgress, responseLimitBytes } = {}) {
+  const reportProgress = onProgress
+  onProgress = update => { if (!request.options.signal?.aborted) reportProgress?.(update) }
   const response = await fetch(request.url, request.options)
   const contentType = response.headers.get('content-type') ?? ''
   const metadata = {
