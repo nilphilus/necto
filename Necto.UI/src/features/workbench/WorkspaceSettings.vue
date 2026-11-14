@@ -63,7 +63,7 @@ async function inspect(event) {
     preview.value = null
   }
 }
-function imported(count) { message.value = `Imported ${count} items. Reload Necto to use the updated workspace.`; preview.value = null }
+function imported(count) { message.value = `Imported ${count} items. Available now without reloading.`; preview.value = null }
 async function loadDocument(event) {
   try {
     await props.importDocument(
