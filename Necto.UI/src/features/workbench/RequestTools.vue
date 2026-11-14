@@ -1,6 +1,6 @@
 <script setup>
+import HistoryPanel from './HistoryPanel.vue'
 import SchemaTree from './SchemaTree.vue'
-import { diffValues } from './history.js'
 import { computed, ref } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -14,14 +14,6 @@ const props = defineProps({
   configuration: Object,
   history: Object,
   prepare: Function
-})
-const changes = computed(() => {
-  const entries = props.history?.forOperation(props.operation.key) ?? []
-  return entries.length > 1 &&
-    entries[0].payload !== undefined &&
-    entries[1].payload !== undefined
-    ? diffValues(entries[1].payload, entries[0].payload)
-    : null
 })
 const dialog = ref(null),
   tab = ref('Contract'),
@@ -308,31 +300,7 @@ function addCheck() {
       <p>Cancel is available beside Send while a request is running.</p>
     </section>
     <section v-if="tab === 'History'">
-      <p>
-        Last 20 requests, kept in memory. Body snapshots and diffs are bounded;
-        large bodies are omitted.
-      </p>
-      <button type="button" @click="history?.clear()">Clear history</button>
-      <details
-        v-for="entry in history?.forOperation(operation.key)"
-        :key="entry.id"
-      >
-        <summary>
-          {{ entry.at }} · {{ entry.status }} · {{ entry.elapsed }} ms
-        </summary>
-        <p v-if="entry.omitted">
-          Body omitted to keep history small. Binary and stream bodies are not
-          retained.
-        </p>
-        <pre v-else>{{ JSON.stringify(entry.payload, null, 2) }}</pre>
-      </details>
-      <details v-if="changes">
-        <summary>Compare last two responses</summary>
-        <pre>{{ JSON.stringify(changes, null, 2) }}</pre>
-      </details>
-      <p v-if="!history?.forOperation(operation.key).length">
-        No requests yet.
-      </p>
+      <HistoryPanel :history="history" :operation="operation" :session="session" @restored="dialog.close()" />
     </section>
     <p v-if="error" role="alert">{{ error }}</p>
   </dialog>
