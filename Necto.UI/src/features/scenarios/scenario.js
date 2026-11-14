@@ -140,12 +140,13 @@ export function prepareScenario(scenario, { operations, links, configuration, cr
 }
 
 export async function executeScenario(plan, { execute, signal, onStep = () => {} }) {
-  let index = 0
+  let index = 0, phase = 'request'
   try {
     for (; index < plan.length; index++) {
       signal.throwIfAborted()
       const step = plan[index]
       step.status = 'running'
+      phase = 'binding'
       for (const binding of step.bindings) {
         const source = plan[binding.sourceStep].session.result
         if (!source?.ok) throw new Error(`Step ${binding.sourceStep + 1} has no successful response.`)
@@ -154,6 +155,7 @@ export async function executeScenario(plan, { execute, signal, onStep = () => {}
         applyChoice(step.session, binding.location, { name: binding.name, value })
         rememberBinding(step.session, { ...binding, value, binding: { path: binding.path } }, binding.sourceStep)
       }
+      phase = 'request'
       await onStep(index, step)
       signal.throwIfAborted()
       const result = await execute(step.operation, step.session, step.values, signal, ({ url, options }) => {
@@ -167,14 +169,16 @@ export async function executeScenario(plan, { execute, signal, onStep = () => {}
         step.response = result
         step.session.result = result
       }
+      phase = 'http'
       if (!result || !result.ok && !result.assertions?.some(check => check.kind === 'status' && check.passed)) throw new Error(result ? `HTTP ${result.status} ${result.statusText}` : step.session.error || 'No response received.')
+      phase = 'assertion'
       if (result.assertions?.some(check => !check.passed)) throw new Error('Response checks failed.')
       step.status = 'completed'
     }
     return { status: 'completed', error: '' }
   } catch (cause) {
     const status = signal.aborted ? 'cancelled' : 'failed'
-    if (plan[index]) { plan[index].status = status; plan[index].error = signal.aborted ? 'Canceled.' : cause.message }
+    if (plan[index]) { plan[index].status = status; plan[index].error = signal.aborted ? 'Canceled.' : cause.message; plan[index].failureCode = signal.aborted ? 'CANCELED' : cause.code ?? ({ binding: 'BINDING_ERROR', http: 'HTTP_ERROR', assertion: 'ASSERTION_FAILED' }[phase] ?? 'REQUEST_ERROR') }
     for (let next = index + 1; next < plan.length; next++) plan[next].status = 'skipped'
     return { status, error: signal.aborted ? 'Scenario stopped.' : `Step ${index + 1}: ${cause.message}` }
   }

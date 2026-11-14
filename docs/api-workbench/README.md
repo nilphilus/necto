@@ -87,3 +87,13 @@ SSE and NDJSON update while receiving. The preview closes the connection at 200 
 - The existing authentication browser fixture verifies protected OpenAPI, Bearer/Basic/API keys/cookies/OIDC, related requests and scenario redaction.
 
 To reproduce screenshots, build the UI and run the workbench fixture with `PLAYWRIGHT_MODULE`, `PLAYWRIGHT_BROWSERS_PATH` and `NECTO_WORKBENCH_SCREENSHOTS` pointing to your local Playwright installation, browser cache and output directory.
+
+### CI failure diagnostics
+
+JSON step reports include a 1-based `step` and a `failure` object with a stable
+`code` and safe message. Codes distinguish `RESPONSE_LIMIT_EXCEEDED`, `TIMEOUT`,
+`NETWORK_ERROR`, `BINDING_ERROR`, `HTTP_ERROR`, `ASSERTION_FAILED`,
+`ORIGIN_MISMATCH`, `CANCELED` and the fallback `REQUEST_ERROR`.
+Budget/timeout failures include `limitMiB`/`timeoutMs`; received HTTP failures
+include `httpStatus`. JUnit uses the same codes and numeric context. Diagnostics
+omit raw exception text, request URLs, headers and response values.
