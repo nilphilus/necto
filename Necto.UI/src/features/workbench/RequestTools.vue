@@ -1,5 +1,5 @@
 <script setup>
-import SchemaTree from './SchemaTree.vue'
+import ContractPanel from './ContractPanel.vue'
 import { diffValues } from './history.js'
 import { computed, ref } from 'vue'
 import { marked } from 'marked'
@@ -125,33 +125,7 @@ function addCheck() {
     <section v-if="tab === 'Contract'">
       <h3>{{ operation.summary || operation.name }}</h3>
       <div v-html="description" />
-      <details v-if="operation.requestBody">
-        <summary>Request body contract</summary>
-        <SchemaTree
-          v-for="(media, name) in operation.requestBody.content"
-          :key="name"
-          :schema="media.schema"
-          :resolve="operation.resolve"
-          :name="name"
-        />
-      </details>
-      <details v-for="(response, status) in operation.responses" :key="status">
-        <summary>{{ status }} · {{ response.description }}</summary>
-        <SchemaTree
-          v-for="(media, name) in operation.resolve(response)?.content"
-          :key="name"
-          :schema="media.schema"
-          :resolve="operation.resolve"
-          :name="name"
-        />
-        <pre>{{
-          JSON.stringify(operation.resolve(response)?.content, null, 2)
-        }}</pre>
-      </details>
-      <details v-if="operation.parameters?.length">
-        <summary>Parameters</summary>
-        <pre>{{ JSON.stringify(operation.parameters, null, 2) }}</pre>
-      </details>
+      <ContractPanel :operation="operation" />
     </section>
     <section v-if="tab === 'Code'">
       <label
