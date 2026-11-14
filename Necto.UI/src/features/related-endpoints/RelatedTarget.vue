@@ -1,4 +1,6 @@
 <script setup>
+import DescriptionHelp from '../workbench/DescriptionHelp.vue'
+import { preferredRelatedChoice } from './mappings.js'
 import RequestSendIcon from '../request-runner/RequestSendIcon.vue'
 import { computed, reactive, watch } from 'vue'
 import ValueInput from './ValueInput.vue'
@@ -19,8 +21,7 @@ const fields = computed(() => {
 })
 watch(fields, fields => {
   for (const field of fields) {
-    const suggested = field.selected.length === 1 ? field.selected[0]
-      : field.choices.length === 1 ? field.choices[0] : null
+    const suggested = preferredRelatedChoice(field.choices, field.selected)
     if (suggested) {
       const value = suggested.value
       drafts[field.key] = typeof value === 'object' ? JSON.stringify(value) : String(value)
@@ -50,6 +51,8 @@ const ready = computed(() => props.canSend(props.target.operation, choices.value
     <div class="destination-title">
       <span class="method" :data-method="target.operation.method">{{ target.operation.method }}</span>
       <strong>{{ target.operation.name }}</strong>
+      <small v-if="target.preferred" class="link-origin">OpenAPI Link</small>
+      <DescriptionHelp :label="'About link to ' + target.operation.name" :description="target.description" />
       <button type="button" class="secondary open-request" :aria-label="'Open request ' + target.operation.name"
         @click="emit('follow', target.operation, choices, false)">Open request</button>
       <small v-if="target.operation.apiId && target.operation.apiId !== 'local'">{{ target.operation.apiName }} [{{ target.operation.apiId }}]</small>

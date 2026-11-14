@@ -66,7 +66,7 @@ export function resolveMappingLinks(operations, catalogs) {
         ['path', 'query', 'header'].includes(parameter.in) && parameter.name === target.name)?.in
       if (location === 'body' ? !to.requestBody : !['path', 'query', 'header'].includes(location) ||
         !to.parameters.some(parameter => parameter.in === location && parameter.name === target.name)) continue
-      links.push({ from, to, location, name: target.name, source, match: mapping.match ?? 'explicit' })
+      links.push({ from, to, location, name: target.name, source, origin: 'mapping', match: mapping.match ?? 'explicit' })
     }
   }
   return links
@@ -108,37 +108,43 @@ export function useRelatedEndpoints(configuration, operations, externalContexts 
   ]))
 
   function mappedEntries(link, result) {
-    if (!result?.ok) return []
+    if (!result || result.incomplete || (!result.ok && link.origin !== 'openapi')) return []
     const status = link.source.responseStatus
+    if (/^[1-5]XX$/i.test(status ?? '') && Object.hasOwn(link.from.responses ?? {}, String(result.status))) return []
+    if (status === 'default' && Object.keys(link.from.responses ?? {}).some(code => code === String(result.status) || /^[1-5]XX$/i.test(code) && code[0] === String(result.status)[0])) return []
     if (status && status !== 'default' && !(status === String(result.status) || /^[1-5]XX$/i.test(status) && status[0] === String(result.status)[0])) return []
+    if (link.navigationOnly) return [{}]
+    if (Object.hasOwn(link, 'constant')) return link.location === 'body' || link.constant !== null ? [{value:link.constant}] : []
+    if (result.json === undefined) return []
     return readResponseEntries(result.json, link.source, result.selectedPath, RELATED_VALUE_LIMIT)
       .filter(entry => link.location === 'body' || entry.value !== null)
   }
   function provenance(link, entry, result) {
-    return { binding: { operationKey: link.from.key, path: entry.path }, sourceResult: result }
+    return { binding: entry.path ? { operationKey: link.from.key, path: entry.path } : undefined, sourceResult: result, origin: link.origin, linkName: link.linkName, description: link.description }
   }
 
   function targetsFor(operation, result) {
-    const byTarget = new Map()
+    const byTarget = new Map(), declared = new Map()
     for (const link of links.value) {
       if (link.from.key !== operation.key) continue
       const values = mappedEntries(link, result)
       if (!values.length) continue
+      if (link.origin === 'openapi') declared.set(link.to, [...(declared.get(link.to) ?? []), link.description].filter(Boolean))
       const matches = byTarget.get(link.to) ?? new Map()
-      for (const entry of values) {
+      for (const entry of link.navigationOnly ? [] : values) {
         const value = entry.value
         const key = JSON.stringify([link.location, link.name, value])
-        matches.set(key, { location: link.location, name: link.name, value, ...provenance(link, entry, result) })
+        if (!matches.has(key)) matches.set(key, { location: link.location, name: link.name, value, ...provenance(link, entry, result) })
       }
       byTarget.set(link.to, matches)
     }
-    return [...byTarget].map(([operation, matches]) => ({ operation, candidates: [...matches.values()] }))
+    return [...byTarget].map(([operation, matches]) => ({ operation, candidates: [...matches.values()], preferred: declared.has(operation), description: [...new Set(declared.get(operation) ?? [])].join('\n\n') }))
   }
 
   function choicesFor(operation, location, name, results) {
     const choices = new Map()
     for (const link of links.value) {
-      if (link.to.key !== operation.key || link.location !== location ||
+      if (link.navigationOnly || link.to.key !== operation.key || link.location !== location ||
         (location !== 'body' && link.name !== name)) continue
       for (const result of results.get(link.from.key) ?? []) {
         for (const entry of mappedEntries(link, result)) {
@@ -152,7 +158,7 @@ export function useRelatedEndpoints(configuration, operations, externalContexts 
   }
 
   function selectablePaths(operation) {
-    return links.value.filter(link => link.from.key === operation.key).map(link => sourcePath(link.source))
+    return links.value.filter(link => !link.navigationOnly && !Object.hasOwn(link, 'constant') && link.from.key === operation.key).map(link => sourcePath(link.source))
   }
 
   return { error, targetsFor, choicesFor, selectablePaths, mappings: graphMappings, links, pending }
@@ -180,4 +186,12 @@ export function applyChoice(session, location, choice) {
     throw new Error('The request body must be a JSON object to apply this value.')
   }
   session.body = JSON.stringify({ ...body, [name]: value }, null, 2)
+}
+
+// An explicit user selection wins. Otherwise prefer one unambiguous declared
+// Link value over supplemental inferred values; never guess between two Links.
+export function preferredRelatedChoice(choices, selected = []) {
+  if (selected.length) return selected.length === 1 ? selected[0] : null
+  const declared = choices.filter(choice => choice.origin === 'openapi')
+  return declared.length === 1 ? declared[0] : choices.length === 1 ? choices[0] : null
 }

@@ -51,6 +51,7 @@ export function readOperations(spec, api = { id: 'local' }) {
         path,
         method: verb,
         id: operation.operationId,
+        summary: operation.summary,
         name: operation.summary || operation.operationId || path,
         description: operation.description,
         tags: (operation.tags?.length ? [...new Set(operation.tags)] : ['Other'])
@@ -79,6 +80,8 @@ export function useCatalog(authentication) {
     ...externalApis.contexts.value.flatMap(api => readOperations(api.document, api)),
   ] : [])
   const groups = computed(() => {
+    const descriptions = new Map((spec.value?.tags ?? []).map(tag => [tag.name, tag.description]))
+    for (const api of externalApis.contexts.value) for (const tag of api.document.tags ?? []) descriptions.set(`${api.name} [${api.id}] · ${tag.name}`, tag.description)
     const byTag = new Map((spec.value?.tags ?? []).map(({ name }) => [name, []]))
     for (const operation of operations.value) {
       for (const tag of operation.tags) {
@@ -87,7 +90,7 @@ export function useCatalog(authentication) {
       }
     }
     return [...byTag].filter(([, entries]) => entries.length)
-      .map(([name, operations]) => ({ name, operations }))
+      .map(([name, operations]) => ({ name, operations, description: descriptions.get(name) }))
   })
 
   let generation = 0, controller

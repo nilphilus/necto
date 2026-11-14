@@ -1,4 +1,5 @@
 <script setup>
+import DescriptionHelp from '../workbench/DescriptionHelp.vue'
 import { computed, nextTick, ref, watch, watchPostEffect } from 'vue'
 import { bodyFields, hasBodyExample } from './bodyHelp.js'
 import ImportedInputs from '../workbench/ImportedInputs.vue'
@@ -208,7 +209,7 @@ function parameterHint(parameter) {
                 :placeholder="parameterHint(parameter)" spellcheck="false">
             </slot>
           </label>
-          <p v-if="parameter.description" class="muted">{{ parameter.description }}</p>
+          <DescriptionHelp :label="'About parameter ' + parameter.name" :description="parameter.description" />
           <p v-if="values.has(contextKey(parameter))" class="muted preset-origin">Set by preset
             <button v-if="presetSource(values, contextKey(parameter))" type="button" class="preset-link" @click="emit('edit-preset', presetSource(values, contextKey(parameter)))">{{ presetSource(values, contextKey(parameter)) }}</button>
             <span v-else>active request preset</span>.
@@ -286,6 +287,9 @@ function parameterHint(parameter) {
 </template>
 
 <style scoped>
+.field { position:relative; }
+.field > .description-help { position:absolute; top:0; right:0; }
+
 .settings-error { margin:.5rem .85rem; font-size:.8rem; }
 .runner {
   container-type: inline-size;
