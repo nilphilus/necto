@@ -251,7 +251,8 @@ export function buildRequest(operation, configuration, draft, values = new Map()
   if (draft.serverIndex >= 0 && operation.servers?.[draft.serverIndex]) operation = { ...operation, requestServer: { ...operation.servers[draft.serverIndex], values: draft.serverValues ?? {} } }
   configuration = operation.configuration ? { ...operation.configuration, serverProfiles: configuration.serverProfiles } : configuration
   const url = requestUrl(operation, configuration)
-  const headers = new Headers()
+  const headers = new Headers(draft.extraHeaders ?? {})
+  for (const [name, value] of draft.extraQuery ?? []) url.searchParams.append(name, value)
   const parameters = supportedParameters(operation)
   const declared = new Set(parameters.map(contextKey))
   let path = operation.path

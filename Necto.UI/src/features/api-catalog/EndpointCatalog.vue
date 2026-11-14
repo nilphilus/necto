@@ -48,7 +48,7 @@ function toggleGroup(name) {
 
 <template>
   <nav class="catalog" aria-label="API endpoints">
-    <h2 class="catalog-title">Endpoints</h2>
+    <header class="catalog-title-row"><h2 class="catalog-title">Endpoints</h2><slot name="actions" /></header>
     <div v-if="externalCount" class="api-visibility" aria-label="API visibility">
       <label><input type="checkbox" role="switch" :checked="showExternal" @change="$emit('toggle-external', $event.target.checked)"> External APIs ({{ externalCount }})</label>
       <small>{{ externalLoading ? 'Loading external services…' : showExternal ? 'Local + external services' : 'Local service only' }}</small>
@@ -99,6 +99,8 @@ function toggleGroup(name) {
 </template>
 
 <style scoped>
+.catalog-title-row {display:flex;gap:.35rem;align-items:center;justify-content:space-between}
+
 .catalog {
   min-width: 0;
   overflow: auto;

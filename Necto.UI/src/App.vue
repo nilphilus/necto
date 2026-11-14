@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import WorkspaceSettings from './features/workbench/WorkspaceSettings.vue'
+import CurlImport from './features/workbench/CurlImport.vue'
 import AgentPanel from './features/agents/AgentPanel.vue'
 import AuthorizationDialog from './features/authentication/AuthorizationDialog.vue'
 import { useAuthentication } from './features/authentication/useAuthentication.js'
@@ -532,6 +533,14 @@ onMounted(() => {
 })
 onUnmounted(() => window.removeEventListener('popstate', restoreRoute))
 
+function loadCurlDraft({ operation, draft }) {
+  const session = createSession(operation)
+  Object.assign(session, draft)
+  sessions.set(operation.key, session)
+  editingScenarioId.value = ''; scenarioName.value = ''
+  if (catalogMedia.matches) catalogOpen.value = false
+  void showChain([{ operation, group: operation.tags[0], session }])
+}
 function selectOperation(operation, group) {
   editingScenarioId.value = ''
   scenarioName.value = ''
@@ -755,7 +764,9 @@ function removeScenario(id) {
           :active-group="current?.group ?? ''"
           :active-operation="current?.operation.key ?? ''"
           @select-operation="selectCatalogOperation"
-        />
+        >
+          <template #actions><CurlImport :operations="operations" :configuration="configuration" :disabled="scenarioBusy" @import="loadCurlDraft" /></template>
+        </EndpointCatalog>
 
         </div>
         <div ref="workArea" class="work-area">
