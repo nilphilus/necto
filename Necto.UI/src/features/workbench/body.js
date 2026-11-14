@@ -49,6 +49,8 @@ export function formFields(operation, mediaType) {
 export function payloadSnapshot(draft) {
   return {
     mediaType: draft.mediaType,
+    extraHeaders: draft.extraHeaders ? { ...draft.extraHeaders } : undefined,
+    extraQuery: draft.extraQuery?.map(row => [...row]),
     binaryAttachmentRequired: Boolean(
       draft.binaryFile || draft.binaryAttachmentRequired
     ),
@@ -60,6 +62,8 @@ export function payloadSnapshot(draft) {
   }
 }
 export function validatePayloadSnapshot(snapshot) {
+  if (snapshot.extraHeaders !== undefined && (!snapshot.extraHeaders || Array.isArray(snapshot.extraHeaders) || typeof snapshot.extraHeaders !== 'object' || Object.keys(snapshot.extraHeaders).length > 100 || Object.values(snapshot.extraHeaders).some(value => typeof value !== 'string'))) throw new Error('Invalid imported headers.')
+  if (snapshot.extraQuery !== undefined && (!Array.isArray(snapshot.extraQuery) || snapshot.extraQuery.length > 200 || snapshot.extraQuery.some(row => !Array.isArray(row) || row.length !== 2 || row.some(value => typeof value !== 'string')))) throw new Error('Invalid imported query inputs.')
   if (
     snapshot.mediaType !== undefined &&
     typeof snapshot.mediaType !== 'string'
