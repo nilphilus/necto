@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { tableColumns, tableCell } from './collectionTable.js';
+import { tableColumns, tableCell, discoverTableColumns, contractTableColumns } from './collectionTable.js';
 import { pageRange, PREVIEW_PAGE_SIZE } from '../request-runner/preview.js';
 import PreviewPager from '../request-runner/PreviewPager.vue';
 import { matchesPath } from '../related-endpoints/mappings.js';
@@ -8,12 +8,27 @@ const props = defineProps({
   value: Array,
   path: Array,
   selectors: Array,
-  selected: Array
+  selected: Array,
+  operation: Object,
+  status: [String, Number],
+  contentType: String
 });
 defineEmits(['select', 'inspect']);
 const page = ref(1),
   selectedColumns = ref([]);
-const columns = computed(() => tableColumns(props.value));
+const columns = ref([]), cursor = ref(25), discovering = ref(false)
+let discoveryId = 0
+function mergeColumns(names) { columns.value = [...new Set([...columns.value, ...names])].slice(0, 100) }
+watch(page, () => mergeColumns(discoverTableColumns(props.value, range.value.start)))
+async function discover() {
+  const id = ++discoveryId
+  discovering.value = true
+  await new Promise(resolve => setTimeout(resolve, 0))
+  if (id !== discoveryId) return
+  mergeColumns(discoverTableColumns(props.value, cursor.value, 250))
+  cursor.value = Math.min(props.value.length, cursor.value + 250)
+  discovering.value = false
+}
 const visibleColumns = computed(() =>
   columns.value.filter((name) => selectedColumns.value.includes(name))
 );
@@ -32,7 +47,12 @@ const rows = computed(() =>
 watch(
   [() => props.value, () => props.path],
   () => {
-    page.value = 1;
+    discoveryId++; discovering.value = false
+    page.value = 1
+    columns.value = []
+    mergeColumns(props.path?.length ? [] : contractTableColumns(props.operation, props.status, props.contentType))
+    mergeColumns(tableColumns(props.value))
+    cursor.value = Math.min(25, props.value.length)
     selectedColumns.value = columns.value.slice(0, 6);
   },
   { immediate: true }
@@ -50,8 +70,8 @@ const active = (path) =>
         ><input v-model="selectedColumns" type="checkbox" :value="name" />
         {{ name }}</label
       ><small
-        >Columns sampled from the first 25 rows; nested fields remain in
-        Inspect.</small
+        >Fields from the contract, first 25 rows and visited pages. Nested fields remain in Inspect. Up to 100 fields.
+      </small><button v-if="cursor < value.length && columns.length < 100" type="button" :disabled="discovering" @click="discover">{{ discovering ? 'Discovering…' : 'Discover more fields' }}</button><small role="status">Discovery scans up to 250 rows per click; checked through row {{ cursor }}. {{ columns.length }} fields available.</small
       >
     </details>
     <PreviewPager :range="range" label="Rows" @change="page = $event" />

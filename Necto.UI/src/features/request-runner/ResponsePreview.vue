@@ -114,7 +114,7 @@ function download() {
       <PayloadSearch v-if="result.json !== undefined" :result="result" :selectors="selectors" @reveal="reveal" @select="selectPath($event)" />
     </div>
     <div v-if="focusPath.length && !raw" class="preview-toolbar"><code>Focused object: {{ pathLabel(focusPath) }}</code><button type="button" @click="fullResponse">{{ tableReturn ? 'Back to table' : 'Back to full response' }}</button></div>
-    <CollectionTable v-if="tableAvailable" v-show="table && !raw" :value="tableValue" :path="tablePath" :selectors="selectors" :selected="result.selectedPath" @select="selectPath($event)" @inspect="inspectRow" />
+    <CollectionTable v-if="tableAvailable" v-show="table && !raw" :value="tableValue" :path="tablePath" :operation="operation" :status="result.status" :content-type="result.contentType" :selectors="selectors" :selected="result.selectedPath" @select="selectPath($event)" @inspect="inspectRow" />
     <div v-if="result.json !== undefined" v-show="!raw && !table" ref="preview" class="json-preview" tabindex="0" aria-label="JSON response preview">
       <JsonNode :key="JSON.stringify(focusPath)" :value="previewValue" :path="focusPath" :root="true" :navigation="navigation" :selectors="selectors" :selected="result.selectedPath" @select="selectPath($event)" />
 
