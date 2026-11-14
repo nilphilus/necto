@@ -26,7 +26,7 @@ const tableReturn = ref(null)
 const tableValue = computed(() => tableReturn.value?.value ?? previewValue.value)
 const tablePath = computed(() => tableReturn.value?.path ?? focusPath.value)
 const tableAvailable = computed(() => tableColumns(tableValue.value).length > 0)
-function inspectRow(path) { tableReturn.value = { value: previewValue.value, path: focusPath.value }; focusPath.value = path; table.value = false; raw.value = false; navigation.value = null }
+function inspectRow(path) { tableReturn.value ??= { value: previewValue.value, path: focusPath.value }; focusPath.value = path; table.value = false; raw.value = false; navigation.value = null }
 const raw = ref(false)
 const streamEvents = computed(() => props.result.stream?.events ?? [])
 const textPage = ref(1)
@@ -62,6 +62,7 @@ function inspectEvent(event) {
   selectPath(undefined); raw.value = false; table.value = false; focusPath.value = []; textPage.value = 1; navigation.value = null
 }
 function backToStream() { props.result.stream.view.selectedIndex = undefined; props.result.json = undefined; selectPath(undefined); raw.value = false; table.value = false; focusPath.value = []; textPage.value = 1 }
+function showTable() { if (tableReturn.value) fullResponse(); else { table.value = true; raw.value = false } }
 function fullResponse() {
   const previous = tableReturn.value
   focusPath.value = previous?.path ?? []
@@ -91,7 +92,7 @@ function download() {
       <template v-if="result.json !== undefined">
         <button type="button" :aria-pressed="!raw && !table" @click="raw = false; table = false">Preview</button>
         <button type="button" :aria-pressed="raw" @click="raw = true">Raw</button>
-        <button v-if="tableAvailable" type="button" :aria-pressed="table && !raw" @click="table = true; raw = false">Table</button>
+        <button v-if="tableAvailable" type="button" :aria-pressed="table && !raw" @click="showTable">Table</button>
         <button ref="finderButton" type="button" :aria-expanded="searchOpen" :aria-controls="searchId" title="Find in response (Ctrl or ⌘ + F while the preview is focused)" @click="toggleSearch()">Find</button>
       </template>
       <details class="response-details" @keydown.esc.stop.prevent="$event.currentTarget.open = false; $event.currentTarget.querySelector('summary').focus()">
