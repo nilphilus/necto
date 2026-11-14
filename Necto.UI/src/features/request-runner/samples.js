@@ -7,6 +7,7 @@ export function applySample(operation, session, sample) {
   Object.assign(session, payloadSnapshot(sample), executionOptions(sample), { binaryFile: undefined, assertions: (sample.assertions ?? []).map(check => ({ ...check })) })
   session.body = sample.body ?? initialBody(operation)
   session.bindings = []
+  session.exampleKey = undefined
   session.sampleName = sample.name
 }
 

@@ -1,4 +1,5 @@
 <script setup>
+import MarkdownText from './MarkdownText.vue'
 import { computed, ref, watch } from 'vue'
 const props = defineProps({
   schema: Object,
@@ -31,7 +32,7 @@ watch(() => props.schema, () => { page.value = 1; open.value = props.depth < 1 }
       ><span v-if="value.writeOnly"> · write only</span>
     </summary>
     <template v-if="open">
-      <p v-if="value.description">{{ value.description }}</p>
+      <MarkdownText v-if="value.description" :text="value.description" />
       <p v-if="value.enum">Allowed: <code>{{ JSON.stringify(value.enum.slice(0, 25)) }}</code><small v-if="value.enum.length > 25"> · first 25 of {{ value.enum.length }} values; see Raw for all values.</small></p>
       <template v-if="depth < 12">
         <div v-if="pages > 1" class="model-pager" role="group" :aria-label="name + ' fields pages'">

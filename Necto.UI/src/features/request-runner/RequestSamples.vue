@@ -1,4 +1,6 @@
 <script setup>
+import DescriptionHelp from '../workbench/DescriptionHelp.vue'
+import { requestExamples, applyRequestExample, draftSnapshot, restoreExampleDraft, exampleDrafts } from '../workbench/openapiExamples.js'
 import { executionOptions } from '../workbench/executionOptions.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { payloadSnapshot } from '../workbench/body.js'
@@ -28,9 +30,31 @@ const searchInput = ref(null)
 const query = ref('')
 const page = ref(0)
 const pageSize = 3
+const examples = computed(() => requestExamples(props.operation))
+const selectedExample = computed(() => examples.value.find(item => item.id === props.session.exampleKey))
+const originalDrafts = exampleDrafts
+const payloads = computed(() => [
+  ...saved.value.samples.map(sample => ({...sample,kind:'saved',id:'saved:'+sample.name})),
+  ...examples.value.map(example => ({...example,exampleKind:example.kind,kind:'example',id:'example:'+example.id,exampleId:example.id}))
+])
+function loadPayload(payload) {
+  if (payload.kind === 'saved') { originalDrafts.delete(props.session); loadSample(payload.name); return }
+  try {
+    const example = examples.value.find(item => item.id === payload.exampleId)
+    const snapshot = originalDrafts.get(props.session) ?? draftSnapshot(props.session)
+    applyRequestExample(props.operation, props.session, example)
+    originalDrafts.set(props.session,snapshot);error.value=''
+  } catch(cause) { error.value=cause.message }
+}
+function returnToDraft() {
+  const snapshot=originalDrafts.get(props.session)
+  if (snapshot) { restoreExampleDraft(props.session,snapshot);originalDrafts.delete(props.session) }
+}
+const isSelected = sample => sample.kind === 'saved' ? !props.session.exampleKey && props.session.sampleName === sample.name : props.session.exampleKey === sample.exampleId
+
 const matchingSamples = computed(() => {
   const term = query.value.trim().toLocaleLowerCase()
-  return saved.value.samples.filter(sample => sample.name.toLocaleLowerCase().includes(term))
+  return payloads.value.filter(sample => `${sample.name} ${sample.subtitle ?? ''}`.toLocaleLowerCase().includes(term))
 })
 const pageCount = computed(() => Math.ceil(matchingSamples.value.length / pageSize))
 const visibleSamples = computed(() => matchingSamples.value.slice(page.value * pageSize, (page.value + 1) * pageSize))
@@ -62,7 +86,7 @@ function resetForm() {
 }
 
 function showSelectedPage() {
-  const index = matchingSamples.value.findIndex(sample => sample.name === props.session.sampleName)
+  const index = matchingSamples.value.findIndex(isSelected)
   page.value = index < 0 ? 0 : Math.floor(index / pageSize)
 }
 
@@ -133,6 +157,8 @@ function storeSample() {
       defaultName: makeDefault.value ? sampleName : current.defaultName === editing.value ? '' : current.defaultName,
     }
   })) {
+    props.session.exampleKey = undefined
+    originalDrafts.delete(props.session)
     props.session.sampleName = sampleName
     query.value = ''
     showSelectedPage()
@@ -166,9 +192,9 @@ function toggleDefault(sampleName) {
 </script>
 
 <template>
-  <section v-if="saved.samples.length || (error && !storeOpen)" class="samples" aria-label="Saved requests">
-    <div v-if="saved.samples.length" class="sample-toolbar">
-      <strong>Saved requests</strong>
+  <section v-if="payloads.length || (error && !storeOpen)" class="samples" aria-label="Saved requests and OpenAPI examples">
+    <div v-if="payloads.length" class="sample-toolbar">
+      <strong>{{ examples.length ? 'Payloads' : 'Saved requests' }}</strong>
       <div class="sample-controls">
         <button type="button" class="secondary icon-button"
           aria-label="Focus saved request search" title="Search saved requests" @click="searchInput?.focus()">
@@ -186,18 +212,20 @@ function toggleDefault(sampleName) {
         </template>
       </div>
     </div>
-    <div v-if="selectedSample" class="sample-management" aria-label="Manage selected saved request">
+    <button v-if="originalDrafts.has(session) && session.exampleKey" type="button" class="secondary" :disabled="session.pending" @click="returnToDraft">Return to draft</button>
+    <DescriptionHelp v-if="selectedExample?.description" :label="'About example ' + selectedExample.name" :description="selectedExample.description" />
+    <div v-if="selectedSample && !session.exampleKey" class="sample-management" aria-label="Manage selected saved request">
       <button type="button" class="secondary" :disabled="session.pending" @click="openStoreDialog(selectedSample.name)">Update selected</button>
       <button type="button" class="secondary" :disabled="session.pending" @click="openStoreDialog(selectedSample.name, true)">Rename</button>
       <button type="button" class="secondary" :disabled="session.pending" @click="deleting = selectedSample.name">Delete</button>
     </div>
     <div v-if="deleting" class="delete-confirmation" role="group" aria-label="Confirm saved request deletion"><span>Delete {{ deleting }}?</span><button type="button" class="secondary" @click="deleteSelected">Delete saved request</button><button type="button" class="secondary" @click="deleting = ''">Keep request</button></div>
     <ul v-if="visibleSamples.length" class="sample-tags">
-      <li v-for="sample in visibleSamples" :key="sample.name" class="sample-tag"
-        :class="{ selected: session.sampleName === sample.name }">
-        <button type="button" class="sample-name" :aria-pressed="session.sampleName === sample.name"
-          :title="sample.name" :disabled="session.pending" @click="loadSample(sample.name)">{{ sample.name }}</button>
-        <button type="button" class="sample-default" :aria-pressed="sample.name === saved.defaultName"
+      <li v-for="sample in visibleSamples" :key="sample.id" class="sample-tag"
+        :class="{ selected: isSelected(sample) }">
+        <button type="button" class="sample-name" :aria-pressed="isSelected(sample)"
+          :title="sample.kind === 'example' ? sample.available ? 'Load OpenAPI example · ' + sample.subtitle + ' · nothing is sent' : sample.reason : sample.name" :disabled="session.pending || sample.kind === 'example' && !sample.available" @click="loadPayload(sample)"><small v-if="sample.kind === 'example'">Example · </small>{{ sample.name }}<small v-if="sample.kind === 'example' && !sample.available"> · unavailable</small></button>
+        <button v-if="sample.kind === 'saved'" type="button" class="sample-default" :aria-pressed="sample.name === saved.defaultName"
           :aria-label="`Default request: ${sample.name}`"
           :title="sample.name === saved.defaultName ? 'Clear default' : 'Set as default'"
           @click="toggleDefault(sample.name)">
@@ -205,7 +233,7 @@ function toggleDefault(sampleName) {
         </button>
       </li>
     </ul>
-    <p v-else-if="saved.samples.length" class="muted" role="status">No matching saved requests.</p>
+    <p v-else-if="payloads.length" class="muted" role="status">No matching saved requests or examples.</p>
     <p v-if="error && !storeOpen" class="error" role="alert">{{ error }}</p>
   </section>
   <Teleport to="body">

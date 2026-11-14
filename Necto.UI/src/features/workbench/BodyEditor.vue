@@ -15,9 +15,6 @@ const binary = computed(
     media.value?.[0] === 'application/octet-stream' ||
     props.operation.resolve(media.value?.[1]?.schema)?.format === 'binary'
 )
-const examples = computed(() =>
-  Object.entries(media.value?.[1]?.examples ?? {})
-)
 const issues = computed(() => {
   if (!media.value || !isJson(media.value[0])) return []
   try {
@@ -113,14 +110,6 @@ watch(
   },
   { immediate: true }
 )
-function example(value) {
-  const item = props.operation.resolve(media.value[1].examples[value])
-  if (item?.value !== undefined)
-    props.session.body =
-      typeof item.value === 'string' && !isJson(media.value[0])
-        ? item.value
-        : JSON.stringify(item.value, null, 2)
-}
 </script>
 <template>
   <div v-if="media" class="body-editor">
@@ -136,15 +125,6 @@ function example(value) {
       </select></label
     >
     <small v-else-if="!isJson(media[0])">Request body · {{ media[0] }}</small>
-    <label v-if="examples.length"
-      >Example
-      <select @change="example($event.target.value)">
-        <option value="">Choose example…</option>
-        <option v-for="[key, value] in examples" :value="key" :key="key">
-          {{ value.summary || key }}
-        </option>
-      </select></label
-    >
     <template v-if="forms">
       <div
         v-for="(row, index) in session.formFields"
