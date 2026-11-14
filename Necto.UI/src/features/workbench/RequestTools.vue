@@ -1,7 +1,7 @@
 <script setup>
 import SchemaTree from './SchemaTree.vue'
 import { diffValues } from './history.js'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { buildRequest } from '../request-runner/request.js'
@@ -45,6 +45,7 @@ const snippet = computed(() => {
     return cause.message
   }
 })
+watch(() => props.operation.key, () => dialog.value?.close())
 const description = computed(() =>
   DOMPurify.sanitize(marked.parse(props.operation.description ?? ''))
 )
@@ -92,8 +93,8 @@ function addCheck() {
   <button type="button" class="secondary" @click="dialog.showModal()">
     Tools
   </button>
-  <dialog ref="dialog" @click="$event.target === dialog && dialog.close()">
-    <header>
+  <dialog ref="dialog" class="request-tools-dialog" @click="$event.target === dialog && dialog.close()">
+    <div class="tools-heading"><header>
       <strong>{{ operation.method }} {{ operation.path }}</strong
       ><button
         type="button"
@@ -122,6 +123,8 @@ function addCheck() {
         {{ item }}
       </button>
     </nav>
+    <label class="mobile-tool-select">Request tool section<select v-model="tab"><option v-for="section in ['Contract','Code','Bindings','Checks','Server','Options','History']" :key="section">{{ section }}</option></select></label>
+    </div>
     <section v-if="tab === 'Contract'">
       <h3>{{ operation.summary || operation.name }}</h3>
       <div v-html="description" />
@@ -338,6 +341,10 @@ function addCheck() {
   </dialog>
 </template>
 <style scoped>
+.mobile-tool-select {display:none}
+:global(body:has(.request-tools-dialog[open])) {overflow:hidden}
+.request-tools-dialog {overscroll-behavior:contain}
+
 dialog {
   width: min(54rem, 94vw);
   max-height: 85dvh;
@@ -402,4 +409,15 @@ p {
   font-size: 0.85rem;
   color: var(--muted);
 }
+@media(max-width:600px) {
+ .request-tools-dialog {position:fixed;inset:auto 0 0;width:100%;max-width:100%;margin:0;max-height:calc(100dvh - .75rem);padding:.7rem .8rem calc(.8rem + env(safe-area-inset-bottom));border-radius:.8rem .8rem 0 0}
+ .tools-heading {position:sticky;top:-.7rem;z-index:2;background:var(--surface);padding:.6rem 0;border-bottom:1px solid var(--line);margin-bottom:.5rem}
+ .tools-heading header strong {font-size:.9rem;max-height:3.6rem;overflow:auto;overflow-wrap:anywhere}
+ .tools-heading nav {display:none}
+ .mobile-tool-select {display:grid;gap:.3rem;font-size:.75rem;margin:.4rem 0}
+ .mobile-tool-select select {width:100%;min-height:44px}
+ .request-tools-dialog button,.request-tools-dialog input:not([type=checkbox]),.request-tools-dialog select {min-height:44px}
+ .request-tools-dialog header button {min-width:44px}
+}
+
 </style>
