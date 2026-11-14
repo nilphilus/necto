@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch, watchPostEffect } from 'vue'
 import { bodyFields, hasBodyExample } from './bodyHelp.js'
 import BodyEditor from '../workbench/BodyEditor.vue'
-import RequestTools from '../workbench/RequestTools.vue'
+import RequestTools from '../workbench/RequestToolsMenu.vue'
 import ResponsePreview from './ResponsePreview.vue'
 import RequestSendIcon from './RequestSendIcon.vue'
 import NextRequestsPanel from './NextRequestsPanel.vue'
