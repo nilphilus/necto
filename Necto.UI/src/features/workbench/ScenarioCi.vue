@@ -14,7 +14,8 @@ const dialog = ref(null),
   base = ref(''),
   error = ref(''), shell = ref('bash');
 const runnerVersion = typeof __NECTO_VERSION__ === 'undefined' ? '0.3.0' : __NECTO_VERSION__
-const setup = ciSetup(runnerVersion)
+const runnerRevision = typeof __NECTO_REVISION__ === 'undefined' ? '' : __NECTO_REVISION__
+const setup = runnerRevision ? ciSetup(runnerVersion, runnerRevision) : ''
 const crossApi = computed(() =>
   props.scenario.steps.some((step) => step.apiId !== 'local')
 );
@@ -94,7 +95,7 @@ function download() {
     <p v-if="uploads" class="error">
       This runner cannot attach files. Export a file-free scenario for CI.
     </p>
-    <details class="ci-setup"><summary>First run? Get the runner</summary><p>The embedded NuGet UI does not install the CLI. Install Node 22.12+ and Git, enable Corepack, then run this one-time setup. Repository access is required. Runner version {{ runnerVersion }} matches this UI.</p><pre tabindex="0">{{ setup }}</pre><p>Run subsequent commands from the repository root. Place the downloaded necto-ci.json there. Existing checkout? Fetch tags and check out v{{ runnerVersion }} instead of cloning again.</p></details>
+    <details class="ci-setup"><summary>First run? Get the runner</summary><p>The embedded UI does not install the CLI. Install Node 22.12+ and Git, enable Corepack, and use the matching source checkout. This export uses CI bundle v2 so older runners reject it instead of ignoring the response budget.</p><template v-if="setup"><p>UI {{ runnerVersion }} · runner revision <code>{{ runnerRevision.slice(0, 12) }}</code>.</p><pre tabindex="0">{{ setup }}</pre></template><p v-else>This is a modified checkout or source archive. Use tools/necto-run.mjs from the same working checkout and install its UI dependencies with corepack pnpm --dir Necto.UI install --frozen-lockfile. Do not substitute an older release runner.</p><p>Run from the repository root with the downloaded necto-ci.json. Existing checkout? Fetch and check out the revision above instead of cloning again.</p></details>
     <label>Shell<select v-model="shell" aria-label="Shell"><option value="bash">Bash / zsh</option><option value="powershell">PowerShell</option></select></label>
     <label>API base URL<input v-model="base" type="url" /></label
     ><label

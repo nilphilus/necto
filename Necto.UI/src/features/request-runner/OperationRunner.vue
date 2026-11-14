@@ -48,6 +48,19 @@ const displayedBody = computed({
 const relatedPinned = ref(false)
 const pinnedToolsHost = ref(null)
 const form = ref(null)
+const settingsTools = ref(null), settingsError = ref(''), invalidSetting = ref(null)
+watch(() => props.session, () => { settingsError.value = ''; invalidSetting.value = null })
+function handleInvalid(event) {
+  if (!event.target.closest('.request-tools-dialog')) return
+  event.preventDefault()
+  invalidSetting.value = event.target
+  const label = event.target.labels?.[0]?.textContent.trim() || 'Request setting'
+  settingsError.value = `Check ${label}: ${event.target.validationMessage}`
+  settingsTools.value?.revealInvalid(event.target)
+}
+function clearSettingsError(event) {
+  if (event.target === invalidSetting.value && event.target.validity?.valid) { settingsError.value = ''; invalidSetting.value = null }
+}
 const responsePreview = ref(null), nextRequests = ref(null)
 async function searchResponse(query) {
   nextRequests.value?.closeForSearch()
@@ -145,14 +158,14 @@ function parameterHint(parameter) {
 
 <template>
   <div class="runner" :class="{ 'request-compact': requestCompact }" @keydown.enter="sendShortcut">
-    <form ref="form" class="request-pane" @submit.prevent="run(operation, session)">
+    <form ref="form" class="request-pane" @invalid.capture="handleInvalid" @input.capture="clearSettingsError" @submit.prevent="run(operation, session)">
       <header class="pane-header">
         <h3>Request <small v-if="target" class="active-host" :title="target.label">{{ target.label }}</small></h3>
         <details v-if="target" class="target-details"><summary>Target</summary><div><strong>{{ target.api }} · {{ target.source }}</strong><code>{{ target.url }}</code><p v-if="!target.complete">Complete request inputs to inspect the full request URL.</p><p>Credential permissions remain scoped to the origins approved in Authorize.</p></div></details>
         <button v-if="requestCompact" type="button" class="secondary" @click="editRequest">Edit request</button>
         <div class="request-actions">
           <slot name="request-actions" />
-          <RequestTools @edit-request="editRequest" :operation="operation" :session="session" :values="values" :configuration="configuration" :prepare="prepare" :history="history" />
+          <RequestTools ref="settingsTools" @edit-request="editRequest" :operation="operation" :session="session" :values="values" :configuration="configuration" :prepare="prepare" :history="history" />
           <button v-if="session.pending && cancel" type="button" @click="cancel(session)">Cancel</button>
           <button v-if="session.result && !requestCompact" type="button" class="secondary focus-response" @click="focusResponse">Focus response</button>
           <button
@@ -165,6 +178,7 @@ function parameterHint(parameter) {
         </div>
       </header>
 
+      <p v-if="settingsError" class="settings-error error" role="alert">{{ settingsError }} <button type="button" @click="settingsTools?.revealInvalid(invalidSetting)">Fix request settings</button></p>
       <div v-if="requestCompact" class="request-summary" aria-label="Request summary">
         <span v-for="input in inputSummary" :key="input.key"><code>{{ input.name }}</code>: <span class="summary-value">{{ input.value }}</span><button v-if="input.source" type="button" class="preset-link" @click="emit('edit-preset', input.source)">{{ input.source }}</button></span>
         <span v-if="content">JSON body · {{ effectiveBody.length.toLocaleString() }} characters</span>
@@ -265,6 +279,7 @@ function parameterHint(parameter) {
 </template>
 
 <style scoped>
+.settings-error { margin:.5rem .85rem; font-size:.8rem; }
 .runner {
   container-type: inline-size;
   display: grid;
