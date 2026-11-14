@@ -16,7 +16,7 @@ export function usePreviewHeight() {
     frame = undefined
     const element = rootElement()
     if (!element) return
-    const surface = [...element.querySelectorAll('.json-preview, .raw-preview pre')].find(node => node.getClientRects().length)
+    const surface = [...element.querySelectorAll('.json-preview, .raw-preview pre, .table-scroll')].find(node => node.getClientRects().length)
     if (!surface) return
     const rect = surface.getBoundingClientRect(), bounds = panel?.getBoundingClientRect()
     const height = availablePreviewHeight({ top: rect.top, panelTop: bounds?.top, panelBottom: bounds?.bottom,
