@@ -1,7 +1,8 @@
 <script setup>
 import SchemaTree from './SchemaTree.vue'
 import { diffValues } from './history.js'
-import { computed, ref } from 'vue'
+import { computed, ref, useId, nextTick, watch } from 'vue'
+
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { buildRequest } from '../request-runner/request.js'
@@ -16,7 +17,9 @@ const props = defineProps({
   hideTrigger: Boolean,
   prepare: Function
 })
-defineEmits(['closed'])
+const emit = defineEmits(['closed', 'edit-request'])
+const closeTarget = ref(null)
+function restoreFocus() { const target = closeTarget.value?.isConnected ? closeTarget.value : trigger.value; closeTarget.value = null; target?.focus(); emit('closed', target) }
 defineExpose({ openSection: section => { tab.value = section; dialog.value.showModal() } })
 const changes = computed(() => {
   const entries = props.history?.forOperation(props.operation.key) ?? []
@@ -26,15 +29,29 @@ const changes = computed(() => {
     ? diffValues(entries[1].payload, entries[0].payload)
     : null
 })
+const toolsId = useId()
+const trigger = ref(null)
+const sectionId = name => toolsId + '-' + name.toLowerCase()
+const sections = ['Contract','Code','Bindings','Checks','Server','Options','History']
+async function navigateTabs(event) {
+  if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key) || event.altKey || event.ctrlKey || event.metaKey) return
+  event.preventDefault()
+  const current = sections.indexOf(tab.value)
+  tab.value = sections[event.key === 'Home' ? 0 : event.key === 'End' ? sections.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + sections.length) % sections.length]
+  await nextTick(); document.getElementById(sectionId(tab.value) + '-tab')?.focus()
+}
 const dialog = ref(null),
   tab = ref('Contract'),
   language = ref('curl'),
   error = ref(''),
-  copied = ref(false)
+  copied = ref(false),
+  codeSource = ref('draft')
 const snippet = computed(() => {
   try {
-    return requestSnippet(
-      props.prepare
+    return { code: requestSnippet(
+      codeSource.value === 'sent' && props.session.result?.sentRequest
+        ? props.session.result.sentRequest
+        : props.prepare
         ? props.prepare(props.operation, props.session, props.values)
         : buildRequest(
             props.operation,
@@ -43,17 +60,27 @@ const snippet = computed(() => {
             props.values
           ),
       language.value
-    )
+    ), error: '' }
   } catch (cause) {
-    return cause.message
+    return { code: '', error: cause.message }
   }
 })
 const description = computed(() =>
   DOMPurify.sanitize(marked.parse(props.operation.description ?? ''))
 )
+watch([snippet, language], () => { copied.value = false; error.value = '' })
+async function fixInputs() {
+  const runner = dialog.value.closest('.runner')
+  emit('edit-request')
+  await nextTick()
+  closeTarget.value = runner?.querySelector('input:invalid, textarea:invalid, textarea, input:not([readonly]):not([type=checkbox])')
+  dialog.value.close()
+}
+
 async function copy() {
+  if (snippet.value.error) return
   try {
-    await navigator.clipboard.writeText(snippet.value)
+    await navigator.clipboard.writeText(snippet.value.code)
     copied.value = true
   } catch {
     error.value = 'Clipboard unavailable. Select and copy the code below.'
@@ -92,10 +119,9 @@ function addCheck() {
 }
 </script>
 <template>
-  <button v-if="!hideTrigger" type="button" class="secondary" @click="dialog.showModal()">
-    Tools
-  </button>
-  <dialog ref="dialog" @close="$emit('closed')" @click="$event.target === dialog && dialog.close()">
+  <button v-if="!hideTrigger" ref="trigger" type="button" class="secondary" aria-haspopup="dialog" :aria-controls="toolsId" @click="dialog.showModal()">Tools</button>
+  <dialog :id="toolsId" ref="dialog" :aria-label="`Request tools: ${operation.method} ${operation.path}`" @close="restoreFocus" @click="$event.target === dialog && dialog.close()">
+
     <header>
       <strong>{{ operation.method }} {{ operation.path }}</strong
       ><button
@@ -106,26 +132,18 @@ function addCheck() {
         ✕
       </button>
     </header>
-    <nav>
+    <nav role="tablist" aria-label="Request tool sections" @keydown="navigateTabs">
       <button
-        v-for="item in [
-          'Contract',
-          'Code',
-          'Bindings',
-          'Checks',
-          'Server',
-          'Options',
-          'History'
-        ]"
+        v-for="item in sections"
         :key="item"
         type="button"
-        :aria-pressed="tab === item"
+        :id="sectionId(item) + '-tab'" role="tab" :aria-selected="tab === item" :aria-controls="sectionId(item)" :tabindex="tab === item ? 0 : -1"
         @click="tab = item"
       >
         {{ item }}
       </button>
     </nav>
-    <section v-if="tab === 'Contract'">
+    <section v-if="tab === 'Contract'" :id="sectionId('Contract')" role="tabpanel" :aria-labelledby="sectionId('Contract') + '-tab'" tabindex="0">
       <h3>{{ operation.summary || operation.name }}</h3>
       <div v-html="description" />
       <details v-if="operation.requestBody">
@@ -156,7 +174,9 @@ function addCheck() {
         <pre>{{ JSON.stringify(operation.parameters, null, 2) }}</pre>
       </details>
     </section>
-    <section v-if="tab === 'Code'">
+    <section v-if="tab === 'Code'" :id="sectionId('Code')" role="tabpanel" :aria-labelledby="sectionId('Code') + '-tab'" tabindex="0">
+      <label v-if="session.result?.sentRequest">Request source<select v-model="codeSource"><option value="draft">Current draft</option><option value="sent">Request sent for this response</option></select></label>
+
       <label
         >Language
         <select v-model="language">
@@ -164,16 +184,17 @@ function addCheck() {
           <option value="fetch">JavaScript fetch</option>
           <option value="csharp">C# HttpClient</option>
         </select></label
-      ><button type="button" @click="copy">
+      ><button type="button" :disabled="!!snippet.error" @click="copy">
         {{ copied ? 'Copied' : 'Copy code' }}
       </button>
       <p>
         Credentials are masked. Review body and URL values before sharing.
         Uploads use file placeholders.
       </p>
-      <pre tabindex="0">{{ snippet }}</pre>
+      <div v-if="snippet.error" class="error" role="alert"><p>{{ snippet.error }}</p><button type="button" @click="fixInputs">Fix request inputs</button></div>
+      <pre v-else tabindex="0">{{ snippet.code }}</pre>
     </section>
-    <section v-if="tab === 'Bindings'">
+    <section v-if="tab === 'Bindings'" :id="sectionId('Bindings')" role="tabpanel" :aria-labelledby="sectionId('Bindings') + '-tab'" tabindex="0">
       <p>
         Scenario bindings normally use the selected array index. Match an object
         by a field to keep the scenario stable when the array order changes. A
@@ -213,7 +234,7 @@ function addCheck() {
         Select a mapped value from a response to create a binding.
       </p>
     </section>
-    <section v-if="tab === 'Checks'">
+    <section v-if="tab === 'Checks'" :id="sectionId('Checks')" role="tabpanel" :aria-labelledby="sectionId('Checks') + '-tab'" tabindex="0">
       <p>
         Checks run after each response. Paths use JSON Pointer, for example
         /lines/0/id.
@@ -253,7 +274,7 @@ function addCheck() {
         Add check
       </button>
     </section>
-    <section v-if="tab === 'Server'">
+    <section v-if="tab === 'Server'" :id="sectionId('Server')" role="tabpanel" :aria-labelledby="sectionId('Server') + '-tab'" tabindex="0">
       <p>
         Choose for this request, or save as the default for this API.
         Credentials stay scoped to the origins approved in Authorize.
@@ -300,7 +321,7 @@ function addCheck() {
         configuration?.apiBaseUrl
       }}</pre>
     </section>
-    <section v-if="tab === 'Options'">
+    <section v-if="tab === 'Options'" :id="sectionId('Options')" role="tabpanel" :aria-labelledby="sectionId('Options') + '-tab'" tabindex="0">
       <label
         >Timeout (milliseconds)<input
           v-model.number="session.timeout"
@@ -310,7 +331,7 @@ function addCheck() {
       /></label>
       <p>Cancel is available beside Send while a request is running.</p>
     </section>
-    <section v-if="tab === 'History'">
+    <section v-if="tab === 'History'" :id="sectionId('History')" role="tabpanel" :aria-labelledby="sectionId('History') + '-tab'" tabindex="0">
       <p>
         Last 20 requests, kept in memory. Body snapshots and diffs are bounded;
         large bodies are omitted.
@@ -368,7 +389,7 @@ nav {
   flex-wrap: wrap;
   margin: 0.75rem 0;
 }
-nav [aria-pressed='true'] {
+nav [aria-selected='true'] {
   background: var(--accent-soft);
   color: var(--accent);
 }

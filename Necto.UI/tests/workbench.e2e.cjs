@@ -151,10 +151,10 @@ const op = (name, extra = {}) => ({
   )
   await p.getByText('Details', { exact: true }).click()
   await tools()
-  await p.getByRole('button', { name: 'Code', exact: true }).click()
+  await p.getByRole('tab', { name: 'Code', exact: true }).click()
   assert.match(await p.locator('dialog[open] pre').textContent(), /--form/)
   if (output) await p.screenshot({ path: path.join(output, 'code.png') })
-  await p.getByRole('button', { name: 'Checks', exact: true }).click()
+  await p.getByRole('tab', { name: 'Checks', exact: true }).click()
   await p.getByRole('button', { name: 'Add check' }).click()
   await p.getByRole('textbox', { name: 'Expected value' }).fill('200')
   await close()
@@ -162,7 +162,7 @@ const op = (name, extra = {}) => ({
   await done()
   await p.getByText('✓ HTTP status · 200', { exact: true }).waitFor()
   await tools()
-  await p.getByRole('button', { name: 'History', exact: true }).click()
+  await p.getByRole('tab', { name: 'History', exact: true }).click()
   await p.getByText('Compare last two responses', { exact: true }).waitFor()
   await close()
   await endpoint('Form invoice')
@@ -214,7 +214,7 @@ const op = (name, extra = {}) => ({
   await p.getByRole('button', { name: 'Cancel', exact: true }).click()
   await p.getByRole('alert').filter({ hasText: 'Request canceled.' }).waitFor()
   await tools()
-  await p.getByRole('button', { name: 'Options', exact: true }).click()
+  await p.getByRole('tab', { name: 'Options', exact: true }).click()
   await p.getByRole('spinbutton', { name: 'Timeout (milliseconds)' }).fill('50')
   await close()
   await send()
@@ -223,11 +223,11 @@ const op = (name, extra = {}) => ({
   await send()
   await done()
   await tools()
-  await p.getByRole('button', { name: 'Contract', exact: true }).click()
+  await p.getByRole('tab', { name: 'Contract', exact: true }).click()
   assert.equal(await p.evaluate(() => window.injected), undefined)
   assert.equal(await p.locator('dialog[open] [onerror]').count(), 0)
   if (output) await p.screenshot({ path: path.join(output, 'contract.png') })
-  await p.getByRole('button', { name: 'Server', exact: true }).click()
+  await p.getByRole('tab', { name: 'Server', exact: true }).click()
   await p.getByRole('combobox', { name: 'API server' }).selectOption('1')
   await p
     .getByRole('combobox', { name: 'version', exact: true })
@@ -253,17 +253,17 @@ const op = (name, extra = {}) => ({
         version: 1,
         entries: [
           {
-            key: 'necto:external-apis:import-test',
-            value: { connections: [], show: false }
+            key: 'necto:servers:import-test',
+            value: { local: { url: base } }
           }
         ]
       })
     )
   })
-  await p.getByRole('button', { name: 'Import new entries only' }).click()
+  await p.getByRole('button', { name: 'Import selected items' }).click()
   await p
     .getByRole('status')
-    .filter({ hasText: 'Imported 1 entries' })
+    .filter({ hasText: 'Imported 1 items' })
     .waitFor()
   if (output) await p.screenshot({ path: path.join(output, 'workspace.png') })
   await p.getByRole('button', { name: 'Close settings' }).click()
@@ -278,7 +278,7 @@ const op = (name, extra = {}) => ({
     await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
     true
   )
-  await p.getByRole('button', { name: 'Contract', exact: true }).click()
+  await p.getByRole('tab', { name: 'Contract', exact: true }).click()
   if (output) await p.screenshot({ path: path.join(output, 'mobile.png') })
   await close()
   await p.getByRole('button', { name: 'Settings', exact: true }).click()
