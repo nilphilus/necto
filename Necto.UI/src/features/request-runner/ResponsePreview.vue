@@ -74,8 +74,8 @@ function download() {
 <template>
   <div class="response-preview" @keydown.ctrl.f.prevent.stop="toggleSearch(true)" @keydown.meta.f.prevent.stop="toggleSearch(true)">
     <div class="preview-toolbar" aria-label="Response tools">
-      <h3>{{ pending || stale ? 'Last response' : 'Response' }}</h3>
-      <span class="status" :class="{ failed: !result.ok }" role="status">{{ result.status }} {{ result.statusText }}</span>
+      <h3>{{ result.incomplete ? (result.receiving ? 'Response in progress' : 'Incomplete response') : pending || stale ? 'Last response' : 'Response' }}</h3>
+      <span class="status" :class="{ failed: !result.ok || (result.incomplete && !result.receiving) }" role="status">{{ result.status }} {{ result.statusText }}</span>
       <span>{{ result.elapsed }} ms</span>
       <slot name="actions" />
       <template v-if="result.json !== undefined">
@@ -88,7 +88,7 @@ function download() {
         <summary>Details</summary>
         <div class="response-details-content">
           <p>{{ result.contentType || 'Body' }} · {{ result.binary ? `${result.binary.size.toLocaleString()} bytes` : `${text.length.toLocaleString()} characters` }}</p>
-          <button type="button" @click="download">Download response</button>
+          <button type="button"  :disabled="result.incomplete" @click="download">Download response</button>
           <dl><template v-for="(value, name) in result.headers" :key="name"><dt>{{ name }}</dt><dd>{{ value }}</dd></template></dl>
           <p v-if="result.json !== undefined">Preview pagination does not change the API response. Select a mapped object to fill related request fields.</p>
         </div>
@@ -109,6 +109,7 @@ function download() {
 
     </div>
     <div v-if="result.stream?.view?.selectedIndex !== undefined" class="preview-toolbar"><strong>Event {{ result.stream.view.selectedIndex + 1 }}</strong><button type="button" @click="backToStream">Back to stream</button></div>
+    <p v-if="result.incomplete" role="status">{{ result.receiving ? (result.progress?.phase === 'parsing' ? 'Parsing response…' : 'Receiving response…') : 'Reception stopped; response incomplete.' }} {{ (result.byteLength / 1024 / 1024).toFixed(1) }} MiB received. <template v-if="result.progress?.total">Server reports {{ (result.progress.total / 1024 / 1024).toFixed(1) }} MiB (may differ after decompression).</template> Preview budget: {{ Math.round((result.progress?.limit || 0) / 1024 / 1024) }} MiB.</p>
     <p v-if="result.stream" role="status">{{ streamEvents.length }} events · {{ result.stream.reason ? "Interrupted" : result.stream.done ? "Finished" : "Receiving…" }}<template v-if="result.stream.limited"> · Preview limit reached; connection closed.</template></p>
     <details v-for="event in streamEvents" v-show="result.stream?.view?.selectedIndex === undefined" :key="event.index"><summary>{{ event.index + 1 }} · {{ event.event }} {{ event.id }} {{ event.error }}</summary><button type="button" :disabled="!!event.error" @click="inspectEvent(event)">Inspect event {{ event.index + 1 }}</button><pre>{{ JSON.stringify(event.data, null, 2) }}</pre></details>
     <div v-if="(!result.stream || result.stream.view?.selectedIndex !== undefined) && text && (raw || result.json === undefined)" class="raw-preview">
@@ -117,7 +118,7 @@ function download() {
     </div>
     <p v-if="result.binary">Binary response · {{ result.binary?.size?.toLocaleString() }} bytes. Use Details to download the original file.</p>
     <ul v-if="result.assertions?.length"><li v-for="(check, index) in result.assertions" :key="index">{{ check.passed ? "✓" : "✗" }} {{ check.label }} · {{ check.actual }}</li></ul>
-    <p v-if="!text && result.json === undefined && !result.binary && !result.stream" class="muted empty">Empty response body.</p>
+    <p v-if="!text && result.json === undefined && !result.binary && !result.stream && !result.incomplete" class="muted empty">Empty response body.</p>
   </div>
 </template>
 

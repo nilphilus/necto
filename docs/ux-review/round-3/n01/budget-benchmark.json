@@ -1,0 +1,30 @@
+{
+  "runtime": "v24.22.1",
+  "note": "Synthetic streaming text; 32 MiB budget. RSS is observational, sequential runs, not browser heap or full JSON parsing benchmark.",
+  "measurements": [
+    {
+      "inputMiB": 10,
+      "state": "complete",
+      "producedBytes": 10485760,
+      "canceled": false,
+      "elapsedMs": 20,
+      "rssDeltaMiB": 32
+    },
+    {
+      "inputMiB": 100,
+      "state": "budget stopped",
+      "producedBytes": 33619968,
+      "canceled": true,
+      "elapsedMs": 61,
+      "rssDeltaMiB": 37
+    },
+    {
+      "inputMiB": 300,
+      "state": "budget stopped",
+      "producedBytes": 33619968,
+      "canceled": true,
+      "elapsedMs": 59,
+      "rssDeltaMiB": 55
+    }
+  ]
+}
