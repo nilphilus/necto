@@ -70,12 +70,12 @@ export function useRequestRunner(configuration, authentication) {
       session.resultStale = false
       session.result = { ...result, requestIdentity: identity, sentRequest, elapsed: Math.round(performance.now() - started) }
       session.result.assertions = evaluateAssertions(session.assertions ?? [], session.result)
-      try { history.add(operation, request, session.result) } catch { /* History must not change the outcome of a sent request. */ }
+      try { history.add(operation, request, session.result, '', session) } catch { /* History must not change the outcome of a sent request. */ }
       return session.result
     } catch (cause) {
       if (session.result) session.resultStale = true
       session.error = controller.signal.aborted ? controller.signal.reason?.message ?? 'Request canceled.' : signal?.aborted ? 'Request canceled.' : cause.message
-      try { history.add(operation, request, undefined, session.error) } catch { /* Metadata retention is optional. */ }
+      try { history.add(operation, request, undefined, session.error, session) } catch { /* Metadata retention is optional. */ }
       return null
     } finally {
       clearTimeout(timeout)

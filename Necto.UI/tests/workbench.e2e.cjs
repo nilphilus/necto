@@ -163,7 +163,7 @@ const op = (name, extra = {}) => ({
   await p.getByText('✓ HTTP status · 200', { exact: true }).waitFor()
   await tools()
   await p.getByRole('tab', { name: 'History', exact: true }).click()
-  await p.getByText('Compare last two responses', { exact: true }).waitFor()
+  await p.getByText('Compare responses', { exact: true }).waitFor()
   await close()
   await endpoint('Form invoice')
   await send()
