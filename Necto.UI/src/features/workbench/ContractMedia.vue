@@ -4,7 +4,7 @@ import { exampleBody } from './contractExample.js';
 import SchemaTree from './SchemaTree.vue';
 const props = defineProps({ content: Object, resolve: Function, canApply: Boolean, requestExample: Boolean, mediaType: String, draftBody: String });
 const emit = defineEmits(['use-example'])
-const selected = ref(''), review = ref(false)
+const selected = ref(''), review = ref(false), exampleOpen = ref(false)
 const proposed = computed(() => {
   try { return { body: exampleBody(props.mediaType ?? '', example.value) } } catch(error) { return {error:error.message} }
 })
@@ -29,8 +29,9 @@ const example = computed(() =>
     :resolve="resolve"
     name="Model"
   />
-  <details v-if="example !== undefined || examples.length">
+  <details v-if="example !== undefined || examples.length" @toggle="exampleOpen = $event.currentTarget.open">
     <summary>Example</summary>
+    <template v-if="exampleOpen">
     <label v-if="examples.length > 1"
       >Named example<select v-model="selected">
         <option value="">Default example</option>
@@ -52,6 +53,7 @@ const example = computed(() =>
         <strong>New body</strong><pre>{{ preview(proposed.body) }}</pre><small>Preview shows at most 4,000 characters; the full example is applied.</small>
         <button type="button" :disabled="!canApply" @click="apply">Replace draft body</button><button type="button" @click="review = false">Cancel replacement</button>
       </section>
+    </template>
     </template>
   </details>
 </template>

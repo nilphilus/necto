@@ -35,7 +35,7 @@ authentication.register({ id: 'local', name: 'Local API', bootstrap: true, schem
   openApiUrl: new URL('/openapi/v1.json', document.baseURI).href, apiBaseUrl: new URL('/', document.baseURI).href,
   configurationUrl: new URL('./configuration', document.baseURI).href,
 }, origins: [location.origin] })
-const { spec, configuration, error, operations, groups, externalApis, reload: reloadCatalog, importDocument } = useCatalog(authentication)
+const { spec, configuration, error, operations, groups, externalApis, reload: reloadCatalog, importDocument, documentSource, restoreServerDocument } = useCatalog(authentication)
 const { sessions, sessionFor, createSession, run, prepare: prepareRequest, cancel: cancelRequest, history: requestHistory } = useRequestRunner(configuration, authentication)
 const { error: mappingError, targetsFor, choicesFor, selectablePaths, mappings: endpointMappings, links: mappingLinks, pending: mappingPending } = useRelatedEndpoints(configuration, operations, externalApis.contexts, authentication)
 
@@ -116,9 +116,9 @@ async function retryAuthorizedMetadata(id) {
     await externalApis.testConnection(id)
     return { error: externalStatuses.get(id)?.error || '' }
   }
-  await reloadCatalog()
+  const outcome = await reloadCatalog()
   if (typeof id !== 'string') await Promise.all(connections.value.map(entry => externalApis.testConnection(entry.id)))
-  return { error: error.value }
+  return { error: error.value, message: outcome?.message }
 }
 watch([spec, configuration, operations, connections, externalApis.contexts], () => {
   const activeIds = new Set(['local', ...connections.value.map(entry => entry.id)])
@@ -675,7 +675,7 @@ function removeScenario(id) {
             <div><strong>{{ spec?.info?.title }}</strong><p v-if="spec?.info?.version">Version {{ spec.info.version }}</p><p v-if="spec?.info?.description">{{ spec.info.description }}</p></div>
           </details>
           <div class="api-title">
-            <h1 :title="spec?.info?.title">{{ spec?.info?.title ?? 'API documentation' }}</h1>
+            <small v-if="documentSource.kind === 'import'" :title="documentSource.name">Imported</small><h1 :title="spec?.info?.title">{{ spec?.info?.title ?? 'API documentation' }}</h1>
             <small v-if="spec?.info?.version">Version {{ spec.info.version }}</small>
           </div>
           <details v-if="spec?.info?.description" class="api-description"><summary>About API</summary><p>{{ spec.info.description }}</p></details>
@@ -735,7 +735,7 @@ function removeScenario(id) {
               </template>
               <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
             </section>
-            <WorkspaceSettings v-show="settingsTab === 'workspace'" :import-document="importDocument" :operations="operations" />
+            <WorkspaceSettings v-show="settingsTab === 'workspace'" :import-document="importDocument" :document-source="documentSource" :restore-document="restoreServerDocument" :operations="operations" />
             <ExternalApiSettings v-show="settingsTab === 'connections'" v-model:show="showExternalApis" :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
               :save="externalApis.saveConnection" :remove="externalApis.removeConnection" :test="externalApis.testConnection" />
           </div>
@@ -899,9 +899,9 @@ function removeScenario(id) {
                   @choose="choose(current.session, location, $event)"
                 />
               </template>
-              <template #related>
+              <template #related="{ searchResponse }">
                 <RelatedTargets
-                  :targets="relatedTargets"
+                  :targets="relatedTargets" @search-response="searchResponse"
                   :can-send="canSendRelated"
                   @follow="follow" @edit-preset="editActivePreset"
                 />

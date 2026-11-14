@@ -35,7 +35,7 @@ const excerpt = (value, offset) => {
 }
 
 // Walk the parsed JSON iteratively. Only the requested result window retains paths.
-export async function searchPayload(document, { query, scope = 'all', caseSensitive = false, exact = false,
+export async function searchPayload(document, { query, scope = 'all', caseSensitive = false, exact = false, field = '',
   page = 1, size = SEARCH_PAGE_SIZE, knownTotal, shouldCancel = () => false,
   onProgress = () => {}, yieldControl = () => new Promise(resolve => setTimeout(resolve, 0)) }) {
   if (typeof query !== 'string' || query.length > MAX_QUERY_LENGTH) throw new Error(`Use a search term of at most ${MAX_QUERY_LENGTH} characters.`)
@@ -63,8 +63,9 @@ export async function searchPayload(document, { query, scope = 'all', caseSensit
       scanned++; batch++
       const scalar = frame.value === null || typeof frame.value !== 'object'
       const text = scalar ? typeof frame.value === 'string' ? frame.value : JSON.stringify(frame.value) : null
-      const keyHit = scope !== 'values' && frame.key !== null ? match(frame.key) : null
-      const valueHit = scope !== 'keys' && text !== null ? match(text) : null
+      const matchesField = !field || frame.key === field
+      const keyHit = matchesField && scope !== 'values' && frame.key !== null ? match(frame.key) : null
+      const valueHit = matchesField && scope !== 'keys' && text !== null ? match(text) : null
       if (keyHit || valueHit) {
         if (total >= start && total < end) matches.push({
           path: stack.slice(1).map(entry => entry.part),
@@ -96,7 +97,7 @@ export async function searchPayload(document, { query, scope = 'all', caseSensit
   if (shouldCancel()) return { cancelled: true }
   const count = knownTotal ?? total
   const pages = Math.max(1, Math.ceil(count / size))
-  if (page > pages) return searchPayload(document, { query, scope, caseSensitive, exact, page: pages, size,
+  if (page > pages) return searchPayload(document, { query, scope, caseSensitive, exact, field, page: pages, size,
     knownTotal: count, shouldCancel, onProgress, yieldControl })
   return { matches, total: count, page, pages, scanned }
 }

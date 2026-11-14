@@ -2,7 +2,7 @@ import { onScopeDispose, reactive, ref, watch } from 'vue'
 import { MAX_QUERY_LENGTH } from './search.js'
 
 export function usePayloadSearch(result) {
-  const query = ref(''), scope = ref('all'), caseSensitive = ref(false), exact = ref(false)
+  const query = ref(''), scope = ref('all'), caseSensitive = ref(false), exact = ref(false), field = ref('')
   const state = reactive({ pending: false, matches: [], total: 0, page: 1, pages: 1, scanned: 0, error: '', cancelled: false })
   let worker, timer, requestId = 0
   const listeners = new Set()
@@ -36,10 +36,10 @@ export function usePayloadSearch(result) {
         instance.postMessage({ type: 'init', id, text: result.value.rawText ?? result.value.text })
       }
       worker.postMessage({ type: 'search', id, query: query.value, scope: scope.value,
-        caseSensitive: caseSensitive.value, exact: exact.value, page })
+        caseSensitive: caseSensitive.value, exact: exact.value, field: field.value, page })
     } catch (cause) { state.pending = false; state.error = cause.message; disposeWorker() }
   }
-  watch([query, scope, caseSensitive, exact], () => {
+  watch([query, scope, caseSensitive, exact, field], () => {
     clearTimeout(timer); requestId++
     worker?.postMessage({ type: 'cancel' })
     clearState(); notify()
@@ -48,12 +48,12 @@ export function usePayloadSearch(result) {
     timer = setTimeout(() => launch(), 250)
   })
   watch(result, () => {
-    clearTimeout(timer); requestId++; disposeWorker(); query.value = ''; clearState(); notify()
+    clearTimeout(timer); requestId++; disposeWorker(); query.value = ''; field.value = ''; clearState(); notify()
   })
   function stop() {
     clearTimeout(timer); requestId++; disposeWorker(); state.pending = false; state.cancelled = true
   }
   onScopeDispose(() => { clearTimeout(timer); disposeWorker(); listeners.clear() })
-  return { query, scope, caseSensitive, exact, state, search: launch, stop,
+  return { query, scope, caseSensitive, exact, field, state, search: launch, stop,
     onResults: listener => { listeners.add(listener); return () => listeners.delete(listener) } }
 }
