@@ -1,7 +1,8 @@
 <script setup>
 import { computed } from 'vue';
 import ContractMedia from './ContractMedia.vue';
-const props = defineProps({ operation: Object });
+const props = defineProps({ operation: Object, session: Object });
+const emit = defineEmits(['use-example'])
 const responses = computed(() =>
   Object.entries(props.operation.responses ?? {}).map(([status, raw]) => [
     status,
@@ -36,7 +37,7 @@ const type = (schema) => {
         :key="name"
       >
         <h4>{{ name }}</h4>
-        <ContractMedia :content="media" :resolve="operation.resolve" />
+        <ContractMedia :content="media" :resolve="operation.resolve" request-example :can-apply="!!session && !session.pending" :media-type="name" :draft-body="session?.body" @use-example="emit('use-example', $event)" />
       </section>
     </details>
     <details
