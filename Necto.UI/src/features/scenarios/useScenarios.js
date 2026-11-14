@@ -1,3 +1,4 @@
+import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 import { executeScenario, prepareScenario, snapshotScenario, validateScenario } from './scenario.js'
 
@@ -11,18 +12,27 @@ export function useScenarios(configuration) {
   const key = computed(() => configuration.value?.openApiUrl && `necto:scenarios:${configuration.value.openApiUrl}`)
   const stop = () => controller?.abort()
   onScopeDispose(stop)
-  watch(key, storageKey => {
-    stop(); runs.clear(); scenarios.value = []; error.value = ''
+  function loadStored(storageKey, reset = false) {
+    const previous = scenarios.value
+    if (reset) { stop(); runs.clear(); scenarios.value = []; error.value = '' }
     if (!storageKey) return
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey))
-      if (saved === null) return
-      if (saved.version !== 1 || !Array.isArray(saved.scenarios)) throw new Error('Unsupported scenario file.')
-      for (const scenario of saved.scenarios) validateScenario(scenario)
-      if (new Set(saved.scenarios.map(scenario => scenario.id)).size !== saved.scenarios.length) throw new Error('Duplicate scenario IDs.')
-      scenarios.value = saved.scenarios
-    } catch (cause) { error.value = `Could not load saved scenarios. ${cause.message}` }
-  }, { immediate: true })
+      if (saved !== null && (saved.version !== 1 || !Array.isArray(saved.scenarios))) throw new Error('Unsupported scenario file.')
+      const next = saved?.scenarios ?? []
+      for (const scenario of next) validateScenario(scenario)
+      if (new Set(next.map(scenario => scenario.id)).size !== next.length) throw new Error('Duplicate scenario IDs.')
+      if (!reset) for (const old of previous) {
+        if (JSON.stringify(old) !== JSON.stringify(next.find(item => item.id === old.id))) {
+          runs.delete(old.id)
+          if (state.id === old.id) { const updated = next.find(item => item.id === old.id); stop(); Object.assign(state, {id:updated?.id ?? '',name:updated?.name ?? '',steps:[],error:'',status:updated?'saved':'idle'}) }
+        }
+      }
+      scenarios.value = next; error.value = ''
+    } catch(cause) { error.value = `Could not load saved scenarios. ${cause.message}` }
+  }
+  watch(key, storageKey => loadStored(storageKey, true), { immediate: true })
+  onWorkspaceImport(key, storageKey => loadStored(storageKey))
   function persist(next) {
     if (!key.value) throw new Error('Load an API before saving scenarios.')
     try { localStorage.setItem(key.value, JSON.stringify({ version: 1, scenarios: next })) }

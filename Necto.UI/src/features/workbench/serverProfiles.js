@@ -1,20 +1,16 @@
+import { onWorkspaceImport } from './workspaceUpdates.js'
 import { watch } from 'vue'
 export function useServerProfiles(configuration, onChange = () => {}) {
-  watch(
-    () => configuration.value?.openApiUrl,
-    (url) => {
-      if (!url) return
-      let saved = {}
-      try {
-        saved = JSON.parse(localStorage.getItem(`necto:servers:${url}`)) ?? {}
-      } catch {
-        /* Optional browser settings. */
-      }
-      configuration.value.serverProfiles =
-        saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {}
-    },
-    { immediate: true }
-  )
+  function loadProfiles() {
+    const url = configuration.value?.openApiUrl
+    if (!url) return
+    let saved = {}
+    try { saved = JSON.parse(localStorage.getItem(`necto:servers:${url}`)) ?? {} } catch { /* Optional browser settings. */ }
+    const next = saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {}
+    if (JSON.stringify(configuration.value.serverProfiles) !== JSON.stringify(next)) configuration.value.serverProfiles = next
+  }
+  watch(() => configuration.value?.openApiUrl, loadProfiles, { immediate: true })
+  onWorkspaceImport(() => configuration.value?.openApiUrl && `necto:servers:${configuration.value.openApiUrl}`, loadProfiles)
   watch(
     () => configuration.value?.serverProfiles,
     (profiles, previous) => {

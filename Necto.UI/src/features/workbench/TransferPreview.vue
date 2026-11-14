@@ -1,4 +1,5 @@
 <script setup>
+import { notifyWorkspaceImport } from './workspaceUpdates.js';
 import { ref, watch } from 'vue';
 import { planTransfer, applyTransfer } from './transfers.js';
 const props = defineProps({ workspace: Object });
@@ -20,6 +21,7 @@ watch(
 function apply() {
   try {
     const changed = applyTransfer(items.value, localStorage);
+    notifyWorkspaceImport(items.value.filter(item => item.action !== 'keep').map(item => item.key));
     emit('applied', changed.length);
   } catch (cause) {
     error.value = cause.message;

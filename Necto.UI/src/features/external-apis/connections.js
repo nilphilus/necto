@@ -1,3 +1,4 @@
+import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { parseDocument, bundleReferences } from '../workbench/document.js'
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 
@@ -45,7 +46,7 @@ export function useExternalApis(configuration, authentication) {
   const statuses = reactive(new Map())
   const storageError = ref('')
   const revision = ref(0)
-  const changedApiId = ref('')
+  const changedApiId = ref(''), changedApiIds = ref([])
   const jobs = new Map()
   const storageKey = computed(() => configuration.value?.openApiUrl && `necto:external-apis:${configuration.value.openApiUrl}`)
 
@@ -100,6 +101,18 @@ export function useExternalApis(configuration, authentication) {
       show.value = saved.show === true
     } catch { storageError.value = 'Could not load saved external API settings.' }
   }, { immediate: true })
+  onWorkspaceImport(storageKey, () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey.value))
+      const next = (saved?.connections ?? []).map(normalizeConnection)
+      if (new Set(next.map(entry => entry.id)).size !== next.length) throw new Error('Duplicate API IDs.')
+      const before = new Map(connections.value.map(entry => [entry.id, entry])), after = new Map(next.map(entry => [entry.id, entry]))
+      const changed = [...new Set([...before.keys(), ...after.keys()])].filter(id => JSON.stringify(before.get(id)) !== JSON.stringify(after.get(id)))
+      for (const id of changed) if (!after.has(id) || signature(before.get(id) ?? {}) !== signature(after.get(id))) { stop(id); loaded.delete(id); statuses.delete(id) }
+      connections.value = next; show.value = saved?.show === true; storageError.value = ''
+      if (changed.length) { changedApiIds.value = changed; changedApiId.value = changed.at(-1); revision.value++ }
+    } catch { storageError.value = 'Could not refresh imported API connections.' }
+  })
   watch([show, () => connections.value.map(entry => `${entry.id}:${signature(entry)}`).join('|')], () => {
     for (const [id, job] of jobs) {
       const entry = connections.value.find(entry => entry.id === id)
@@ -123,13 +136,13 @@ export function useExternalApis(configuration, authentication) {
       stop(entry.id); loaded.delete(entry.id); statuses.delete(entry.id)
     }
     connections.value = editingId ? connections.value.map(item => item.id === editingId ? entry : item) : [...connections.value, entry]
-    changedApiId.value = entry.id
+    changedApiId.value = entry.id; changedApiIds.value = [entry.id]
     revision.value++
   }
   function removeConnection(id) {
     stop(id); loaded.delete(id); statuses.delete(id)
     connections.value = connections.value.filter(entry => entry.id !== id)
-    changedApiId.value = id
+    changedApiId.value = id; changedApiIds.value = [id]
     revision.value++
   }
   const contexts = computed(() => !show.value ? [] : connections.value.flatMap(entry => {
@@ -139,5 +152,5 @@ export function useExternalApis(configuration, authentication) {
       configuration: { openApiUrl: entry.openApiUrl, endpointMappingsUrl: entry.endpointMappingsUrl,
         apiBaseUrl: entry.apiBaseUrl || new URL('/', entry.openApiUrl).href, overrideServer: Boolean(entry.apiBaseUrl) } }]
   }))
-  return { connections, show, contexts, statuses, storageError, revision, changedApiId, saveConnection, removeConnection, testConnection }
+  return { connections, show, contexts, statuses, storageError, revision, changedApiId, changedApiIds, saveConnection, removeConnection, testConnection }
 }

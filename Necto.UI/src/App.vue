@@ -1,4 +1,5 @@
 <script setup>
+import { onWorkspaceImport } from './features/workbench/workspaceUpdates.js'
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import WorkspaceSettings from './features/workbench/WorkspaceSettings.vue'
 import CurlImport from './features/workbench/CurlImport.vue'
@@ -209,7 +210,7 @@ watch(operations, available => {
 })
 
 watch(externalApis.revision, () => {
-  const id = externalApis.changedApiId.value
+  for (const id of externalApis.changedApiIds.value) {
   for (const [key, session] of sessions) if (session.apiId === id) sessions.delete(key)
   for (const [key, entry] of historyEntries) {
     if (entry.steps.some(step => step.operation.apiId === id)) historyEntries.delete(key)
@@ -219,9 +220,10 @@ watch(externalApis.revision, () => {
   }
   const index = chain.value.findIndex(step => step.operation.apiId === id)
   if (index >= 0) resetChain(chain.value.slice(0, index))
+  }
 })
 
-watch(configuration, () => {
+function loadPresets() {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey.value))
     if (!saved) return
@@ -234,7 +236,9 @@ watch(configuration, () => {
   } catch {
     presetError.value = 'Could not load saved presets in this browser.'
   }
-})
+}
+watch(configuration, loadPresets)
+onWorkspaceImport(storageKey, loadPresets)
 
 function savePresets() {
   try {
