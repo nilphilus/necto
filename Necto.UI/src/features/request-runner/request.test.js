@@ -150,8 +150,7 @@ test('canceling a large response parser terminates its worker', async t => {
     terminate() { terminated = true }
   } })
   t.after(() => { if (descriptor) Object.defineProperty(globalThis, 'Worker', descriptor); else delete globalThis.Worker })
-  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, headers: new Headers({ 'content-type': 'application/json' }),
-    text: async () => '"' + 'x'.repeat(1000000) + '"' }))
+  t.mock.method(globalThis, 'fetch', async () => new Response('"' + 'x'.repeat(1000000) + '"', { headers: { 'content-type': 'application/json' } }))
   await assert.rejects(sendRequest({ url: 'https://api.test', options: { signal: controller.signal } }), { name: 'AbortError' })
   assert.equal(terminated, true)
 })

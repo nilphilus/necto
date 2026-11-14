@@ -295,6 +295,7 @@ function addCheck() {
       }}</pre>
     </section>
     <section v-if="tab === 'Options'" :id="sectionId('Options')" role="tabpanel" :aria-labelledby="sectionId('Options') + '-tab'" tabindex="0">
+      <label>Response budget (MiB)<input v-model.number="session.responseLimitMiB" type="number" min="1" max="512" placeholder="32" /></label><p>Text and JSON reception stops at this budget, including responses without Content-Length. Raising it can use substantially more memory during parsing. No automatic retry. Binary downloads and bounded SSE/NDJSON streams have separate handling.</p>
       <label
         >Timeout (milliseconds)<input
           v-model.number="session.timeout"
