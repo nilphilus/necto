@@ -5,7 +5,7 @@ import { effectiveTarget } from '../workbench/target.js'
 import { requestIdentity } from '../workbench/requestContext.js'
 
 import BodyEditor from '../workbench/BodyEditor.vue'
-import RequestTools from '../workbench/RequestTools.vue'
+import RequestTools from '../workbench/RequestToolsMenu.vue'
 import ResponsePreview from './ResponsePreview.vue'
 import RequestSendIcon from './RequestSendIcon.vue'
 import NextRequestsPanel from './NextRequestsPanel.vue'
@@ -143,7 +143,7 @@ function parameterHint(parameter) {
         <button v-if="requestCompact" type="button" class="secondary" @click="editRequest">Edit request</button>
         <div class="request-actions">
           <slot name="request-actions" />
-          <RequestTools :operation="operation" :session="session" :values="values" :configuration="configuration" :prepare="prepare" :history="history" />
+          <RequestTools @edit-request="editRequest" :operation="operation" :session="session" :values="values" :configuration="configuration" :prepare="prepare" :history="history" />
           <button v-if="session.pending && cancel" type="button" @click="cancel(session)">Cancel</button>
           <button v-if="session.result && !requestCompact" type="button" class="secondary focus-response" @click="focusResponse">Focus response</button>
           <button
