@@ -5,7 +5,7 @@ import {
   exportWorkspace,
   inspectWorkspace
 } from './workspace.js'
-const props = defineProps({ importDocument: Function, operations: Array })
+const props = defineProps({ importDocument: Function, operations: Array, documentSource: Object, restoreDocument: Function })
 const includeBodies = ref(false),
   preview = ref(null),
   message = ref(''),
@@ -67,7 +67,7 @@ function imported(count) { message.value = `Imported ${count} items. Reload Nect
 async function loadDocument(event) {
   try {
     await props.importDocument(
-      await readFile(event.target.files[0], 5 * 1024 * 1024)
+      await readFile(event.target.files[0], 5 * 1024 * 1024), event.target.files[0].name
     )
     message.value = 'API document loaded for this session.'
     error.value = ''
@@ -107,6 +107,8 @@ async function loadDocument(event) {
       <TransferPreview :workspace="preview" @applied="imported" />
     </div>
     <h3>OpenAPI document</h3>
+    <p v-if="documentSource">Source: {{ documentSource.name }}</p>
+    <button v-if="documentSource?.kind === 'import'" type="button" @click="restoreDocument">Return to server document</button>
     <p>
       Load JSON or YAML for this session. Supports Swagger 2.0 conversion,
       OpenAPI 3.0/3.1 and common 3.2 operations. External references require
