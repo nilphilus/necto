@@ -251,17 +251,17 @@ const op = (name, extra = {}) => ({
         version: 1,
         entries: [
           {
-            key: 'necto:external-apis:import-test',
-            value: { connections: [], show: false }
+            key: 'necto:servers:import-test',
+            value: { local: { url: base } }
           }
         ]
       })
     )
   })
-  await p.getByRole('button', { name: 'Import new entries only' }).click()
+  await p.getByRole('button', { name: 'Import selected items' }).click()
   await p
     .getByRole('status')
-    .filter({ hasText: 'Imported 1 entries' })
+    .filter({ hasText: 'Imported 1 items' })
     .waitFor()
   if (output) await p.screenshot({ path: path.join(output, 'workspace.png') })
   await p.getByRole('button', { name: 'Close settings' }).click()
