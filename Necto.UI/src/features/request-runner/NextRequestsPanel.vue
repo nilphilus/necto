@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, onScopeDispose, ref, useId, watch } from 'vue'
-const props = defineProps({ operationKey: String })
+const props = defineProps({ operationKey: String, pinTarget: Object })
 const emit = defineEmits(['pin'])
 const pinned = ref(false)
 const wide = ref(false)
@@ -11,13 +11,14 @@ const pinnedContent = ref(null)
 const dialogContent = ref(null)
 function pin(value) { pinned.value = value; dialog.value?.close(); emit('pin', value) }
 function close() { dialog.value?.close(); trigger.value?.focus() }
-watch(() => props.operationKey, () => dialog.value?.close())
+watch(() => props.operationKey, () => pin(false))
 let media
 const resize = () => { wide.value = media.matches; if (!wide.value) pin(false) }
 onMounted(() => { media = matchMedia('(min-width: 1200px)'); resize(); media.addEventListener('change', resize) })
 onScopeDispose(() => media?.removeEventListener('change', resize))
 </script>
 <template>
+  <Teleport :to="pinTarget || 'body'" :disabled="!pinned || !pinTarget">
   <aside class="next-requests" :class="{ pinned }" aria-label="Next request">
     <template v-if="pinned">
       <header><strong>Next request</strong><button type="button" class="secondary" @click="pin(false)">Unpin</button></header>
@@ -33,6 +34,7 @@ onScopeDispose(() => media?.removeEventListener('change', resize))
     </Teleport>
     <Teleport v-if="pinnedContent && dialogContent" :to="pinned ? pinnedContent : dialogContent"><slot /></Teleport>
   </aside>
+  </Teleport>
 </template>
 <style scoped>
 .next-requests { min-width: 0; }
