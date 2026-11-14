@@ -1,0 +1,41 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { sendRequest } from './response.js';
+test('selected event and JSON path survive subsequent stream snapshots', async (t) => {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode('{"id":42}\n'));
+      setTimeout(() => {
+        controller.enqueue(encoder.encode('{"id":43}\n'));
+        controller.close();
+      }, 70);
+    }
+  });
+  t.mock.method(
+    globalThis,
+    'fetch',
+    async () =>
+      new Response(body, {
+        headers: { 'Content-Type': 'application/x-ndjson' }
+      })
+  );
+  const result = await sendRequest(
+    { url: new URL('https://api.test/stream'), options: {} },
+    {
+      onProgress: (progress) => {
+        if (
+          progress.stream.events.length &&
+          progress.stream.view.selectedIndex === undefined
+        ) {
+          progress.stream.view.selectedIndex = 0;
+          progress.stream.view.selectedPath = [];
+        }
+      }
+    }
+  );
+  assert.equal(result.json.id, 42);
+  assert.deepEqual(result.selectedPath, []);
+  assert.equal(result.stream.events.length, 2);
+  assert.equal(result.stream.done, true);
+});
