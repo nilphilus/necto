@@ -1,3 +1,4 @@
+import { executionOptions } from './executionOptions.js'
 import { validateScenario } from '../scenarios/scenario.js'
 import { normalizeConnection } from '../external-apis/connections.js'
 import { validatePayloadSnapshot } from './body.js'
@@ -115,6 +116,7 @@ export function inspectWorkspace(text, storage) {
           (sample.body !== undefined && typeof sample.body !== 'string')
         )
           throw new Error('Invalid saved request.')
+        executionOptions(sample)
         validatePayloadSnapshot(sample)
         validateAssertions(sample.assertions)
       }

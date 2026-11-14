@@ -14,6 +14,14 @@ const props = defineProps({ result: { type: Object, required: true }, selectors:
 const responseTarget = computed(() => {
   try { const url = new URL(props.result.sentRequest.url); return url.host + url.pathname } catch { return 'Target not retained' }
 })
+const payloadFinder = ref(null)
+async function searchWholeResponse(query) {
+  raw.value = false; table.value = false
+  await toggleSearch(true)
+  await payloadFinder.value?.setQuery(query)
+  finderPanel.value?.scrollIntoView({block:'nearest'})
+}
+defineExpose({ searchWholeResponse })
 const searchOpen = ref(false)
 const finderButton = ref(null)
 const finderPanel = ref(null)
@@ -29,7 +37,7 @@ const tableReturn = ref(null)
 const tableValue = computed(() => tableReturn.value?.value ?? previewValue.value)
 const tablePath = computed(() => tableReturn.value?.path ?? focusPath.value)
 const tableAvailable = computed(() => tableColumns(tableValue.value).length > 0)
-function inspectRow(path) { tableReturn.value ??= { value: previewValue.value, path: focusPath.value }; focusPath.value = path; table.value = false; raw.value = false; navigation.value = null }
+async function inspectRow(path) { tableReturn.value ??= { value: previewValue.value, path: focusPath.value }; focusPath.value = path; table.value = false; raw.value = false; navigation.value = null; await nextTick(); preview.value?.focus() }
 const raw = ref(false)
 const streamEvents = computed(() => props.result.stream?.events ?? [])
 const textPage = ref(1)
@@ -115,7 +123,7 @@ function download() {
       <button type="button" @click="selectPath(undefined)">Clear selection</button>
     </div>
     <div v-show="searchOpen" :id="searchId" ref="finderPanel" @keydown.esc.stop.prevent="toggleSearch(false)">
-      <PayloadSearch v-if="result.json !== undefined" :result="result" :selectors="selectors" @reveal="reveal" @select="selectPath($event)" />
+      <PayloadSearch ref="payloadFinder" v-if="result.json !== undefined" :result="result" :selectors="selectors" @reveal="reveal" @select="selectPath($event)" />
     </div>
     <div v-if="focusPath.length && !raw" class="preview-toolbar"><code>Focused object: {{ pathLabel(focusPath) }}</code><button type="button" @click="fullResponse">{{ tableReturn ? 'Back to table' : 'Back to full response' }}</button></div>
     <CollectionTable v-if="tableAvailable" v-show="table && !raw" :value="tableValue" :path="tablePath" :operation="operation" :status="result.status" :content-type="result.contentType" :selectors="selectors" :selected="result.selectedPath" @select="selectPath($event)" @inspect="inspectRow" />

@@ -16,7 +16,7 @@ export function createCiBundle(
     .scenarios[0];
   return {
     format: 'necto-ci-bundle',
-    version: 1,
+    version: 2,
     scenario: safe,
     document: JSON.parse(JSON.stringify(document)),
     mappings: JSON.parse(JSON.stringify(mappings))
@@ -37,10 +37,11 @@ export function ciCommand(baseUrl, { bearer = false, writes = false, shell = 'ba
   return `node tools/necto-run.mjs --bundle necto-ci.json --base-url ${shell === 'powershell' ? "'" + url.href.replaceAll("'", "''") + "'" : quote(url.href)}${bearer ? ' --bearer-env NECTO_CI_TOKEN' : ''}${writes ? ' --allow-writes' : ''} --report necto-report.json --junit necto-report.xml`;
 }
 
-export function ciSetup(version) {
+export function ciSetup(version, revision) {
   if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version)) throw new Error('Runner version must be a release version.')
+  if (revision !== undefined && !/^[a-f0-9]{40}$/.test(revision)) throw new Error('Runner revision must be a full commit SHA.')
   return `git clone https://github.com/nilphilus/necto.git
 cd necto
-git checkout --detach v${version}
+git checkout --detach ${revision ?? 'v' + version}
 corepack pnpm --dir Necto.UI install --frozen-lockfile`
 }
