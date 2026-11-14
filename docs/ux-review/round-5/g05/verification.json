@@ -1,0 +1,14 @@
+{
+  "observations": [
+    {
+      "id": "preferences",
+      "tablePressedAfterResend": "true",
+      "totalColumnCheckedAfterResend": false,
+      "selectedRows": 0
+    },
+    {
+      "incompatibleShapeFallback": true
+    }
+  ],
+  "errors": []
+}

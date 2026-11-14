@@ -36,6 +36,7 @@ const responseStale = computed(() => {
   catch { return true }
 })
 
+const previewPreferences = computed(() => props.session.previewPreferences ??= { tables: {} })
 const parameters = computed(() => supportedParameters(props.operation))
 const content = computed(() => jsonContent(props.operation, props.session.mediaType))
 const bodyPresetResult = computed(() => applyBodyPresets(props.operation, props.session.body, props.values, props.session.mediaType))
@@ -268,7 +269,7 @@ function parameterHint(parameter) {
           <p v-if="responseStale" class="muted response-stale" role="status">{{ session.error ? (session.result?.incomplete ? 'Response reception did not complete. No complete preview is available.' : 'The latest request did not complete. Showing the previous response.') : 'Inputs changed. This response belongs to the previous request.' }}</p>
           <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }">
           <div class="response-body">
-            <ResponsePreview ref="responsePreview" :result="session.result" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="responseStale">
+            <ResponsePreview ref="responsePreview" :result="session.result" :presentation="previewPreferences" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="responseStale">
               <template #actions><NextRequestsPanel ref="nextRequests" v-if="hasRelated" :operation-key="operation.key" :pin-target="pinnedToolsHost" @pin="relatedPinned = $event"><slot name="related" :search-response="searchResponse" /></NextRequestsPanel></template>
             </ResponsePreview>
 
