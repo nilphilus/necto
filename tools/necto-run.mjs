@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { failureDiagnostic } from './failure-diagnostic.mjs'
 import { executionOptions } from '../Necto.UI/src/features/workbench/executionOptions.js'
 import { junitReport } from './junit.mjs'
 import { readFile, writeFile } from 'node:fs/promises'
@@ -66,20 +67,24 @@ export async function runScenario({
     execute: async (operation, session, values, signal, onRequest) => {
       const request = buildRequest(operation, configuration, session, values)
       if (request.url.origin !== origin)
-        throw new Error('Request origin differs from --base-url.')
+        throw Object.assign(new Error('Request origin differs from --base-url.'), { code: 'ORIGIN_MISMATCH' })
       request.options.redirect = 'error'
+      const deadline = AbortSignal.timeout(Math.min(600000, Math.max(1, Number(session.timeout ?? timeout))))
       request.options.signal = AbortSignal.any([
         signal,
-        AbortSignal.timeout(
-          Math.min(600000, Math.max(1, Number(session.timeout ?? timeout)))
-        )
+        deadline
       ])
       if (bearer)
         request.options.headers.set('Authorization', `Bearer ${bearer}`)
       onRequest(safeRequest(request))
       const start = performance.now()
       const policy = executionOptions(session)
-      const result = await sendRequest(request, { responseLimitBytes: policy.responseLimitMiB * 1024 * 1024 })
+      let result
+      try { result = await sendRequest(request, { responseLimitBytes: policy.responseLimitMiB * 1024 * 1024 }) }
+      catch (cause) {
+        const code = signal.aborted ? 'CANCELED' : deadline.aborted ? 'TIMEOUT' : cause.code === 'RESPONSE_LIMIT_EXCEEDED' ? cause.code : 'NETWORK_ERROR'
+        throw Object.assign(new Error(failureDiagnostic(code).message), { code })
+      }
       result.elapsed = Math.round(performance.now() - start)
       result.assertions = evaluateAssertions(session.assertions ?? [], result)
       return result
@@ -89,7 +94,8 @@ export async function runScenario({
     version: 1,
     scenario: scenario.name,
     status: summary.status,
-    steps: plan.map((step) => ({
+    steps: plan.map((step, index) => ({
+      step: index + 1,
       operation: step.operation.key,
       status: step.status,
       httpStatus: step.httpStatus,
@@ -99,9 +105,8 @@ export async function runScenario({
           label,
           passed
         })) ?? [],
-      error: step.error
-        ? 'Step failed. Check the operation, HTTP status, bindings and assertions.'
-        : ''
+      error: step.error ? failureDiagnostic(step.failureCode).message : '',
+      ...(step.error ? { failure: failureDiagnostic(step.failureCode, step.session, step.httpStatus) } : {})
     }))
   }
 }
