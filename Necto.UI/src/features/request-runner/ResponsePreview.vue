@@ -37,7 +37,7 @@ const tableReturn = ref(null)
 const tableValue = computed(() => tableReturn.value?.value ?? previewValue.value)
 const tablePath = computed(() => tableReturn.value?.path ?? focusPath.value)
 const tableAvailable = computed(() => tableColumns(tableValue.value).length > 0)
-function inspectRow(path) { tableReturn.value ??= { value: previewValue.value, path: focusPath.value }; focusPath.value = path; table.value = false; raw.value = false; navigation.value = null }
+async function inspectRow(path) { tableReturn.value ??= { value: previewValue.value, path: focusPath.value }; focusPath.value = path; table.value = false; raw.value = false; navigation.value = null; await nextTick(); preview.value?.focus() }
 const raw = ref(false)
 const streamEvents = computed(() => props.result.stream?.events ?? [])
 const textPage = ref(1)
