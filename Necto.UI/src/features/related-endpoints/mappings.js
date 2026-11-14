@@ -77,7 +77,7 @@ export function useRelatedEndpoints(configuration, operations, externalContexts 
   const error = ref('')
   const pending = ref(false)
 
-  watch([() => configuration.value?.endpointMappingsUrl, () => authentication?.revision.value], async ([url], previous, onCleanup) => {
+  watch([() => configuration.value?.endpointMappingsUrl, () => authentication?.apiRevision('local')], async ([url], previous, onCleanup) => {
     mappings.value = []; error.value = ''; pending.value = false
     if (!url) return
     pending.value = true

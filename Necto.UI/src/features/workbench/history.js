@@ -44,6 +44,7 @@ export function useRequestHistory() {
     entries.unshift({
       id: crypto.randomUUID(),
       key: operation.key,
+      apiId: operation.apiId ?? 'local',
       name: operation.name,
       method: operation.method,
       at: new Date().toISOString(),
@@ -76,6 +77,7 @@ export function useRequestHistory() {
     entries,
     add,
     clear: () => entries.splice(0),
+    clearApi: id => { for (let index = entries.length - 1; index >= 0; index--) if ((entries[index].apiId ?? 'local') === id) entries.splice(index, 1) },
     clearOperation: key => { for (let index = entries.length - 1; index >= 0; index--) if (entries[index].key === key) entries.splice(index, 1) },
     forOperation: (key) => entries.filter((entry) => entry.key === key)
   }
