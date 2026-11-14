@@ -1,4 +1,5 @@
 <script setup>
+import { scenarioTargets } from './features/workbench/scenarioTargets.js'
 import { workspaceIdentity } from './features/workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from './features/workbench/workspaceUpdates.js'
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
@@ -623,6 +624,11 @@ function copyEditingScenario() {
   scenarioDialog.value.showModal()
 }
 
+function previewScenarioTargets(scenario, presetNames) {
+  const layers = presetNames.map(name => presets.value.get(name)).filter(Boolean)
+  return scenarioTargets(scenario, scenarioContext(operation => valuesFor(operation, layers)))
+}
+
 function openScenario(scenario) {
   const steps = scenarioStore.open(scenario, scenarioContext())
   if (!steps) return
@@ -761,7 +767,16 @@ function removeScenario(id) {
 
         :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"
-        @remove="removeScenario" @stop="scenarioStore.stop" @inspect="inspectScenario" />
+        @remove="removeScenario" @stop="scenarioStore.stop" @inspect="inspectScenario">
+        <template #run-targets="{ scenario, presetNames }">
+          <details><summary>Targets for this run</summary>
+            <ol><li v-for="(target, index) in previewScenarioTargets(scenario, presetNames)" :key="index">
+              <span v-if="target.error">{{ target.error }}</span>
+              <template v-else><strong>{{ target.api }}</strong> · {{ target.target }} · <code>{{ target.operation }}</code></template>
+            </li></ol>
+          </details>
+        </template>
+      </ScenarioPanel>
       <section :inert="settingsOpen" v-if="!graphView && activePresetNames.length" class="active-presets" aria-label="Active presets">
         <strong>Active presets</strong>
         <span v-for="name in activePresetNames" :key="name" class="active-preset-chip">
