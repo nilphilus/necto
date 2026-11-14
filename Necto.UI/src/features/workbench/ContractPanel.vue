@@ -1,8 +1,14 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import ContractMedia from './ContractMedia.vue';
 const props = defineProps({ operation: Object, session: Object });
 const emit = defineEmits(['use-example'])
+const rawOpen = ref(false), rawText = ref('')
+function toggleRaw(event) {
+  rawOpen.value = event.currentTarget.open
+  rawText.value = rawOpen.value ? JSON.stringify({requestBody:props.operation.requestBody,parameters:props.operation.parameters,responses:props.operation.responses},null,2) : ''
+}
+watch(() => props.operation, () => { rawOpen.value = false; rawText.value = '' })
 const responses = computed(() =>
   Object.entries(props.operation.responses ?? {}).map(([status, raw]) => [
     status,
@@ -80,19 +86,9 @@ const type = (schema) => {
         </p>
       </div>
     </details>
-    <details class="raw-contract">
+    <details class="raw-contract" :open="rawOpen" @toggle="toggleRaw">
       <summary>Raw OpenAPI fragment</summary>
-      <pre>{{
-        JSON.stringify(
-          {
-            requestBody: operation.requestBody,
-            parameters: operation.parameters,
-            responses: operation.responses
-          },
-          null,
-          2
-        )
-      }}</pre>
+      <pre v-if="rawOpen">{{ rawText }}</pre>
     </details>
   </div>
 </template>
