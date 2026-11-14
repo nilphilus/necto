@@ -57,6 +57,7 @@ export function useRequestRunner(configuration, authentication) {
   async function run(operation, session, values, { signal, onRequest } = {}) {
     if (session.pending) return
     session.error = ''
+    if (session.result) delete session.result.reception
     session.pending = true
     const controller = new AbortController()
     const authRevision = authentication?.apiRevision(operation.apiId ?? 'local')
@@ -78,7 +79,13 @@ export function useRequestRunner(configuration, authentication) {
       onRequest?.(redactedRequest(request))
       const started = performance.now()
       const result = await sendRequest(request, { responseLimitBytes: policy.responseLimitMiB * 1024 * 1024, onProgress: progress => {
-        session.result = { ...progress, requestIdentity: identity, sentRequest, elapsed: Math.round(performance.now() - started) }
+        const update = { ...progress, requestIdentity: identity, sentRequest, elapsed: Math.round(performance.now() - started) }
+        // Retain one completed result while a normal response is received/parsed.
+        // Streaming responses keep their existing live event preview.
+        if (progress.incomplete) {
+          if (!session.result || session.result.incomplete || session.result.stream && !session.result.stream.done) session.result = update
+          else session.result.reception = update
+        } else session.result = update
       } })
       if (invalidated()) return null
       if (result.json && typeof result.json === 'object') markRaw(result.json)
@@ -97,6 +104,7 @@ export function useRequestRunner(configuration, authentication) {
 
       return null
     } finally {
+      if (session.result?.reception) { session.result.reception.receiving = false; session.result.reception.error = session.error }
       clearTimeout(timeout)
       controllers.delete(session)
       running.delete(controller)

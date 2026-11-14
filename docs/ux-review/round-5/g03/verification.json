@@ -1,0 +1,15 @@
+{
+  "observations": [
+    {
+      "id": "cancel",
+      "previewWhileReceiving": 1,
+      "previewAfterCancel": 1,
+      "text": "Reception stopped; response incomplete. 0.0 MiB received. Showing the previous complete response. Request canceled.\n\nThe latest request did not complete. Showing the previous response.\n\nLast response\n200 OK\n35 ms\nPreview\nRaw\nFind\nDetails\n−{\n\"id\": 42,\n\"reference\": \"INV-42\"\n}"
+    },
+    {
+      "id": "cancel-history",
+      "oldResponseRetained": true
+    }
+  ],
+  "errors": []
+}
