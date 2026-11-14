@@ -31,3 +31,17 @@ test('same workspace retains credentials; a separate API drops them',()=>{
  register({...configuration,workspaceId:importedWorkspaceId(configuration,'Partner')});assert.deepEqual(store.apis.get('local').credentials,{})
  assert.throws(()=>importedWorkspaceId(configuration,' '),/workspace name/)
 })
+
+test('a canceled request from the previous workspace cannot repopulate the new history', async () => {
+ globalThis.localStorage={getItem:()=>null,setItem:()=>{}}
+ const configuration=ref({openApiUrl:'https://example.test/openapi.json',apiBaseUrl:'https://example.test'}), scope=effectScope()
+ let runner;scope.run(()=>runner=useRequestRunner(configuration))
+ const previous=globalThis.fetch
+ globalThis.fetch=async(url,options)=>new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true}))
+ try {
+  const operation={key:'GET /lookup',apiId:'local',method:'GET',path:'/lookup',parameters:[]}
+  const pending=runner.run(operation,runner.sessionFor(operation),new Map())
+  configuration.value={...configuration.value,workspaceId:importedWorkspaceId(configuration.value,'Partner')}
+  await pending;assert.equal(runner.history.entries.length,0)
+ }finally{scope.stop();globalThis.fetch=previous}
+})
