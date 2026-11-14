@@ -1,14 +1,187 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { parseCurl, curlMatches, curlDraft } from './curlImport.js'
-const props = defineProps({ operations: Array, configuration: Object, disabled: Boolean })
-const emit = defineEmits(['import'])
-const dialog = ref(null), source = ref(''), selected = ref('')
-watch(source, () => { selected.value = '' })
-const parsed = computed(() => { try { return { value: parseCurl(source.value) } } catch (error) { return { error: error.message } } })
-const matches = computed(() => parsed.value.value ? curlMatches(parsed.value.value, props.operations ?? [], props.configuration) : [])
-const preview = computed(() => { const match = selected.value ? matches.value.find(item => item.operation.key === selected.value) : matches.value.length === 1 ? matches.value[0] : undefined; if (!match) return {}; try { return { operation: match.operation, draft: curlDraft(parsed.value.value, match) } } catch (error) { return { error: error.message } } })
-function load() { if (!preview.value.operation || props.disabled) return; emit('import',preview.value); source.value = ''; dialog.value.close() }
+import { computed, ref, watch } from 'vue';
+import { parseCurl, curlMatches, curlDraft } from './curlImport.js';
+const props = defineProps({
+  operations: Array,
+  configuration: Object,
+  disabled: Boolean
+});
+const emit = defineEmits(['import']);
+const dialog = ref(null),
+  source = ref(''),
+  selected = ref('');
+watch(source, () => {
+  selected.value = '';
+});
+const parsed = computed(() => {
+  try {
+    return { value: parseCurl(source.value) };
+  } catch (error) {
+    return { error: error.message };
+  }
+});
+const matches = computed(() =>
+  parsed.value.value
+    ? curlMatches(
+        parsed.value.value,
+        props.operations ?? [],
+        props.configuration
+      )
+    : []
+);
+const preview = computed(() => {
+  const match = selected.value
+    ? matches.value.find((item) => item.operation.key === selected.value)
+    : matches.value.length === 1
+      ? matches.value[0]
+      : undefined;
+  if (!match) return {};
+  try {
+    return {
+      operation: match.operation,
+      draft: curlDraft(parsed.value.value, match)
+    };
+  } catch (error) {
+    return { error: error.message };
+  }
+});
+function load() {
+  if (!preview.value.operation || props.disabled) return;
+  emit('import', preview.value);
+  source.value = '';
+  dialog.value.close();
+}
 </script>
-<template><button type="button" class="curl-trigger" :disabled="disabled" @click="source = ''; dialog.showModal()">Import cURL</button><Teleport to="body"><dialog ref="dialog" aria-label="Import cURL request"><header><h3>Import cURL as a draft</h3><button type="button" aria-label="Close cURL import" @click="dialog.close()">✕</button></header><p>Paste one POSIX cURL command. It is parsed locally and never executed. Credential headers/query values and browser-managed headers are omitted; use Authorize for login.</p><label>cURL command<textarea v-model="source" rows="7" maxlength="1000000" spellcheck="false" placeholder="curl 'https://api.example.com/invoices'" /></label><p v-if="source && parsed.error" class="error" role="alert">{{ parsed.error }}</p><template v-if="parsed.value"><p><strong>{{ parsed.value.method }}</strong> <code>{{ parsed.value.url.href }}</code></p><ul><li v-for="warning in parsed.value.warnings" :key="warning">{{ warning }}</li></ul><p v-if="!matches.length" class="error">No matching endpoint in the current catalog. Load or enable the matching API first.</p><label v-else-if="matches.length > 1">Target endpoint<select v-model="selected"><option value="">Choose the API</option><option v-for="match in matches" :key="match.operation.key" :value="match.operation.key">{{ match.operation.apiName }} · {{ match.operation.name }}</option></select></label><p v-if="preview.operation">Matched {{ preview.operation.apiName }} · {{ preview.operation.name }}. Loading replaces this endpoint’s current draft, without changing saved requests. Current presets can still override imported values.</p><p v-if="preview.error" class="error" role="alert">{{ preview.error }}</p><p>File/multipart imports, shell expansions and unsupported flags require manual setup. Review body values before saving or sharing.</p><button type="button" :disabled="!preview.operation || disabled" @click="load">Load draft · do not send</button></template></dialog></Teleport></template>
-<style scoped>.curl-trigger{font-size:.7rem;padding:.25rem .4rem}dialog{width:min(48rem,94vw);max-height:88dvh;overflow:auto;border:1px solid var(--line);border-radius:.7rem;padding:1rem;background:var(--surface);color:var(--text)}dialog::backdrop{background:#0006}header{display:flex;justify-content:space-between;align-items:center;gap:1rem}label{display:grid;gap:.4rem;font-size:.85rem}textarea{width:100%;max-height:40dvh;font-family:monospace}p,li{font-size:.83rem;color:var(--muted)}code{overflow-wrap:anywhere}</style>
+<template>
+  <button
+    type="button"
+    class="curl-trigger"
+    :disabled="disabled"
+    @click="
+      source = '';
+      dialog.showModal();
+    "
+  >
+    Import cURL</button
+  ><Teleport to="body"
+    ><dialog ref="dialog" aria-label="Import cURL request">
+      <header>
+        <h3>Import cURL as a draft</h3>
+        <button
+          type="button"
+          aria-label="Close cURL import"
+          @click="dialog.close()"
+        >
+          ✕
+        </button>
+      </header>
+      <p>
+        Paste one POSIX cURL command. It is parsed locally and never executed.
+        Credential headers/query values and browser-managed headers are omitted;
+        use Authorize for login.
+      </p>
+      <label
+        >cURL command<textarea
+          v-model="source"
+          rows="7"
+          maxlength="1000000"
+          spellcheck="false"
+          placeholder="curl 'https://api.example.com/invoices'"
+        />
+      </label>
+      <p v-if="source && parsed.error" class="error" role="alert">
+        {{ parsed.error }}
+      </p>
+      <template v-if="parsed.value"
+        ><p>
+          <strong>{{ parsed.value.method }}</strong>
+          <code>{{ parsed.value.url.href }}</code>
+        </p>
+        <ul>
+          <li v-for="warning in parsed.value.warnings" :key="warning">
+            {{ warning }}
+          </li>
+        </ul>
+        <p v-if="!matches.length" class="error">
+          No matching endpoint in the current catalog. Load or enable the
+          matching API first.
+        </p>
+        <label v-else-if="matches.length > 1"
+          >Target endpoint<select v-model="selected">
+            <option value="">Choose the API</option>
+            <option
+              v-for="match in matches"
+              :key="match.operation.key"
+              :value="match.operation.key"
+            >
+              {{ match.operation.apiName }} · {{ match.operation.name }}
+            </option>
+          </select></label
+        >
+        <p v-if="preview.operation">
+          Matched {{ preview.operation.apiName }} ·
+          {{ preview.operation.name }}. Loading replaces this endpoint’s current
+          draft, without changing saved requests. Current presets can still
+          override imported values.
+        </p>
+        <p v-if="preview.error" class="error" role="alert">
+          {{ preview.error }}
+        </p>
+        <p>
+          File/multipart imports, shell expansions and unsupported flags require
+          manual setup. Review body values before saving or sharing.
+        </p>
+        <button
+          type="button"
+          :disabled="!preview.operation || disabled"
+          @click="load"
+        >
+          Load draft · do not send
+        </button></template
+      >
+    </dialog></Teleport
+  >
+</template>
+<style scoped>
+.curl-trigger {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.4rem;
+}
+dialog {
+  width: min(48rem, 94vw);
+  max-height: 88dvh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  padding: 1rem;
+  background: var(--surface);
+  color: var(--text);
+}
+dialog::backdrop {
+  background: #0006;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+textarea {
+  width: 100%;
+  max-height: 40dvh;
+  font-family: monospace;
+}
+p,
+li {
+  font-size: 0.83rem;
+  color: var(--muted);
+}
+code {
+  overflow-wrap: anywhere;
+}
+</style>
