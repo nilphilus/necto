@@ -1,3 +1,4 @@
+import { executionOptions } from '../workbench/executionOptions.js'
 import { validateSelectionRule, selectionRulePath } from '../workbench/selectionRule.js'
 import { payloadSnapshot, validatePayloadSnapshot, describeBody } from '../workbench/body.js'
 import { validateAssertions } from '../workbench/assertions.js'
@@ -48,7 +49,7 @@ export function snapshotScenario(chain, name, id = globalThis.crypto?.randomUUID
       }
     }
     return { operationKey: operation.key, apiId: operation.apiId ?? 'local', name: operation.name,
-      method: operation.method, path: operation.path, fields, body, bindings, ...payloadSnapshot(session), assertions: (session.assertions ?? []).map(check => ({ ...check })), timeout: session.timeout, serverIndex: session.serverIndex, serverValues: { ...session.serverValues } }
+      method: operation.method, path: operation.path, fields, body, bindings, ...payloadSnapshot(session), assertions: (session.assertions ?? []).map(check => ({ ...check })), ...executionOptions(session), serverIndex: session.serverIndex, serverValues: { ...session.serverValues } }
   })
   return { version: 1, id, name, steps }
 }
@@ -64,6 +65,7 @@ export function validateScenario(scenario) {
       Object.values(step.fields).some(value => typeof value !== 'string') || !Array.isArray(step.bindings)) {
       throw new Error(`Invalid scenario step ${index + 1}.`)
     }
+    executionOptions(step)
     validatePayloadSnapshot(step)
     validateAssertions(step.assertions)
     const targets = new Set()
@@ -108,7 +110,7 @@ export function prepareScenario(scenario, { operations, links, configuration, cr
       throw new Error(`Step ${index + 1}: ${step.method} ${step.path} is unavailable. Check API visibility and connections.`)
     }
     const session = createSession(operation)
-    Object.assign(session, payloadSnapshot(step), { assertions: (step.assertions ?? []).map(check => ({ ...check })), timeout: step.timeout ?? 30000, serverIndex: step.serverIndex, serverValues: { ...step.serverValues } }); session.fields = { ...step.fields }; session.body = step.body
+    Object.assign(session, payloadSnapshot(step), { assertions: (step.assertions ?? []).map(check => ({ ...check })), ...executionOptions(step), serverIndex: step.serverIndex, serverValues: { ...step.serverValues } }); session.fields = { ...step.fields }; session.body = step.body
     session.bindings = step.bindings.map(binding => ({ ...binding, ...(binding.selector ? { selector: { ...binding.selector, arrayPath: [...binding.selector.arrayPath] } } : {}), path: [...binding.path],
       appliedValue: currentValue(session, binding.location, binding.name) }))
     return { operation, group: operation.tags[0], session, bindings: step.bindings.map(binding => ({ ...binding, ...(binding.selector ? { selector: { ...binding.selector, arrayPath: [...binding.selector.arrayPath] } } : {}), path: [...binding.path] })),
