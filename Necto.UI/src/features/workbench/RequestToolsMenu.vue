@@ -124,20 +124,9 @@ onUnmounted(() => {
       ><button type="button" @click="inspect('History')">
         History ({{ history?.forOperation(operation.key).length ?? 0 }})
       </button>
-      <details>
-        <summary>Configure request</summary>
-        <button type="button" @click="inspect('Checks')">
-          Checks ({{ session.assertions?.length ?? 0 }})</button
-        ><button type="button" @click="inspect('Server')">Server</button
-        ><button type="button" @click="inspect('Options')">Timeout</button
-        ><button
-          v-if="session.bindings?.length"
-          type="button"
-          @click="inspect('Bindings')"
-        >
-          Bindings ({{ session.bindings.length }})
-        </button>
-      </details>
+      <button type="button" @click="inspect('Configure')">Configure request</button>
+      <button v-if="session.bindings?.length" type="button" @click="inspect('Bindings')">Bindings ({{ session.bindings.length }})</button>
+
     </div></Teleport
   >
   <RequestTools
