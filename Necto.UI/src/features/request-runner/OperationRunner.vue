@@ -2,12 +2,16 @@
 import { computed, nextTick, ref, watch, watchPostEffect } from 'vue'
 import { bodyFields, hasBodyExample } from './bodyHelp.js'
 import ImportedInputs from '../workbench/ImportedInputs.vue'
+import { effectiveTarget } from '../workbench/target.js'
+import { requestIdentity } from '../workbench/requestContext.js'
+
+
 import BodyEditor from '../workbench/BodyEditor.vue'
-import RequestTools from '../workbench/RequestTools.vue'
+import RequestTools from '../workbench/RequestToolsMenu.vue'
 import ResponsePreview from './ResponsePreview.vue'
 import RequestSendIcon from './RequestSendIcon.vue'
 import NextRequestsPanel from './NextRequestsPanel.vue'
-import { applyBodyPresets, contextKey, fieldKey, jsonContent, presetSource, supportedParameters, requestUrl } from './request.js'
+import { applyBodyPresets, contextKey, fieldKey, jsonContent, presetSource, supportedParameters, requestUrl, buildRequest } from './request.js'
 
 const props = defineProps({
   operation: { type: Object, required: true },
@@ -23,16 +27,15 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['edit-preset'])
-const activeHost = computed(() => {
-  try {
-    const server = props.operation.servers?.[props.session.serverIndex]
-    const operation = server ? { ...props.operation, requestServer: { ...server, values: props.session.serverValues } } : props.operation
-    const configuration = props.operation.configuration
-      ? { ...props.operation.configuration, serverProfiles: props.configuration?.serverProfiles }
-      : props.configuration ?? {}
-    return requestUrl(operation, configuration).host
-  } catch { return '' }
+const target = computed(() => { try { return effectiveTarget(props.operation, props.configuration, props.session, props.values) } catch { return null } })
+const responseStale = computed(() => {
+  if (!props.session.result) return false
+  if (props.session.resultStale) return true
+  if (!props.session.result.requestIdentity) return Boolean(props.session.resultStale)
+  try { return requestIdentity(buildRequest(props.operation, props.configuration ?? {}, props.session, props.values), props.session) !== props.session.result.requestIdentity }
+  catch { return true }
 })
+
 const parameters = computed(() => supportedParameters(props.operation))
 const content = computed(() => jsonContent(props.operation, props.session.mediaType))
 const bodyPresetResult = computed(() => applyBodyPresets(props.operation, props.session.body, props.values, props.session.mediaType))
@@ -43,6 +46,7 @@ const displayedBody = computed({
   set: body => { props.session.body = body },
 })
 const relatedPinned = ref(false)
+const pinnedToolsHost = ref(null)
 const form = ref(null)
 const bodyEditor = ref(null)
 const responsePane = ref(null)
@@ -137,11 +141,12 @@ function parameterHint(parameter) {
   <div class="runner" :class="{ 'request-compact': requestCompact }" @keydown.enter="sendShortcut">
     <form ref="form" class="request-pane" @submit.prevent="run(operation, session)">
       <header class="pane-header">
-        <h3 :title="activeHost">Request <small class="active-host">{{ activeHost }}</small></h3>
+        <h3>Request <small v-if="target" class="active-host" :title="target.label">{{ target.label }}</small></h3>
+        <details v-if="target" class="target-details"><summary>Target</summary><div><strong>{{ target.api }} · {{ target.source }}</strong><code>{{ target.url }}</code><p v-if="!target.complete">Complete request inputs to inspect the full request URL.</p><p>Credential permissions remain scoped to the origins approved in Authorize.</p></div></details>
         <button v-if="requestCompact" type="button" class="secondary" @click="editRequest">Edit request</button>
         <div class="request-actions">
           <slot name="request-actions" />
-          <RequestTools :operation="operation" :session="session" :values="values" :configuration="configuration" :prepare="prepare" :history="history" />
+          <RequestTools @edit-request="editRequest" :operation="operation" :session="session" :values="values" :configuration="configuration" :prepare="prepare" :history="history" />
           <button v-if="session.pending && cancel" type="button" @click="cancel(session)">Cancel</button>
           <button v-if="session.result && !requestCompact" type="button" class="secondary focus-response" @click="focusResponse">Focus response</button>
           <button
@@ -234,13 +239,15 @@ function parameterHint(parameter) {
 
       <div class="pane-body">
         <template v-if="session.result">
-          <p v-if="session.resultStale" class="muted response-stale" role="status">Inputs changed. Showing the previous response until you send again.</p>
+          <p v-if="responseStale" class="muted response-stale" role="status">{{ session.error ? 'The latest request did not complete. Showing the previous response.' : 'Inputs changed. This response belongs to the previous request.' }}</p>
           <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }">
-          <NextRequestsPanel v-if="hasRelated" :operation-key="operation.key" @pin="relatedPinned = $event"><slot name="related" /></NextRequestsPanel>
           <div class="response-body">
-            <ResponsePreview :result="session.result" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="session.resultStale" />
-          </div>
+            <ResponsePreview :result="session.result" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="responseStale">
+              <template #actions><NextRequestsPanel v-if="hasRelated" :operation-key="operation.key" :pin-target="pinnedToolsHost" @pin="relatedPinned = $event"><slot name="related" /></NextRequestsPanel></template>
+            </ResponsePreview>
 
+          </div>
+          <div v-if="hasRelated" v-show="relatedPinned" ref="pinnedToolsHost" class="pinned-tools-host"></div>
           </div>
         </template>
         <p v-else class="muted empty">
@@ -276,6 +283,10 @@ function parameterHint(parameter) {
   padding: .55rem .8rem;
   border-bottom: 1px solid var(--line);
 }
+.target-details { position:relative; font-size:.75rem; }
+.target-details summary {cursor:pointer;color:var(--accent)}
+.target-details > div {position:absolute;z-index:8;top:100%;left:0;width:min(30rem,75vw);padding:.7rem;background:var(--surface);border:1px solid var(--line);border-radius:.4rem;overflow-wrap:anywhere;box-shadow:0 5px 15px #0002}
+.target-details code {display:block;margin:.4rem 0}
 .active-host {display:inline-block;max-width:18rem;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;font-weight:400;color:var(--muted);font-size:.7rem}
 .pane-header h3 { margin: 0; font-size: .88rem; }
 .request-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
@@ -315,7 +326,7 @@ function parameterHint(parameter) {
 
 @container (min-width: 48rem) {
   .response-content.related-pinned { grid-template-columns: minmax(0, 1fr) 17rem; }
-  .response-content.related-pinned :deep(.next-requests) { grid-column: 2; grid-row: 1; position: sticky; top: 1rem; max-height: calc(100dvh - 10rem); overflow: auto; }
+  .response-content.related-pinned .pinned-tools-host { grid-column: 2; grid-row: 1; position: sticky; top: 1rem; max-height: calc(100dvh - 10rem); overflow: auto; }
 }
 .response-type { margin: 0 0 .35rem; color: var(--muted); font-size: .74rem; overflow-wrap: anywhere; }
 pre { overflow: auto; max-height: 28rem; margin: 0; padding: .8rem; border-radius: .45rem; background: #182420; color: #e7f3eb; }

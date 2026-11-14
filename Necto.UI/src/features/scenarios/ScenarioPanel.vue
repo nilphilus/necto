@@ -1,9 +1,13 @@
 <script setup>
+import ScenarioCi from '../workbench/ScenarioCi.vue'
+import ScenarioExport from '../workbench/ScenarioExport.vue'
+
 import { ref } from 'vue'
 import { pathLabel } from './scenario.js'
 import ScenarioTrace from './ScenarioTrace.vue'
 const props = defineProps({ scenarios: Array, state: Object, pending: Boolean, busy: Boolean, error: String,
-  presetNames: Array, activePresetNames: Array, runs: Map })
+  presetNames: Array, activePresetNames: Array, runs: Map, apiUrl: String, document: Object, mappings: Array, configuration: Object })
+
 const emit = defineEmits(['open', 'run', 'remove', 'stop', 'inspect'])
 const runId = ref('')
 const selectedPresets = ref([])
@@ -27,7 +31,8 @@ function runScenario(scenario) {
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <ul ref="list" class="saved-list">
       <li v-for="scenario in scenarios" :key="scenario.id">
-        <div class="saved-title"><strong>{{ scenario.name }}</strong><span class="muted">{{ scenario.steps.length }} steps</span></div>
+        <div class="saved-title"><strong>{{ scenario.name }}</strong><span class="muted">{{ scenario.steps.length }} steps</span><ScenarioExport :scenario="scenario" :api-url="apiUrl" /><ScenarioCi :scenario="scenario" :document="document" :mappings="mappings" :configuration="configuration" /></div>
+
         <details class="review"><summary>Review steps</summary>
           <ol>
             <li v-for="(step, index) in scenario.steps" :key="index">

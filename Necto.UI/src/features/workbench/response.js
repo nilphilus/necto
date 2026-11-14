@@ -42,6 +42,7 @@ async function readStream(response, metadata, signal, onProgress) {
     decoder = new TextDecoder(),
     events = []
   const sse = /event-stream/i.test(metadata.contentType)
+  const view = { selectedIndex: undefined, selectedPath: undefined }
   let buffer = '',
     rawText = '',
     bytes = 0,
@@ -56,7 +57,9 @@ async function readStream(response, metadata, signal, onProgress) {
     ...metadata,
     rawText,
     text: rawText,
-    stream: { events: [...events], bytes, total, limited, done, malformed }
+    json: events.find(event => event.index === view.selectedIndex)?.data,
+    selectedPath: view.selectedPath,
+    stream: { events: [...events], bytes, total, limited, done, malformed, view }
   })
   const append = (text, eventName = 'message', eventId = '') => {
     if (
