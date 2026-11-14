@@ -258,6 +258,12 @@ function parameterHint(parameter) {
       </header>
 
       <div class="pane-body">
+        <p v-if="session.result?.reception" class="muted reception-progress" role="status">
+          {{ session.result?.reception.receiving ? (session.result?.reception.progress?.phase === 'parsing' ? 'Parsing response…' : 'Receiving response…') : 'Reception stopped; response incomplete.' }}
+          {{ (session.result?.reception.byteLength / 1024 / 1024).toFixed(1) }} MiB received.
+          Showing the previous complete response.
+          <span v-if="session.result?.reception.error">{{ session.result?.reception.error }}</span>
+        </p>
         <template v-if="session.result">
           <p v-if="responseStale" class="muted response-stale" role="status">{{ session.error ? (session.result?.incomplete ? 'Response reception did not complete. No complete preview is available.' : 'The latest request did not complete. Showing the previous response.') : 'Inputs changed. This response belongs to the previous request.' }}</p>
           <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }">
