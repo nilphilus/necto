@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
+  define: { __NECTO_VERSION__: JSON.stringify(readFileSync(new URL('../Necto/Necto.csproj', import.meta.url), 'utf8').match(/<Version>([^<]+)<\/Version>/)[1]) },
   base: './',
   plugins: [vue()],
   server: {
