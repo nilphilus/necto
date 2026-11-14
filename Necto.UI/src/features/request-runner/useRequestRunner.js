@@ -1,3 +1,4 @@
+import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { executionOptions } from '../workbench/executionOptions.js'
 import { requestIdentity, captureSentRequest } from '../workbench/requestContext.js'
 import { useServerProfiles } from '../workbench/serverProfiles.js'
@@ -16,6 +17,7 @@ export function useRequestRunner(configuration, authentication) {
   onScopeDispose(cancel)
   useServerProfiles(configuration, () => { for (const controller of running) controller.abort(new Error('API server changed. Send the request again.')) })
   const sessions = reactive(new Map())
+  watch(() => workspaceIdentity(configuration.value), (next, previous) => { if (previous && next !== previous) { cancel(); sessions.clear() } }, { flush: 'sync' })
 
   function createSession(operation) {
     return reactive({

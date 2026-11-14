@@ -1,4 +1,5 @@
 <script setup>
+import { workspaceIdentity } from './features/workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from './features/workbench/workspaceUpdates.js'
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import WorkspaceSettings from './features/workbench/WorkspaceSettings.vue'
@@ -97,7 +98,7 @@ const presetError = ref('')
 const activePresetValues = computed(() => activePresetNames.value.map(name => presets.value.get(name)))
 const editedPresetValues = computed(() => presets.value.get(editedPresetName.value))
 // Keep the original storage key so saved environments carry over to presets.
-const storageKey = computed(() => 'necto:environments:' + configuration.value?.openApiUrl)
+const storageKey = computed(() => 'necto:environments:' + workspaceIdentity(configuration.value))
 const endpointHeading = ref(null)
 const workArea = ref(null)
 const chain = computed(() => {
@@ -172,7 +173,7 @@ function valuesFor(operation, layers = activePresetValues.value) {
 
 function sampleStorageKey(operation) {
   return 'necto:request-samples:' + JSON.stringify([
-    (operation.configuration ?? configuration.value)?.openApiUrl,
+    workspaceIdentity(operation.configuration ?? configuration.value),
     operation.key,
   ])
 }
@@ -209,6 +210,14 @@ watch(operations, available => {
   else resetChain(valid)
 })
 
+watch(() => workspaceIdentity(configuration.value), (next, previous) => {
+  if (!previous || next === previous) return
+  scenarioStore.stop(); scenarioRuns.clear(); editingScenarioId.value = ''
+  sessions.clear(); requestHistory.clear(); historyEntries.clear()
+  selectedChain.value = []; inspectedScenarioStep.value = null
+  pendingRoute.value = null; routeError.value = ''
+}, { flush: 'sync' })
+
 watch(externalApis.revision, () => {
   for (const id of externalApis.changedApiIds.value) {
   for (const [key, session] of sessions) if (session.apiId === id) sessions.delete(key)
@@ -224,6 +233,7 @@ watch(externalApis.revision, () => {
 })
 
 function loadPresets() {
+  presets.value = new Map(); presetColors.value = new Map(); activePresetNames.value = []
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey.value))
     if (!saved) return
