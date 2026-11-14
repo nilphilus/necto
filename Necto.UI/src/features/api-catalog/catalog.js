@@ -71,6 +71,7 @@ export function useCatalog(authentication) {
   const spec = ref(null)
   const configuration = ref(null)
   const error = ref('')
+  const documentSource = ref({ kind: 'server', name: 'Server document' })
   const externalApis = useExternalApis(configuration, authentication)
   const operations = computed(() => spec.value ? [
     ...readOperations(spec.value),
@@ -90,7 +91,11 @@ export function useCatalog(authentication) {
 
   let generation = 0, controller
   onScopeDispose(() => controller?.abort())
-  async function reload() {
+  async function reload({ server = false } = {}) {
+    if (!server && documentSource.value.kind === 'import') {
+      error.value = ''
+      return { message: 'Credentials applied. Imported API document kept; no server document was loaded.' }
+    }
     const version = ++generation
     controller?.abort()
     controller = new AbortController()
@@ -105,11 +110,26 @@ export function useCatalog(authentication) {
       authentication?.register({ id: 'local', name: 'Local API', configuration: configuration.value, document: current?.document, schemes: current?.schemes, origins: [new URL(openApiUrl).origin] })
       const openApiDocument = await fetchJson(openApiUrl, authentication, signal, true)
       if (!openApiDocument?.openapi) throw new Error('Expected an OpenAPI document. If redirected to a login page, sign into the product first.')
-      if (version === generation) spec.value = openApiDocument
+      if (version === generation) {
+        spec.value = openApiDocument
+        documentSource.value = { kind: 'server', name: 'Server document' }
+      }
     } catch (cause) {
       if (version === generation && !signal.aborted) error.value = `Could not load the API documentation. ${cause.message}`
     }
   }
+  async function importDocument(text, name = 'Local API document') {
+    const version = ++generation
+    controller?.abort()
+    controller = new AbortController()
+    const signal = controller.signal
+    const imported = parseDocument(text)
+    const bundled = await bundleReferences(imported, configuration.value.openApiUrl, (url, options) => fetch(url, { ...options, signal }))
+    if (version !== generation) return
+    spec.value = bundled
+    documentSource.value = { kind: 'import', name }
+    error.value = ''
+  }
   onMounted(reload)
-  return { spec, configuration, error, operations, groups, externalApis, reload, importDocument: async text => { const imported = parseDocument(text); spec.value = await bundleReferences(imported, configuration.value.openApiUrl) } }
+  return { spec, configuration, error, operations, groups, externalApis, documentSource, reload, importDocument, restoreServerDocument: () => reload({ server: true }) }
 }
