@@ -1,7 +1,9 @@
 <script setup>
 import { computed, nextTick, ref, watch, watchPostEffect } from 'vue'
 import { bodyFields, hasBodyExample } from './bodyHelp.js'
+import { effectiveTarget } from '../workbench/target.js'
 import { requestIdentity } from '../workbench/requestContext.js'
+
 import BodyEditor from '../workbench/BodyEditor.vue'
 import RequestTools from '../workbench/RequestTools.vue'
 import ResponsePreview from './ResponsePreview.vue'
@@ -23,16 +25,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['edit-preset'])
-const activeHost = computed(() => {
-  try {
-    const server = props.operation.servers?.[props.session.serverIndex]
-    const operation = server ? { ...props.operation, requestServer: { ...server, values: props.session.serverValues } } : props.operation
-    const configuration = props.operation.configuration
-      ? { ...props.operation.configuration, serverProfiles: props.configuration?.serverProfiles }
-      : props.configuration ?? {}
-    return requestUrl(operation, configuration).host
-  } catch { return '' }
-})
+const target = computed(() => { try { return effectiveTarget(props.operation, props.configuration, props.session, props.values) } catch { return null } })
 const responseStale = computed(() => {
   if (!props.session.result) return false
   if (props.session.resultStale) return true
@@ -40,6 +33,7 @@ const responseStale = computed(() => {
   try { return requestIdentity(buildRequest(props.operation, props.configuration ?? {}, props.session, props.values), props.session) !== props.session.result.requestIdentity }
   catch { return true }
 })
+
 const parameters = computed(() => supportedParameters(props.operation))
 const content = computed(() => jsonContent(props.operation, props.session.mediaType))
 const bodyPresetResult = computed(() => applyBodyPresets(props.operation, props.session.body, props.values, props.session.mediaType))
@@ -144,7 +138,8 @@ function parameterHint(parameter) {
   <div class="runner" :class="{ 'request-compact': requestCompact }" @keydown.enter="sendShortcut">
     <form ref="form" class="request-pane" @submit.prevent="run(operation, session)">
       <header class="pane-header">
-        <h3 :title="activeHost">Request <small class="active-host">{{ activeHost }}</small></h3>
+        <h3>Request <small v-if="target" class="active-host" :title="target.label">{{ target.label }}</small></h3>
+        <details v-if="target" class="target-details"><summary>Target</summary><div><strong>{{ target.api }} · {{ target.source }}</strong><code>{{ target.url }}</code><p v-if="!target.complete">Complete request inputs to inspect the full request URL.</p><p>Credential permissions remain scoped to the origins approved in Authorize.</p></div></details>
         <button v-if="requestCompact" type="button" class="secondary" @click="editRequest">Edit request</button>
         <div class="request-actions">
           <slot name="request-actions" />
@@ -282,6 +277,10 @@ function parameterHint(parameter) {
   padding: .55rem .8rem;
   border-bottom: 1px solid var(--line);
 }
+.target-details { position:relative; font-size:.75rem; }
+.target-details summary {cursor:pointer;color:var(--accent)}
+.target-details > div {position:absolute;z-index:8;top:100%;left:0;width:min(30rem,75vw);padding:.7rem;background:var(--surface);border:1px solid var(--line);border-radius:.4rem;overflow-wrap:anywhere;box-shadow:0 5px 15px #0002}
+.target-details code {display:block;margin:.4rem 0}
 .active-host {display:inline-block;max-width:18rem;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;font-weight:400;color:var(--muted);font-size:.7rem}
 .pane-header h3 { margin: 0; font-size: .88rem; }
 .request-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
