@@ -1,0 +1,12 @@
+{
+  "observations": [
+    {
+      "id": "auth-scope",
+      "historyBefore": 1,
+      "historyAfter": 1,
+      "localPreviewAfter": 1,
+      "historyText": "Up to 20 requests in memory. Restoring fills a draft without sending; current presets and authentication still apply. Re-enter secrets and attach files again.\n\nClear this endpoint’s history\n10:25:04 PM · 200 · 32 ms · invoiceReference=INV-42"
+    }
+  ],
+  "errors": []
+}

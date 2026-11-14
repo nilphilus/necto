@@ -9,13 +9,18 @@ import { useRequestHistory } from '../workbench/history.js'
 import { buildRequest, initialBody, sendRequest } from './request.js'
 
 export function useRequestRunner(configuration, authentication) {
-  const running = new Set()
+  const running = new Map()
   const controllers = new WeakMap()
   const history = useRequestHistory()
-  const cancel = () => { history.clear(); for (const controller of running) controller.abort(new Error('Authentication changed. Send the request again.')) }
-  if (authentication) watch(authentication.revision, cancel, { flush: 'sync' })
+  const invalidate = ids => {
+    for (const id of ids) history.clearApi(id)
+    for (const [controller, session] of running) if (ids.includes(session.apiId)) controller.abort(new Error('Authentication changed. Send the request again.'))
+    for (const session of new Set([...sessions.values(), ...running.values()])) if (ids.includes(session.apiId)) { session.result = null; session.error = '' }
+  }
+  const cancel = () => { history.clear(); for (const controller of running.keys()) controller.abort() }
+  if (authentication) onScopeDispose(authentication.onChange(invalidate))
   onScopeDispose(cancel)
-  useServerProfiles(configuration, () => { for (const controller of running) controller.abort(new Error('API server changed. Send the request again.')) })
+  useServerProfiles(configuration, () => { for (const controller of running.keys()) controller.abort(new Error('API server changed. Send the request again.')) })
   const sessions = reactive(new Map())
   watch(() => workspaceIdentity(configuration.value), (next, previous) => { if (previous && next !== previous) { cancel(); sessions.clear() } }, { flush: 'sync' })
 
@@ -54,7 +59,9 @@ export function useRequestRunner(configuration, authentication) {
     session.error = ''
     session.pending = true
     const controller = new AbortController()
-    running.add(controller)
+    const authRevision = authentication?.apiRevision(operation.apiId ?? 'local')
+    const invalidated = () => authentication && authentication.apiRevision(operation.apiId ?? 'local') !== authRevision
+    running.set(controller, session)
     controllers.set(session, controller)
     let timeout
     let request
@@ -73,6 +80,7 @@ export function useRequestRunner(configuration, authentication) {
       const result = await sendRequest(request, { responseLimitBytes: policy.responseLimitMiB * 1024 * 1024, onProgress: progress => {
         session.result = { ...progress, requestIdentity: identity, sentRequest, elapsed: Math.round(performance.now() - started) }
       } })
+      if (invalidated()) return null
       if (result.json && typeof result.json === 'object') markRaw(result.json)
       session.resultStale = false
       session.result = { ...result, requestIdentity: identity, sentRequest, elapsed: Math.round(performance.now() - started) }
@@ -80,6 +88,7 @@ export function useRequestRunner(configuration, authentication) {
       try { if (workspaceIdentity(configuration.value) === workspaceAtStart) history.add(operation, request, session.result, '', session) } catch { /* History must not change the outcome of a sent request. */ }
       return session.result
     } catch (cause) {
+      if (invalidated()) { session.result = null; session.error = ''; return null }
       if (session.result) session.resultStale = true
       session.error = controller.signal.aborted ? controller.signal.reason?.message ?? 'Request canceled.' : signal?.aborted ? 'Request canceled.' : cause.message
       try { if (workspaceIdentity(configuration.value) === workspaceAtStart) history.add(operation, request, undefined, session.error, session) } catch { /* Metadata retention is optional. */ }

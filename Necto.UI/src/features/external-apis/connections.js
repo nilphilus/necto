@@ -121,10 +121,12 @@ export function useExternalApis(configuration, authentication) {
     }
     if (show.value) for (const entry of connections.value) void testConnection(entry.id, false)
   })
-  if (authentication) watch(authentication.revision, () => {
-    for (const id of [...jobs.keys()]) stop(id)
-    if (show.value) for (const entry of connections.value) void testConnection(entry.id)
-  })
+  if (authentication) onScopeDispose(authentication.onChange(ids => {
+    for (const id of ids) {
+      stop(id)
+      if (show.value && connections.value.some(entry => entry.id === id)) void testConnection(id)
+    }
+  }))
   watch([show, connections], persist, { deep: true })
 
   function saveConnection(input, editingId = '') {
