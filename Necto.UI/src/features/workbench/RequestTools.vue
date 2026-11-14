@@ -326,6 +326,8 @@ function addCheck() {
   </dialog>
 </template>
 <style scoped>
+.configure-group .error { color:#a12626; font-weight:600; }
+.configure-group input:invalid { border-color:#a12626; }
 .tool-picker { display:flex; align-items:center; gap:.5rem; margin:.5rem 0; font-size:.85rem; }
 .tool-picker select { flex:1; min-width:0; }
 .configure-group { padding:.6rem 0; border-bottom:1px solid var(--line); }
