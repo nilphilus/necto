@@ -1,3 +1,4 @@
+import { historySnapshot } from './historySnapshot.js'
 import { shallowReactive } from 'vue'
 import { safeRequest, traceBody, redactValue } from './privacy.js'
 const MAX_HISTORY = 20,
@@ -5,7 +6,7 @@ const MAX_HISTORY = 20,
   MAX_TOTAL = 1000000
 export function useRequestHistory() {
   const entries = shallowReactive([])
-  function add(operation, request, result, error = '') {
+  function add(operation, request, result, error = '', draft) {
     const oversized =
       typeof request?.options.body === 'string' &&
       request.options.body.length > MAX_PAYLOAD
@@ -22,8 +23,10 @@ export function useRequestHistory() {
       (result?.rawText?.length ??
         JSON.stringify(result?.json ?? result?.text)?.length ??
         0) + requestSize
-    const retained =
+    let retained =
       !oversized && size <= MAX_PAYLOAD && !result?.binary && !result?.stream
+    let snapshot = retained && request ? historySnapshot(request, draft) : undefined
+    if (snapshot && size + JSON.stringify(snapshot).length > MAX_PAYLOAD) { retained = false; snapshot = undefined }
     const payload = retained
       ? redactValue(result?.json ?? result?.text)
       : undefined
@@ -49,10 +52,11 @@ export function useRequestHistory() {
       elapsed: result?.elapsed,
       error,
       request: requestMetadata,
+      snapshot,
       payload,
       size:
         (JSON.stringify(payload)?.length ?? 0) +
-        (JSON.stringify(requestMetadata)?.length ?? 0),
+        (JSON.stringify(requestMetadata)?.length ?? 0) + (JSON.stringify(snapshot)?.length ?? 0),
       omitted: !retained
     })
     if (entries.length > MAX_HISTORY) entries.splice(MAX_HISTORY)
@@ -61,6 +65,7 @@ export function useRequestHistory() {
       total += entry.size
       if (total > MAX_TOTAL) {
         entry.payload = undefined
+        entry.snapshot = undefined
         if (entry.request) entry.request.body = '[body omitted]'
         entry.omitted = true
         entry.size = 0
@@ -71,6 +76,7 @@ export function useRequestHistory() {
     entries,
     add,
     clear: () => entries.splice(0),
+    clearOperation: key => { for (let index = entries.length - 1; index >= 0; index--) if (entries[index].key === key) entries.splice(index, 1) },
     forOperation: (key) => entries.filter((entry) => entry.key === key)
   }
 }

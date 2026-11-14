@@ -17,7 +17,7 @@ function safeUrl(value) {
   }
 }
 const allowed = (key) =>
-  /^necto:(scenarios|samples|environments|external-apis|servers):/.test(key)
+  /^necto:(scenarios|samples|request-samples|environments|external-apis|servers):/.test(key)
 function scrub(value, includeBodies, key = '') {
   if (sensitiveName(key)) return undefined
   if (Array.isArray(value))
@@ -53,8 +53,14 @@ export function exportWorkspace(storage, includeBodies = false) {
     const key = storage.key(index)
     if (!allowed(key)) continue
     const value = scrub(JSON.parse(storage.getItem(key)), includeBodies)
-    const match = key.match(/https?:.*/)
-    const safeKey = match ? key.slice(0, match.index) + safeUrl(match[0]) : key
+    let safeKey = key
+    if (key.startsWith('necto:request-samples:')) {
+      const scope = JSON.parse(key.slice('necto:request-samples:'.length))
+      safeKey = 'necto:request-samples:' + JSON.stringify([safeUrl(scope[0]), ...scope.slice(1)])
+    } else {
+      const match = key.match(/https?:.*/)
+      safeKey = match ? key.slice(0, match.index) + safeUrl(match[0]) : key
+    }
     entries.push({ key: safeKey, value })
   }
   return {
@@ -91,7 +97,7 @@ export function inspectWorkspace(text, storage) {
       if (value.version !== 1 || !Array.isArray(value.scenarios))
         throw new Error('Invalid scenario collection.')
       value.scenarios.forEach(validateScenario)
-    } else if (entry.key.startsWith('necto:samples:')) {
+    } else if ((entry.key.startsWith('necto:samples:') || entry.key.startsWith('necto:request-samples:'))) {
       if (
         !Array.isArray(value.samples) ||
         typeof value.defaultName !== 'string'
