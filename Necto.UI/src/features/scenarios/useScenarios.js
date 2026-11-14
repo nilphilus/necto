@@ -1,3 +1,4 @@
+import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 import { executeScenario, prepareScenario, snapshotScenario, validateScenario } from './scenario.js'
@@ -9,12 +10,12 @@ export function useScenarios(configuration) {
   const runs = reactive(new Map())
   const pending = ref(false)
   let controller
-  const key = computed(() => configuration.value?.openApiUrl && `necto:scenarios:${configuration.value.openApiUrl}`)
+  const key = computed(() => workspaceIdentity(configuration.value) && `necto:scenarios:${workspaceIdentity(configuration.value)}`)
   const stop = () => controller?.abort()
   onScopeDispose(stop)
   function loadStored(storageKey, reset = false) {
     const previous = scenarios.value
-    if (reset) { stop(); runs.clear(); scenarios.value = []; error.value = '' }
+    if (reset) { Object.assign(state, { id: '', name: '', status: 'idle', steps: [], error: '' }); stop(); runs.clear(); scenarios.value = []; error.value = '' }
     if (!storageKey) return
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey))
