@@ -1,3 +1,4 @@
+import { requestIdentity, captureSentRequest } from '../workbench/requestContext.js'
 import { useServerProfiles } from '../workbench/serverProfiles.js'
 import { markRaw, onScopeDispose, reactive, watch } from 'vue'
 import { redactedRequest } from '../authentication/authentication.js'
@@ -55,20 +56,24 @@ export function useRequestRunner(configuration, authentication) {
     let request
     try {
       validateAssertions(session.assertions ?? [])
+      const identity = requestIdentity(buildRequest(operation, configuration.value, session, values), session)
       request = prepare(operation, session, values)
+      const snapshot = captureSentRequest(request, session)
+      const sentRequest = snapshot ? markRaw(snapshot) : undefined
       request.options.signal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
       onRequest?.(redactedRequest(request))
       const started = performance.now()
       const result = await sendRequest(request, { onProgress: progress => {
-        session.result = { ...progress, elapsed: Math.round(performance.now() - started) }
+        session.result = { ...progress, requestIdentity: identity, sentRequest, elapsed: Math.round(performance.now() - started) }
       } })
       if (result.json && typeof result.json === 'object') markRaw(result.json)
       session.resultStale = false
-      session.result = { ...result, elapsed: Math.round(performance.now() - started) }
+      session.result = { ...result, requestIdentity: identity, sentRequest, elapsed: Math.round(performance.now() - started) }
       session.result.assertions = evaluateAssertions(session.assertions ?? [], session.result)
       try { history.add(operation, request, session.result) } catch { /* History must not change the outcome of a sent request. */ }
       return session.result
     } catch (cause) {
+      if (session.result) session.resultStale = true
       session.error = controller.signal.aborted ? controller.signal.reason?.message ?? 'Request canceled.' : signal?.aborted ? 'Request canceled.' : cause.message
       try { history.add(operation, request, undefined, session.error) } catch { /* Metadata retention is optional. */ }
       return null

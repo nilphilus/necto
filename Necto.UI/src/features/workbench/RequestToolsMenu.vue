@@ -11,6 +11,7 @@ const props = defineProps({
   history: Object,
   prepare: Function
 });
+const emit = defineEmits(['edit-request']);
 const trigger = ref(null),
   menu = ref(null),
   advanced = ref(null),
@@ -143,7 +144,7 @@ onUnmounted(() => {
     ref="advanced"
     v-bind="props"
     hide-trigger
-    @closed="trigger?.focus()"
+    @closed="target => (target ?? trigger)?.focus()" @edit-request="emit('edit-request')"
   />
 </template>
 <style scoped>
