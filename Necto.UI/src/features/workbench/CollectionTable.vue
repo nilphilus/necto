@@ -153,6 +153,7 @@ const active = (path) =>
 </template>
 <style scoped>
 .mobile-row-trigger { display:none; }
+.mobile-row-trigger:hover, .mobile-row-trigger:focus-visible, .mobile-row-trigger[aria-expanded='true'] { background:#315947; color:#e7f3eb; }
 .row-action-menu { position:fixed; z-index:50; width:180px; padding:.35rem; display:grid; gap:.25rem; border:1px solid var(--line); border-radius:.4rem; background:var(--surface); color:var(--text); box-shadow:0 6px 20px #0003; }
 .row-action-menu button { text-align:left; min-height:44px; padding:.45rem .6rem; color:inherit; border-color:var(--line); }
 @media(max-width:720px) {
