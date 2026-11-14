@@ -71,6 +71,7 @@ export function useRequestRunner(configuration, authentication) {
     } catch (cause) {
       session.error = controller.signal.aborted ? controller.signal.reason?.message ?? 'Request canceled.' : signal?.aborted ? 'Request canceled.' : cause.message
       try { history.add(operation, request, undefined, session.error) } catch { /* Metadata retention is optional. */ }
+      if (session.result?.stream) { session.result.stream.done = true; session.result.stream.reason = session.error }
       return null
     } finally {
       clearTimeout(timeout)
