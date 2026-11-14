@@ -1,4 +1,5 @@
 <script setup>
+import DescriptionHelp from './features/workbench/DescriptionHelp.vue'
 import { scenarioTargets } from './features/workbench/scenarioTargets.js'
 import { workspaceIdentity } from './features/workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from './features/workbench/workspaceUpdates.js'
@@ -693,15 +694,12 @@ function removeScenario(id) {
       </label>
       <div class="api-identity">
         <div class="api-info">
-          <details class="mobile-api-about" @keydown.esc.stop.prevent="$event.currentTarget.open = false">
-            <summary>{{ spec?.info?.title ?? 'API documentation' }}</summary>
-            <div><strong>{{ spec?.info?.title }}</strong><p v-if="spec?.info?.version">Version {{ spec.info.version }}</p><p v-if="spec?.info?.description">{{ spec.info.description }}</p></div>
-          </details>
+          <DescriptionHelp class="mobile-api-about" label="About API" :trigger-text="spec?.info?.title ?? 'API documentation'" :context="spec?.info?.version ? 'Version ' + spec.info.version : spec?.info?.title" :summary="spec?.info?.summary" :description="spec?.info?.description" />
           <div class="api-title">
             <small v-if="documentSource.kind === 'import'" :title="documentSource.name">Imported</small><h1 :title="spec?.info?.title">{{ spec?.info?.title ?? 'API documentation' }}</h1>
             <small v-if="spec?.info?.version">Version {{ spec.info.version }}</small>
           </div>
-          <details v-if="spec?.info?.description" class="api-description"><summary>About API</summary><p>{{ spec.info.description }}</p></details>
+          <DescriptionHelp class="desktop-api-help" label="About API" :summary="spec?.info?.summary" :description="spec?.info?.description" />
         </div>
         <button ref="authorizationButton" type="button" class="secondary authorize-button" aria-label="Authorize" :title="authorizedCount ? 'Authorize · configured' : 'Authorize'" :data-configured="authorizedCount > 0" @click="openAuthorization()"><svg class="authorize-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="4"/><path d="m11 11 9 9m-3-3 2-2m-5 2 2-2"/></svg><span class="authorize-label">Authorize<small v-if="authorizedCount"> · configured</small></span></button>
         <button v-if="spec" ref="settingsButton" type="button" class="secondary settings-icon" :disabled="scenarioPending"
@@ -871,11 +869,12 @@ function removeScenario(id) {
               <div class="endpoint-route">
                 <span class="method" :data-method="current.operation.method">{{ current.operation.method }}</span>
                 <code>{{ current.operation.path }}</code>
+                <DescriptionHelp label="About endpoint" :summary="current.operation.summary" :description="current.operation.description" />
               </div>
               <details :key="current.operation.key" class="endpoint-help" @keydown.esc.stop.prevent="$event.currentTarget.open = false; $event.currentTarget.querySelector('summary').focus()">
                 <summary>Help and presets</summary>
                 <div class="endpoint-help-content">
-                  <p v-if="current.operation.description">{{ current.operation.description }}</p>
+
               <div id="saving-guide">
                 <p><strong>Saved requests</strong> keep input values for one endpoint so you can load them again.</p>
                 <p><strong>Scenarios</strong> replay a chain of requests and pass response values between steps. Use a related request to add the next step; a one-request scenario is also supported.</p>
@@ -985,15 +984,12 @@ body { margin: 0; background: #eef2ee; }
 }
 .hero { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .5rem 1rem .5rem 7rem; min-height: 3.5rem; border-bottom: 1px solid var(--line); }
 .api-identity { display: flex; flex: 1 1 12rem; justify-content: flex-end; align-items: center; gap: .75rem; min-width: 0; }
-.api-info { min-width: 0; overflow-wrap: anywhere; text-align: right; }
+.api-info { display:flex; align-items:center; gap:.35rem; min-width: 0; overflow-wrap: anywhere; text-align: right; }
 .api-title { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .5rem; min-height: 1.65rem; }
-.mobile-workspace-view, .mobile-api-about { display: none; }
+.mobile-workspace-view, .hero .api-info > .mobile-api-about { display: none; }
 .mobile-workspace-view > .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .hero h1 { margin: 0; font-size: 1.05rem; letter-spacing: -.025em; }
 .hero p { margin: .25rem 0 0; font-size: .82rem; }
-.api-description { position: relative; font-size: .75rem; }
-.api-description summary { cursor: pointer; }
-.api-description p { position: absolute; top: 100%; right: 0; z-index: 10; width: min(26rem, 75vw); padding: .6rem; background: var(--surface); border: 1px solid var(--line); border-radius: .4rem; }
 .brand-track {
   position: absolute;
   z-index: 1;
@@ -1194,13 +1190,12 @@ input:not([type="checkbox"]), select, textarea {
   .mobile-workspace-view select { width: 100%; min-width: 0; min-height: 44px; padding: .25rem; font-size: .8rem; }
   .hero .api-identity { display: contents; }
   .hero .api-info { grid-column: 1; grid-row: 2; text-align: left; position: relative; }
-  .mobile-api-about { display: block; min-width: 0; font-size: .7rem; line-height: 1rem; }
-  .mobile-api-about summary { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mobile-api-about > div { position: absolute; top: 100%; right: 0; z-index: 10; width: min(24rem, 80vw); padding: .6rem; background: var(--surface); border: 1px solid var(--line); border-radius: .4rem; }
+  .hero .api-info > .mobile-api-about { display: inline-flex; min-width: 0; font-size: .7rem; line-height: 1rem; }
+  .hero .api-info > .desktop-api-help { display:none; }
   .hero .api-title { display: none; }
   .hero .api-title { justify-content: flex-start; min-height: 0; }
   .hero h1 { font-size: .7rem; line-height: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .hero .api-title small, .hero .api-description { display: none; }
+  .hero .api-title small { display: none; }
   .hero .settings-icon { grid-column: 2; grid-row: 1 / 3; min-height: 44px; width: 44px; align-self: center; }
   .brand-stamp { top: .8rem; left: .5rem; }
 

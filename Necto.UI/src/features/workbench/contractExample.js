@@ -16,6 +16,7 @@ export function applyContractExample(session, operation, example) {
   session.body = body
   session.variantIndex = undefined
   session.sampleName = undefined
+  session.exampleKey = undefined
   session.bindings = (session.bindings ?? []).filter(binding => binding.location !== 'body')
   session.resultStale = Boolean(session.result)
 }

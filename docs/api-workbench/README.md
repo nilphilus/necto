@@ -30,7 +30,7 @@ Checks support exact HTTP status, JSON Pointer existence/equality, nonempty valu
 
 In **Tools → Bindings**, an array binding can use an object condition instead of its saved position: for example `/reference` equals `"INV-42"`. Replay requires exactly one match and reports missing/ambiguous matches. Ordinary positional bindings remain available.
 
-Native OpenAPI Links supplement Necto mappings for complete `$response.body#…` expressions targeting operationId or a local operationRef. Target parameters and whole request bodies are supported. Source status codes/ranges are respected in suggestions from successful responses. Header/request expressions, constant values, interpolated expressions, external operationRef and Link-specific server overrides are not executed. Existing Necto mappings remain the source for richer generated relationships.
+Native OpenAPI Links take precedence over additional Necto mappings. Complete `$response.body#…` expressions and literal values can fill path/query/header parameters or whole request bodies; parameterless Links also appear. Destinations use operationId or a local operationRef. Exact status codes override ranges and `default`, including declared error responses. Request/header expressions, interpolated expressions, external operationRef and Link-specific server overrides are not executed. See [OpenAPI content and examples](../openapi-content/README.md) for the compact description dialogs, saved/example payload navigation and supported scope.
 
 ## CI runner
 
