@@ -1,9 +1,17 @@
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
+let runnerRevision = ''
+try {
+  const cwd = new URL('..', import.meta.url)
+  const dirty = execFileSync('git', ['status', '--porcelain', '--untracked-files=normal', '--', 'Necto.UI/src', 'tools', 'Necto.UI/vite.config.js', 'Necto/Necto.csproj'], {cwd, encoding:'utf8'}).trim()
+  if (!dirty) runnerRevision = execFileSync('git', ['rev-parse', 'HEAD'], {cwd, encoding:'utf8'}).trim()
+} catch { /* Source archives and modified checkouts use their local runner. */ }
+
 export default defineConfig({
-  define: { __NECTO_VERSION__: JSON.stringify(readFileSync(new URL('../Necto/Necto.csproj', import.meta.url), 'utf8').match(/<Version>([^<]+)<\/Version>/)[1]) },
+  define: { __NECTO_REVISION__: JSON.stringify(runnerRevision), __NECTO_VERSION__: JSON.stringify(readFileSync(new URL('../Necto/Necto.csproj', import.meta.url), 'utf8').match(/<Version>([^<]+)<\/Version>/)[1]) },
   base: './',
   plugins: [vue()],
   server: {
