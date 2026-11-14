@@ -129,7 +129,7 @@ onUnmounted(() => {
         <button type="button" @click="inspect('Checks')">
           Checks ({{ session.assertions?.length ?? 0 }})</button
         ><button type="button" @click="inspect('Server')">Server</button
-        ><button type="button" @click="inspect('Options')">Timeout</button
+        ><button type="button" @click="inspect('Options')">Timeout and response budget</button
         ><button
           v-if="session.bindings?.length"
           type="button"
