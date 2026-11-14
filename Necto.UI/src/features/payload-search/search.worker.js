@@ -11,7 +11,7 @@ self.onmessage = async ({ data }) => {
   if (data.type !== 'search') return
   const current = ++generation
   if (!ready) { self.postMessage({ type: 'error', id: data.id, message: 'The response search index is unavailable.' }); return }
-  const key = JSON.stringify([data.query, data.scope, data.caseSensitive, data.exact])
+  const key = JSON.stringify([data.query, data.scope, data.caseSensitive, data.exact, data.field])
   try {
     const result = await searchPayload(document, { ...data,
       knownTotal: cache?.key === key ? cache.total : undefined,

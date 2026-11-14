@@ -895,9 +895,9 @@ function removeScenario(id) {
                   @choose="choose(current.session, location, $event)"
                 />
               </template>
-              <template #related>
+              <template #related="{ searchResponse }">
                 <RelatedTargets
-                  :targets="relatedTargets"
+                  :targets="relatedTargets" @search-response="searchResponse"
                   :can-send="canSendRelated"
                   @follow="follow" @edit-preset="editActivePreset"
                 />

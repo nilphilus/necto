@@ -1,8 +1,8 @@
 <script setup>
 import { computed, nextTick, ref, useId } from 'vue'
 defineOptions({ inheritAttrs: false })
-const props = defineProps({ modelValue: { default: '' }, choices: { type: Array, default: () => [] }, dropdown: Boolean })
-const emit = defineEmits(['update:modelValue', 'choose'])
+const props = defineProps({ modelValue: { default: '' }, choices: { type: Array, default: () => [] }, dropdown: Boolean, searchableResponse: Boolean })
+const emit = defineEmits(['update:modelValue', 'choose', 'search-response'])
 const id = useId()
 const input = ref(null)
 const open = ref(false)
@@ -89,6 +89,7 @@ async function navigate(event) {
             </li>
           </ul>
           <p v-if="!matches.length" role="status">No matching suggestions</p>
+          <button v-if="!matches.length && query.trim() && searchableResponse" type="button" class="search-response" @pointerdown.prevent @click="emit('search-response', query); close()">Search whole response</button>
         </div>
       </div>
       <slot name="trailing" />
