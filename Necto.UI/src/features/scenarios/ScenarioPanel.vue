@@ -36,7 +36,7 @@ function runScenario(scenario) {
         <details class="review"><summary>Review steps</summary>
           <ol>
             <li v-for="(step, index) in scenario.steps" :key="index">
-              <span class="method" :data-method="step.method">{{ step.method }}</span> <code>{{ step.path }}</code><small>{{ step.apiId }}</small>
+              <span class="method" :data-method="step.method">{{ step.method }}</span> <code>{{ step.path }}</code><small>{{ step.apiId }} · {{ step.timeout ?? 30000 }} ms · {{ step.responseLimitMiB ?? 32 }} MiB response budget</small>
               <p v-for="binding in step.bindings" :key="JSON.stringify([binding.location, binding.name])" class="binding-note">Step {{ binding.sourceStep + 1 }} <code>{{ pathLabel(binding.path) }}</code><span v-if="binding.selector"> where {{ binding.selector.field }} = {{ binding.selector.expected }}</span> → {{ binding.name ?? 'body' }}</p>
             </li>
           </ol>

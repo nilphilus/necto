@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { executionOptions } from '../Necto.UI/src/features/workbench/executionOptions.js'
 import { junitReport } from './junit.mjs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
@@ -77,7 +78,8 @@ export async function runScenario({
         request.options.headers.set('Authorization', `Bearer ${bearer}`)
       onRequest(safeRequest(request))
       const start = performance.now()
-      const result = await sendRequest(request)
+      const policy = executionOptions(session)
+      const result = await sendRequest(request, { responseLimitBytes: policy.responseLimitMiB * 1024 * 1024 })
       result.elapsed = Math.round(performance.now() - start)
       result.assertions = evaluateAssertions(session.assertions ?? [], result)
       return result
