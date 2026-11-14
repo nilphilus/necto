@@ -14,11 +14,11 @@ for(const failure of ['cancel','timeout','budget','network'])test(`last complete
   else globalThis.fetch=async()=>new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode(failure==='budget'?'x'.repeat(2*1024*1024):'{"id":43,'))}}),{headers:{'content-type':'application/json'}})
   session.responseLimitMiB=1;session.timeout=failure==='timeout'?15:30000
   const pending=runner.run(operation,session,new Map())
-  if(failure==='cancel'){await new Promise(r=>setTimeout(r,5));assert.equal(session.result,complete);assert.equal(session.responseProgress.receiving,true);runner.cancel(session)}
+  if(failure==='cancel'){await new Promise(r=>setTimeout(r,5));assert.equal(session.result,complete);assert.equal(session.result.reception.receiving,true);runner.cancel(session)}
   await pending
   assert.equal(session.result,complete);assert.equal(session.result.json.id,42);assert.ok(session.error)
-  if(session.responseProgress)assert.equal(session.responseProgress.receiving,false)
+  if(session.result.reception)assert.equal(session.result.reception.receiving,false)
   globalThis.fetch=async()=>new Response('{"id":44}',{headers:{'content-type':'application/json'}})
-  await runner.run(operation,session,new Map());assert.equal(session.result.json.id,44);assert.equal(session.responseProgress,null)
+  await runner.run(operation,session,new Map());assert.equal(session.result.json.id,44);assert.equal(session.result.reception,undefined)
  }finally{scope.stop();globalThis.fetch=previousFetch}
 })
