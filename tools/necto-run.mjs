@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { executionOptions } from '../Necto.UI/src/features/workbench/executionOptions.js'
 import { junitReport } from './junit.mjs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
@@ -77,7 +78,8 @@ export async function runScenario({
         request.options.headers.set('Authorization', `Bearer ${bearer}`)
       onRequest(safeRequest(request))
       const start = performance.now()
-      const result = await sendRequest(request)
+      const policy = executionOptions(session)
+      const result = await sendRequest(request, { responseLimitBytes: policy.responseLimitMiB * 1024 * 1024 })
       result.elapsed = Math.round(performance.now() - start)
       result.assertions = evaluateAssertions(session.assertions ?? [], result)
       return result
@@ -121,7 +123,7 @@ async function main() {
       'Usage: node tools/necto-run.mjs --bundle necto-ci.json --base-url URL [--junit report.xml] OR --scenario scenario.json --document openapi.yaml --base-url https://api.example.com [--mappings mappings.json] [--name scenario-name] [--bearer-env TOKEN_ENV] [--allow-writes] [--report report.json]'
     )
   const bundle = args['--bundle'] ? JSON.parse(await readFile(args['--bundle'], 'utf8')) : undefined
-  if (bundle && (bundle.format !== 'necto-ci-bundle' || bundle.version !== 1 || !bundle.scenario || !bundle.document || !Array.isArray(bundle.mappings))) throw new Error('Invalid CI bundle.')
+  if (bundle && (bundle.format !== 'necto-ci-bundle' || ![1, 2].includes(bundle.version) || !bundle.scenario || !bundle.document || !Array.isArray(bundle.mappings))) throw new Error('Invalid CI bundle.')
   const saved = bundle?.scenario ?? JSON.parse(await readFile(args['--scenario'], 'utf8'))
   const candidates =
     saved.format === 'necto-workspace'

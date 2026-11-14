@@ -1,3 +1,4 @@
+import { executionOptions } from './executionOptions.js';
 import { safeRequest, sensitiveName } from './privacy.js';
 import { payloadSnapshot } from './body.js';
 function withoutSecrets(value, depth = 0) {
@@ -48,7 +49,7 @@ export function historySnapshot(request, draft) {
         fields: withoutSecrets(draft.fields ?? {}),
         body: editorBody,
         assertions: draft.assertions ?? [],
-        timeout: draft.timeout,
+        ...executionOptions(draft),
         serverIndex: draft.serverIndex,
         serverValues: withoutSecrets(draft.serverValues ?? {})
       }
@@ -92,7 +93,7 @@ export function requestFromHistory(snapshot) {
 }
 export function restoreHistoryDraft(session, snapshot) {
   if (!snapshot?.draft) throw new Error('Draft not retained for this entry.');
-  Object.assign(session, JSON.parse(JSON.stringify(snapshot.draft)), {
+  Object.assign(session, JSON.parse(JSON.stringify(snapshot.draft)), executionOptions(snapshot.draft), {
     binaryFile: undefined,
     bindings: [],
     sampleName: undefined,
