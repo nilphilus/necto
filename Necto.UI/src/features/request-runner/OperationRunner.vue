@@ -239,7 +239,7 @@ function parameterHint(parameter) {
 
       <div class="pane-body">
         <template v-if="session.result">
-          <p v-if="responseStale" class="muted response-stale" role="status">{{ session.error ? 'The latest request did not complete. Showing the previous response.' : 'Inputs changed. This response belongs to the previous request.' }}</p>
+          <p v-if="responseStale" class="muted response-stale" role="status">{{ session.error ? (session.result?.incomplete ? 'Response reception did not complete. No complete preview is available.' : 'The latest request did not complete. Showing the previous response.') : 'Inputs changed. This response belongs to the previous request.' }}</p>
           <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }">
           <div class="response-body">
             <ResponsePreview :result="session.result" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="responseStale">
