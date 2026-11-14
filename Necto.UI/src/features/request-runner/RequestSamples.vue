@@ -1,4 +1,5 @@
 <script setup>
+import { executionOptions } from '../workbench/executionOptions.js'
 import { payloadSnapshot } from '../workbench/body.js'
 import { computed, ref, watch } from 'vue'
 import { contextKey, fieldKey, jsonContent, supportedParameters } from './request.js'
@@ -100,7 +101,10 @@ function storeSample() {
     error.value = 'Enter a request name.'
     return
   }
+  let policy
+  try { policy = executionOptions(props.session) } catch(cause) { error.value = cause.message; return }
   const sample = {
+    ...policy,
     name: sampleName,
     ...payloadSnapshot(props.session),
     assertions: props.session.assertions ?? [],

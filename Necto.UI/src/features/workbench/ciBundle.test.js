@@ -109,3 +109,9 @@ test('CI onboarding pins the UI version and commands quote targets for the chose
   assert.match(ciCommand("https://api.test/O'Neil", {shell:'powershell'}), /'https:\/\/api.test\/O''Neil'/)
   assert.match(ciCommand("https://api.test/O'Neil"), /'\\''/)
 })
+
+test('execution-policy bundles require v2 and setup can pin the exact UI source revision', () => {
+ assert.equal(createCiBundle(scenario,{openapi:'3.1.0',paths:{}}).version,2)
+ assert.match(ciSetup('0.3.0','a'.repeat(40)),/checkout --detach a{40}/)
+ assert.throws(()=>ciSetup('0.3.0','main'),/revision/)
+})
