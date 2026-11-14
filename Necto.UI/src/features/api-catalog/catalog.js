@@ -1,13 +1,15 @@
 import { computed, onMounted, onScopeDispose, ref } from 'vue'
+import { parseDocument, bundleReferences } from '../workbench/document.js'
 import { useExternalApis } from '../external-apis/connections.js'
 
 const methods = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace', 'query']
 
-async function fetchJson(url, authentication, signal) {
-  const response = await (authentication?.metadataFetch(url, 'local', { signal, headers: { Accept: 'application/json' } }) ?? fetch(url, { signal, headers: { Accept: 'application/json' } }))
+async function fetchJson(url, authentication, signal, apiDocument = false) {
+  const accept = apiDocument ? 'application/json, application/yaml, text/yaml' : 'application/json'
+  const response = await (authentication?.metadataFetch(url, 'local', { signal, headers: { Accept: accept } }) ?? fetch(url, { signal, headers: { Accept: accept } }))
   if (!response.ok) throw new Error(`HTTP ${response.status}${response.status === 401 ? ' — sign in using Authorize, then retry.' : response.status === 403 ? ' — access denied for this account.' : ''}`)
-  if (response.redirected || !/json/i.test(response.headers.get('content-type') ?? '')) throw new Error('The documentation endpoint returned a login page. Use Authorize or sign into the product, then retry.')
-  const data = await response.json()
+  if (response.redirected || !/json|yaml|text\/plain/i.test(response.headers.get('content-type') ?? '')) throw new Error('The documentation endpoint returned a login page. Use Authorize or sign into the product, then retry.')
+  const data = apiDocument ? await bundleReferences(parseDocument(await response.text()), new URL(url, document.baseURI).href, (url, options) => fetch(url, { ...options, signal })) : await response.json()
   signal?.throwIfAborted()
   return data
 }
@@ -19,7 +21,7 @@ function resolveReference(spec, value) {
     if (!reference.startsWith('#/') || visited.has(reference)) return undefined
     visited.add(reference)
     value = decodeURIComponent(reference.slice(2)).split('/').reduce(
-      (node, key) => node?.[key.replaceAll('~1', '/').replaceAll('~0', '~')],
+      (node, key) => { const name = key.replaceAll('~1', '/').replaceAll('~0', '~'); return node && Object.hasOwn(node, name) ? node[name] : undefined },
       spec,
     )
   }
@@ -57,6 +59,7 @@ export function readOperations(spec, api = { id: 'local' }) {
         responses: operation.responses ?? {},
         security: Object.hasOwn(operation, 'security') ? operation.security : spec.security ?? null,
         securitySchemes: Object.fromEntries(Object.entries(spec.components?.securitySchemes ?? {}).map(([name, value]) => [name, resolve(value)])),
+        servers: [operation.servers, item.servers, spec.servers].find(servers => servers?.length) ?? [],
         server: [operation.servers, item.servers, spec.servers].find(servers => servers?.length)?.[0],
         resolve,
       }
@@ -100,7 +103,7 @@ export function useCatalog(authentication) {
       configuration.value = { ...settings, openApiUrl, configurationUrl: new URL('./configuration', document.baseURI).href }
       const current = authentication?.apis.get('local')
       authentication?.register({ id: 'local', name: 'Local API', configuration: configuration.value, document: current?.document, schemes: current?.schemes, origins: [new URL(openApiUrl).origin] })
-      const openApiDocument = await fetchJson(openApiUrl, authentication, signal)
+      const openApiDocument = await fetchJson(openApiUrl, authentication, signal, true)
       if (!openApiDocument?.openapi) throw new Error('Expected an OpenAPI document. If redirected to a login page, sign into the product first.')
       if (version === generation) spec.value = openApiDocument
     } catch (cause) {
@@ -108,5 +111,5 @@ export function useCatalog(authentication) {
     }
   }
   onMounted(reload)
-  return { spec, configuration, error, operations, groups, externalApis, reload }
+  return { spec, configuration, error, operations, groups, externalApis, reload, importDocument: async text => { const imported = parseDocument(text); spec.value = await bundleReferences(imported, configuration.value.openApiUrl) } }
 }

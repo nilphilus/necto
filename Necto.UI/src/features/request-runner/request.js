@@ -1,3 +1,4 @@
+import { bodyContent, buildNonJsonBody, isJson } from '../workbench/body.js'
 import { jsonBodyIssue } from './bodyHelp.js'
 export const formatJson = value => JSON.stringify(value, null, 2)
 export const fieldKey = parameter => `${parameter.in}:${parameter.name}`
@@ -73,9 +74,9 @@ function resolveLayers(operation, layers, sourceNames = []) {
   return values
 }
 
-export function jsonContent(operation) {
+export function jsonContent(operation, mediaType) {
   return Object.entries(operation.requestBody?.content ?? {}).find(([type]) =>
-    type === 'application/json' || type.endsWith('+json'),
+    (mediaType === undefined || type === mediaType) && isJson(type),
   )
 }
 
@@ -102,8 +103,13 @@ function schemaExample(operation, schema, ancestors = new Set(), useExamples = t
   return null
 }
 
-export function initialBody(operation) {
-  const content = jsonContent(operation)?.[1]
+export function initialBody(operation, mediaType) {
+  const entry = bodyContent(operation, { mediaType })
+  const content = entry?.[1]
+  if (entry && !isJson(entry[0])) {
+    const example = content.example ?? Object.values(content.examples ?? {}).map(operation.resolve).find(value => value && Object.hasOwn(value, 'value'))?.value
+    return example === undefined ? '' : typeof example === 'string' ? example : formatJson(example)
+  }
   if (!content) return ''
   if (Object.hasOwn(content, 'example')) return formatJson(content.example)
   for (const entry of Object.values(content.examples ?? {})) {
@@ -118,7 +124,7 @@ function bodyValue(value, example) {
   try { return JSON.parse(value) } catch { return value }
 }
 
-export function applyBodyPresets(operation, body, values) {
+export function applyBodyPresets(operation, body, values, mediaType) {
   const layers = values.get(bodyPresets)
   const matches = new Set()
   const sources = []
@@ -126,7 +132,7 @@ export function applyBodyPresets(operation, body, values) {
   if (!layers) return { body, matches, sources }
   let parsed
   try { parsed = JSON.parse(body.trim() ? body : '{}') } catch { return { body, matches, sources } }
-  const shape = schemaExample(operation, jsonContent(operation)?.[1].schema, new Set(), false)
+  const shape = schemaExample(operation, jsonContent(operation, mediaType)?.[1].schema, new Set(), false)
   let applied = false
   function fill(value, example, root = false, path = []) {
     if (Array.isArray(value)) return value.map((item, index) => fill(item, example?.[index] ?? example?.[0], false, [...path, index]))
@@ -226,22 +232,24 @@ function serializeParameter(parameter, value, url, path) {
   return path.replaceAll(`{${name}}`, () => serialized)
 }
 
-function requestUrl(operation, configuration) {
-  const server = configuration.overrideServer ? undefined : operation.server
+export function requestUrl(operation, configuration) {
+  const selected = operation.requestServer ?? configuration.serverProfiles?.[operation.apiId ?? 'local']
+  const server = selected ?? (configuration.overrideServer ? undefined : operation.server)
   const serverUrl = server?.url.replace(/\{([^}]+)\}/g, (_, name) => {
-    const value = server.variables?.[name]?.default
+    const value = server.values?.[name] ?? server.variables?.[name]?.default
     if (value === undefined) throw new Error(`The API server variable ${name} has no default.`)
     return value
   })
   const url = serverUrl
     ? new URL(serverUrl, configuration.openApiUrl)
     : new URL(configuration.apiBaseUrl ?? '/', configuration.openApiUrl)
-  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('The API server must use HTTP or HTTPS.')
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('The API server must use HTTP or HTTPS.')
   return url
 }
 
 export function buildRequest(operation, configuration, draft, values = new Map()) {
-  configuration = operation.configuration ?? configuration
+  if (draft.serverIndex >= 0 && operation.servers?.[draft.serverIndex]) operation = { ...operation, requestServer: { ...operation.servers[draft.serverIndex], values: draft.serverValues ?? {} } }
+  configuration = operation.configuration ? { ...operation.configuration, serverProfiles: configuration.serverProfiles } : configuration
   const url = requestUrl(operation, configuration)
   const headers = new Headers()
   const parameters = supportedParameters(operation)
@@ -262,59 +270,25 @@ export function buildRequest(operation, configuration, draft, values = new Map()
   if (/\{[^}]+\}/.test(path)) throw new Error('A path parameter is missing.')
   url.pathname = url.pathname.replace(/\/$/, '') + path
 
+  if (['CONNECT', 'TRACE', 'TRACK'].includes(operation.method.toUpperCase())) throw new Error('This HTTP method is blocked by browsers. Export a code snippet to use a compatible client.')
   const options = { method: operation.method, headers }
   if (operation.requestBody) {
-    const content = jsonContent(operation)
-    if (!content) throw new Error('This request needs a body format other than JSON.')
-    const { body } = applyBodyPresets(operation, draft.body, values)
-    if (body.trim() || operation.requestBody.required) {
-      try {
-        JSON.parse(body)
-      } catch (cause) {
-        throw new Error(jsonBodyIssue(body, cause))
+    const content = bodyContent(operation, draft)
+    if (!content) throw new Error('This request has no supported media type.')
+    if (isJson(content[0])) {
+      const { body } = applyBodyPresets(operation, draft.body ?? '', values, content[0])
+      if (body.trim() || operation.requestBody.required) {
+        try { JSON.parse(body) } catch (cause) { throw new Error(jsonBodyIssue(body, cause)) }
+        options.body = body
       }
-      options.body = body
-      if (!values.has('header:content-type')) headers.set('Content-Type', content[0])
-    }
+    } else options.body = buildNonJsonBody(operation, draft, content[0])
+    if (options.body !== undefined && !(options.body instanceof FormData)) headers.set('Content-Type', content[0])
   }
   for (const [key, value] of values) {
     if (typeof key === 'string' && key.startsWith('header:') && !declared.has(key)) headers.set(key.slice(7), value)
   }
+  if (options.body instanceof FormData) headers.delete('Content-Type')
   return { url, options }
 }
 
-async function parseResponse(text, signal) {
-  signal?.throwIfAborted()
-  if (text.length < 1000000 || typeof Worker === 'undefined') {
-    try { return JSON.parse(text) } catch { return undefined }
-  }
-  const worker = new Worker(new URL('./json.worker.js', import.meta.url), { type: 'module' })
-  let abort
-  try {
-    return await new Promise((resolve, reject) => {
-      abort = () => reject(signal.reason)
-      signal?.addEventListener('abort', abort, { once: true })
-      if (signal?.aborted) { abort(); return }
-      worker.onmessage = ({ data }) => resolve(data.valid ? data.json : undefined)
-      worker.onerror = () => reject(new Error('Could not parse the response in the background.'))
-      worker.postMessage(text)
-    })
-  } finally { signal?.removeEventListener('abort', abort); worker.terminate() }
-}
-
-export async function sendRequest(request) {
-  const response = await fetch(request.url, request.options)
-  const contentType = response.headers.get('content-type') ?? ''
-  const text = await response.text()
-  const json = text ? await parseResponse(text, request.options.signal) : undefined
-  request.options.signal?.throwIfAborted()
-  return {
-    ok: response.ok,
-    status: response.status,
-    statusText: response.statusText,
-    contentType,
-    rawText: text,
-    text,
-    json,
-  }
-}
+export { sendRequest } from '../workbench/response.js'

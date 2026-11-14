@@ -1,3 +1,6 @@
+import { validateSelectionRule, selectionRulePath } from '../workbench/selectionRule.js'
+import { payloadSnapshot, validatePayloadSnapshot, describeBody } from '../workbench/body.js'
+import { validateAssertions } from '../workbench/assertions.js'
 import { applyChoice, matchesPath, sourcePath } from '../related-endpoints/mappings.js'
 import { applyBodyPresets, buildRequest, contextKey } from '../request-runner/request.js'
 
@@ -18,7 +21,7 @@ export function rememberBinding(session, choice, sourceStep) {
   session.bindings = (session.bindings ?? []).filter(binding => targetKey(binding) !== targetKey(choice) &&
     !(location === 'body' && binding.location === 'body' && (name === null || binding.name === null)))
   if (!choice.binding || !Number.isInteger(sourceStep) || sourceStep < 0) return
-  session.bindings.push({ sourceStep, path: [...choice.binding.path], location, name,
+  session.bindings.push({ selector: choice.selector, sourceStep, path: [...choice.binding.path], location, name,
     appliedValue: location === 'body' ? JSON.stringify(value) : inputValue(value) })
 }
 
@@ -34,7 +37,7 @@ export function snapshotScenario(chain, name, id = globalThis.crypto?.randomUUID
     let body = session.body ?? ''
     const bindings = (session.bindings ?? []).filter(binding => binding.sourceStep < index &&
       currentValue(session, binding.location, binding.name) === binding.appliedValue)
-      .map(({ sourceStep, path, location, name }) => ({ sourceStep, path: [...path], location, name }))
+      .map(({ sourceStep, path, location, name, selector }) => ({ sourceStep, path: [...path], location, name, ...(selector ? { selector: JSON.parse(JSON.stringify(selector)) } : {}) }))
     for (const binding of bindings) {
       if (binding.location !== 'body') delete fields[`${binding.location}:${binding.name}`]
       else if (binding.name === null) body = ''
@@ -45,7 +48,7 @@ export function snapshotScenario(chain, name, id = globalThis.crypto?.randomUUID
       }
     }
     return { operationKey: operation.key, apiId: operation.apiId ?? 'local', name: operation.name,
-      method: operation.method, path: operation.path, fields, body, bindings }
+      method: operation.method, path: operation.path, fields, body, bindings, ...payloadSnapshot(session), assertions: (session.assertions ?? []).map(check => ({ ...check })), timeout: session.timeout, serverIndex: session.serverIndex, serverValues: { ...session.serverValues } }
   })
   return { version: 1, id, name, steps }
 }
@@ -61,8 +64,11 @@ export function validateScenario(scenario) {
       Object.values(step.fields).some(value => typeof value !== 'string') || !Array.isArray(step.bindings)) {
       throw new Error(`Invalid scenario step ${index + 1}.`)
     }
+    validatePayloadSnapshot(step)
+    validateAssertions(step.assertions)
     const targets = new Set()
     for (const binding of step.bindings) {
+      validateSelectionRule(binding.selector)
       if (!Number.isInteger(binding.sourceStep) || binding.sourceStep < 0 || binding.sourceStep >= index ||
         !Array.isArray(binding.path) || binding.path.some(part => typeof part !== 'string' &&
           !(Number.isSafeInteger(part) && part >= 0)) || !['path', 'query', 'header', 'body'].includes(binding.location) ||
@@ -102,10 +108,10 @@ export function prepareScenario(scenario, { operations, links, configuration, cr
       throw new Error(`Step ${index + 1}: ${step.method} ${step.path} is unavailable. Check API visibility and connections.`)
     }
     const session = createSession(operation)
-    session.fields = { ...step.fields }; session.body = step.body
-    session.bindings = step.bindings.map(binding => ({ ...binding, path: [...binding.path],
+    Object.assign(session, payloadSnapshot(step), { assertions: (step.assertions ?? []).map(check => ({ ...check })), timeout: step.timeout ?? 30000, serverIndex: step.serverIndex, serverValues: { ...step.serverValues } }); session.fields = { ...step.fields }; session.body = step.body
+    session.bindings = step.bindings.map(binding => ({ ...binding, ...(binding.selector ? { selector: { ...binding.selector, arrayPath: [...binding.selector.arrayPath] } } : {}), path: [...binding.path],
       appliedValue: currentValue(session, binding.location, binding.name) }))
-    return { operation, group: operation.tags[0], session, bindings: step.bindings.map(binding => ({ ...binding, path: [...binding.path] })),
+    return { operation, group: operation.tags[0], session, bindings: step.bindings.map(binding => ({ ...binding, ...(binding.selector ? { selector: { ...binding.selector, arrayPath: [...binding.selector.arrayPath] } } : {}), path: [...binding.path] })),
       values: new Map(valuesFor(operation)), status: 'waiting', error: '' }
   })
   if (!validateRequests) return plan
@@ -114,7 +120,7 @@ export function prepareScenario(scenario, { operations, links, configuration, cr
     step.bindings = step.bindings.filter(binding => binding.location === 'body'
       ? !matches.has(binding.name)
       : !step.values.has(contextKey({ in: binding.location, name: binding.name })))
-    const draft = { fields: { ...step.session.fields }, body: step.session.body }
+    const draft = { ...step.session, fields: { ...step.session.fields }, body: step.session.body }
     try {
       for (const binding of step.bindings) {
         const origin = plan[binding.sourceStep].operation
@@ -141,7 +147,7 @@ export async function executeScenario(plan, { execute, signal, onStep = () => {}
       for (const binding of step.bindings) {
         const source = plan[binding.sourceStep].session.result
         if (!source?.ok) throw new Error(`Step ${binding.sourceStep + 1} has no successful response.`)
-        const value = readResponseAt(source.json, binding.path)
+        const value = readResponseAt(source.json, selectionRulePath(source.json, binding.path, binding.selector))
         if (binding.location !== 'body' && value === null) throw new Error(`Response value at ${pathLabel(binding.path)} is null.`)
         applyChoice(step.session, binding.location, { name: binding.name, value })
         rememberBinding(step.session, { ...binding, value, binding: { path: binding.path } }, binding.sourceStep)
@@ -150,7 +156,7 @@ export async function executeScenario(plan, { execute, signal, onStep = () => {}
       signal.throwIfAborted()
       const result = await execute(step.operation, step.session, step.values, signal, ({ url, options }) => {
         step.request = { url: url.href, headers: Object.fromEntries(options.headers),
-          body: options.body === undefined ? undefined : JSON.parse(options.body) }
+          body: describeBody(options.body) }
       })
       signal.throwIfAborted()
       step.httpStatus = result?.status
@@ -159,7 +165,8 @@ export async function executeScenario(plan, { execute, signal, onStep = () => {}
         step.response = result
         step.session.result = result
       }
-      if (!result?.ok) throw new Error(result ? `HTTP ${result.status} ${result.statusText}` : step.session.error || 'No response received.')
+      if (!result || !result.ok && !result.assertions?.some(check => check.kind === 'status' && check.passed)) throw new Error(result ? `HTTP ${result.status} ${result.statusText}` : step.session.error || 'No response received.')
+      if (result.assertions?.some(check => !check.passed)) throw new Error('Response checks failed.')
       step.status = 'completed'
     }
     return { status: 'completed', error: '' }

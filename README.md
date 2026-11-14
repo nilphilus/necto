@@ -133,3 +133,7 @@ precedence over `eachItem`; when absent, the original root selectors still apply
 The UI uses mappings resolved against OpenAPI to mark selectable objects, without
 adding metadata to the API's business responses or requiring another attribute. Use `SampleApi/SampleApi.http` to try all
 three match rules.
+
+## API workbench
+
+Send forms and files, inspect HTTP responses, copy request code, choose API servers and verify scenarios without giving up response space. [Workbench guide and CI runner](docs/api-workbench/README.md).
