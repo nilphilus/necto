@@ -1,0 +1,15 @@
+{
+  "observations": [
+    {
+      "id": "delete",
+      "dialogs": [],
+      "undoButtons": 1,
+      "savedCount": 0
+    },
+    {
+      "undoRestoredExactDefinition": true,
+      "noRequestsSent": true
+    }
+  ],
+  "errors": []
+}
