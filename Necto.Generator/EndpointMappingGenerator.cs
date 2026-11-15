@@ -318,6 +318,9 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
         code.AppendLine("""
                 };
 
+                internal static Microsoft.AspNetCore.OpenApi.OpenApiOptions AddNectoGeneratedLinks(this Microsoft.AspNetCore.OpenApi.OpenApiOptions options) =>
+                    NectoOpenApiLinks.AddNectoLinks(options, Mappings);
+
                 internal static RouteHandlerBuilder MapNectoEndpointMappings(
                     this IEndpointRouteBuilder endpoints, string pattern = "/necto/endpoint-mappings") =>
                     EndpointMappingsMetadata.Register(endpoints,

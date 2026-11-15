@@ -10,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
+builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedLinks());
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
