@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis.Operations;
 namespace Necto.Generator;
 
 [Generator]
-public sealed class EndpointMappingGenerator : IIncrementalGenerator
+public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -112,7 +112,7 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
             var propertyType = NonNullable(property.Type);
             yield return new Field(propertyType, JsonName(property), name,
                 ValueKey(property), "", eachItem, path.Length > (eachItem ? 1 : 0) ? path : null,
-                type.Name + property.Name);
+                type.Name + property.Name, type.ToDisplayString());
             if (IsTypedId(propertyType))
                 continue;
             var item = propertyType is IArrayTypeSymbol { Rank: 1 } array
@@ -138,7 +138,7 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
             }
             foreach (var property in JsonProperties(type))
                 yield return new Field(NonNullable(property.Type), JsonName(property), property.Name,
-                    ValueKey(property), "body");
+                    ValueKey(property), "body", Owner: type.ToDisplayString());
             yield break;
         }
 
@@ -325,6 +325,7 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
                             .ExcludeFromDescription());
             }
             """);
+        EmitEntityCatalog(context, ordered);
         context.AddSource("EndpointMappings.g.cs", code.ToString());
     }
 
@@ -333,5 +334,5 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
     private sealed record Endpoint(string Id, Field[] Response, Field[] Request);
     private sealed record Field(
         ITypeSymbol Type, string? WireName, string? ConventionName, string? Key, string Location,
-        bool EachItem = false, string?[]? ObjectPath = null, string? QualifiedName = null);
+        bool EachItem = false, string?[]? ObjectPath = null, string? QualifiedName = null, string? Owner = null);
 }
