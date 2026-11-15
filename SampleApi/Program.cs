@@ -8,7 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options => options.AddNectoGeneratedDocumentation());
 
 builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedLinks());
 var app = builder.Build();
@@ -25,6 +25,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.MapPost("/documented-invoices", DocumentedInvoiceHandlers.Create).WithName("CreateDocumentedInvoice");
+app.MapPost("/documented-invoices/authored", DocumentedInvoiceHandlers.Create).WithName("AuthoredDocumentedInvoice")
+    .WithSummary("Authored summary").WithDescription("Authored description");
 
 Invoice[] invoices = Enumerable.Range(42, 12)
     .Select(id => new Invoice(id, 0m, 781 + id - 42, $"INV-{id}")).ToArray();
