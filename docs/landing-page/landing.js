@@ -63,7 +63,7 @@ document.querySelector('#expand-screenshot')?.addEventListener('click', () => {
 document.querySelector('#close-viewer')?.addEventListener('click', () => viewer.close())
 viewer?.addEventListener('click', event => { if (event.target === viewer) viewer.close() })
 
-const snippets = { install: 'dotnet add package Necto.OpenApi', setup: 'app.MapOpenApi();\napp.MapNectoEndpointMappings();\napp.UseNectoUI();' }
+const snippets = { install: 'dotnet add package Necto.OpenApi', setup: '// Keep your existing OpenAPI registration. Add this once after builder.Build().\napp.UseNectoUI();' }
 document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', async () => {
   const text = snippets[button.dataset.copy] ?? document.querySelector(button.dataset.copy)?.textContent
   if (!text) return

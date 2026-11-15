@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
@@ -12,7 +13,7 @@ public static class NectoUIApplicationExtensions
     private static readonly string[] ReadMethods = [HttpMethods.Get, HttpMethods.Head];
     private static readonly FileExtensionContentTypeProvider ContentTypes = new();
 
-    /// <summary>Serves the embedded Necto UI for an OpenAPI JSON document.</summary>
+    /// <summary>Serves the embedded UI and automatically registers application-generated mappings.</summary>
     /// <param name="app">The application serving Necto UI.</param>
     /// <param name="routePrefix">The UI path, relative to the application's path base.</param>
     /// <param name="openApiPath">The OpenAPI JSON path, relative to the application's path base.</param>
@@ -27,6 +28,11 @@ public static class NectoUIApplicationExtensions
         string? agentPath = null,
         Attribute? metadataAttribute = null)
     {
+        if (endpointMappingsPath is null && !EndpointMappingsMetadata.HasMappings(app.Services))
+        {
+            var application = Assembly.Load(new AssemblyName(app.Environment.ApplicationName));
+            application.GetCustomAttribute<NectoMappingsAttribute>()?.Map(app);
+        }
         var ui = app.MapNectoUI(routePrefix, openApiPath, endpointMappingsPath, agentPath);
         if (metadataAttribute is not null)
         {

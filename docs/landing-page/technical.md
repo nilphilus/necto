@@ -4,13 +4,27 @@
 
 ## Quickstart
 
-The current package targets .NET 10. Start with an ASP.NET Core application that has Microsoft's OpenAPI integration configured (`AddOpenApi`). Install:
+The current package targets .NET 10. Install the package in your ASP.NET Core application:
 
 ```sh
 dotnet add package Necto.OpenApi
 ```
 
-In `Program.cs`:
+### Existing application
+
+Keep your existing OpenAPI service and document registrations. Add Necto once after `builder.Build()`:
+
+```csharp
+app.UseNectoUI();
+```
+
+`UseNectoUI()` serves the workspace and registers the application’s generated relationship mappings automatically. It reuses mappings registered beforehand. `MapOpenApi()` serves the OpenAPI document: keep your existing call rather than adding another for the same document route. If that route differs from `/openapi/v1.json`, pass it as `openApiPath`.
+
+`MapNectoUI()` is an alternative to `UseNectoUI()` when you need endpoint conventions such as `.RequireAuthorization()`. Use one of them for a given UI path. With manual UI registration, also register the mappings explicitly.
+
+### New application
+
+This complete `Program.cs` replaces the corresponding setup; do not append it to the existing application's registrations:
 
 ```csharp
 using Necto;
@@ -24,7 +38,6 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.MapNectoEndpointMappings();
     app.UseNectoUI();
 }
 
@@ -73,6 +86,7 @@ The optional MCP bridge shares the visible API catalog, types and relationships,
 
 ```csharp
 app.MapNectoAgent();
+// Replace the existing UseNectoUI() call with this one:
 app.UseNectoUI(agentPath: "/necto/agent");
 ```
 
