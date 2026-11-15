@@ -77,6 +77,45 @@ async function searchResponse(query) {
 const bodyEditor = ref(null)
 const responsePane = ref(null)
 
+function selectBodyValue(editor, direction, fromStart = false) {
+  const body = editor.value
+  try {
+    JSON.parse(body)
+  } catch {
+    return false
+  }
+
+  const values = []
+  for (const match of body.matchAll(/"(?:[^"\\]|\\.)*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|\[\s*\]|\{\s*\}/g)) {
+    const token = match[0]
+    const end = match.index + token.length
+    const quoted = token.startsWith('"')
+    if (quoted && /^\s*:/.test(body.slice(end))) continue
+    values.push({ start: match.index + Number(quoted), end: end - Number(quoted) })
+  }
+
+  const value = fromStart ? values[0] : direction > 0
+    ? values.find(value => value.start > editor.selectionEnd)
+    : values.findLast(value => value.end < editor.selectionStart)
+  if (!value) return false
+  editor.setSelectionRange(value.start, value.end)
+  return true
+}
+
+async function focusFirstBodyValue(event) {
+  const editor = bodyEditor.value
+  if (!editor || event.target === editor) return
+  event.preventDefault()
+  editor.focus()
+  await nextTick()
+  if (document.activeElement === editor) selectBodyValue(editor, 1, true)
+}
+
+function tabBodyValue(event) {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return
+  if (selectBodyValue(event.currentTarget, event.shiftKey ? -1 : 1)) event.preventDefault()
+}
+
 const requestCompact = ref(false)
 let preferredFocus = null
 try { preferredFocus = JSON.parse(sessionStorage.getItem('necto:response-focus')) } catch { /* Optional layout preference. */ }
@@ -224,7 +263,7 @@ function parameterHint(parameter) {
         <div v-if="content" class="field">
           <p class="body-origin"><strong>{{ session.sampleName ? 'Saved request' : hasBodyExample(content[1], operation.resolve) ? 'OpenAPI example' : 'Generated template' }}</strong><span v-if="!session.sampleName && !hasBodyExample(content[1], operation.resolve)"> · Fill placeholder values before sending. API validation may require different values.</span></p>
           <details v-if="content[1].schema" class="body-schema"><summary>Body fields and requirements</summary><dl><template v-for="field in bodyFields(operation, content[1].schema)" :key="field.path"><dt><code>{{ field.path }}</code></dt><dd>{{ field.rules }}</dd></template></dl><small>Requirements published by this API. Additional business rules may apply.</small></details>
-          <label class="field-label">
+          <label class="field-label" @click="focusFirstBodyValue">
             <span>Request body <small>{{ content[0] }}</small></span>
             <textarea
               ref="bodyEditor"
@@ -234,6 +273,7 @@ function parameterHint(parameter) {
               :required="operation.requestBody.required && !effectiveBody"
               @focus="editingBody = true"
               @blur="editingBody = false"
+              @keydown.tab="tabBodyValue"
             />
           </label>
           <details v-if="bodyPresetResult.sources?.length" class="body-preset-origins">
