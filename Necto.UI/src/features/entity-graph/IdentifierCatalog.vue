@@ -20,7 +20,7 @@ async function open(){
   const {text}=await readBoundedText(response,{signal,responseLimitBytes:5*1024*1024}),data=JSON.parse(text)
   validateEntityCatalog(data)
   if(!signal.aborted)entries.value=data
- }catch(cause){if(!signal.aborted)error.value=cause.message;else error.value='Catalog loading stopped.'}finally{clearTimeout(timeout);if(controller===job)pending.value=false}
+ }catch(cause){if(controller===job)error.value=signal.aborted?'Catalog loading stopped.':cause.message}finally{clearTimeout(timeout);if(controller===job)pending.value=false}
 }
 async function closed(){controller?.abort();await nextTick();trigger.value?.focus()}
 function openOperation(operation){dialog.value.close();emit('open-operation',operation)}
