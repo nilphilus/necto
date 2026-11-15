@@ -242,7 +242,7 @@ The **Presets** bar above the API workspace shows active presets first, followed
 
 Parameter notes identify the winning preset and link to its editor. Expand JSON body overrides to inspect field paths and sources. Related requests show effective preset inputs when a preset replaces an editable field. These summaries hide header values. External APIs that have not opted into presets show an exclusion note.
 
-Use **Settings → Presets** to add a named preset. Choose **Add field**, enter its name and value, and choose **Save values**.
+Use **Settings → Presets** to add a named preset. Choose **Add field** and enter its name and value. Valid edits and field removals are saved automatically.
 
 | Name | Value |
 | --- | --- |

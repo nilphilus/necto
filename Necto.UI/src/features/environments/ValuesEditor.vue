@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, ref, watch } from 'vue'
+import { nextTick, ref, toRaw, watch } from 'vue'
 
 const props = defineProps({
   values: { type: Map, required: true },
@@ -7,72 +7,99 @@ const props = defineProps({
 })
 const emit = defineEmits(['save'])
 const rows = ref([])
-const form = ref(null)
-const error = ref('')
+const editor = ref(null)
 let nextId = 0
+let lastSavedValues
 
 watch(() => props.values, values => {
-  rows.value = Array.from(values, ([name, { value, legacyHeader }]) => ({
-    id: nextId++, name, value, legacyHeader,
+  // Keep row focus and drafts when the parent applies our latest save.
+  if (toRaw(values) === lastSavedValues) return
+  lastSavedValues = undefined
+  rows.value = Array.from(values, ([name, field]) => ({
+    id: nextId++, name, value: field.value, legacyHeader: field.legacyHeader,
+    saved: { name, field }, error: '',
   }))
-  error.value = ''
 }, { immediate: true })
 
 async function addRow() {
-  rows.value.push({ id: nextId++, name: '', value: '' })
+  rows.value.push({ id: nextId++, name: '', value: '', saved: null, error: '' })
   await nextTick()
-  form.value?.querySelector('.value-row:last-child .field-name')?.focus()
+  editor.value?.querySelector('.value-row:last-child .field-name')?.focus()
+}
+
+function saveRow(row, event) {
+  if (event.target.composing) return
+  const name = row.name.trim()
+  const { value, legacyHeader } = row
+  if (!row.saved && !name && !value) {
+    row.error = ''
+    return
+  }
+
+  try {
+    if (!name) throw new Error('Enter a name for this field.')
+    if (rows.value.some(other => other !== row && other.saved?.name === name)) {
+      throw new Error(`"${name}" is already listed.`)
+    }
+    if (legacyHeader) {
+      try {
+        new Headers([[name, value]])
+      } catch {
+        throw new Error(`Check the name and value of the "${name}" header.`)
+      }
+    }
+  } catch (cause) {
+    row.error = cause.message
+    return
+  }
+
+  row.error = ''
+  if (row.saved?.name === name && row.saved.field.value === value) return
+  row.saved = { name, field: { value, legacyHeader } }
+  save()
+}
+
+function removeRow(index) {
+  const [removed] = rows.value.splice(index, 1)
+  if (removed.saved) save()
 }
 
 function save() {
-  try {
-    const values = new Map()
-    for (const { name, value, legacyHeader } of rows.value) {
-      if (!name) throw new Error('Enter a name for each field.')
-      if (legacyHeader) {
-        try {
-          new Headers([[name, value]])
-        } catch {
-          throw new Error(`Check the name and value of the "${name}" header.`)
-        }
-      }
-      if (values.has(name)) throw new Error(`"${name}" is already listed.`)
-      values.set(name, { value, legacyHeader })
-    }
-    error.value = ''
-    emit('save', values)
-  } catch (cause) {
-    error.value = cause.message
+  const values = new Map()
+  for (const { saved } of rows.value) {
+    if (saved) values.set(saved.name, saved.field)
   }
+  lastSavedValues = values
+  emit('save', values)
 }
 </script>
 
 <template>
-  <form ref="form" class="values-editor" :aria-label="label" @submit.prevent="save">
+  <div ref="editor" class="values-editor" role="group" :aria-label="label">
+    <p class="muted">Changes are saved automatically.</p>
     <div v-if="rows.length" class="value-rows">
       <div v-for="(row, index) in rows" :key="row.id" class="value-row">
         <label>
           Name
-          <input v-model.trim="row.name" class="field-name" required spellcheck="false">
+          <input v-model="row.name" class="field-name" spellcheck="false" @input="saveRow(row, $event)">
         </label>
         <label>
           Value
-          <input v-model="row.value" spellcheck="false">
+          <input v-model="row.value" spellcheck="false" @input="saveRow(row, $event)">
         </label>
         <button
           type="button"
           class="secondary"
           :aria-label="row.name ? 'Remove ' + row.name : 'Remove field ' + (index + 1)"
-          @click="rows.splice(index, 1)"
+          @click="removeRow(index)"
         >Remove</button>
+        <p v-if="row.error" class="error" role="alert">{{ row.error }}</p>
       </div>
     </div>
     <div class="value-actions">
       <button type="button" class="secondary" @click="addRow">Add field</button>
-      <button type="submit" class="secondary">Save values</button>
     </div>
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
-  </form>
+  </div>
 </template>
 
 <style scoped>
@@ -89,6 +116,7 @@ input { width: 100%; }
 .value-row button { min-height: 2.25rem; }
 .value-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 p { margin: 0; }
+.value-row .error { grid-column: 1 / -1; }
 @media (max-width: 520px) {
   .value-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
