@@ -62,17 +62,18 @@ public sealed class XmlDocumentationGenerator:IIncrementalGenerator
     private static string Literal(string? value)=>value is null?"null":SymbolDisplay.FormatLiteral(value,true);
     private static void Emit(SourceProductionContext context,DocumentationEndpoint[] endpoints)
     {
-        var types=new Dictionary<string,INamedTypeSymbol>(StringComparer.Ordinal);var visited=new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
-        void Visit(ITypeSymbol type)
+        var types=new Dictionary<string,INamedTypeSymbol>(StringComparer.Ordinal);var visited=new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);var definitions=new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        void Visit(ITypeSymbol type,int depth=0)
         {
-            if(!visited.Add(type))return;
-            if(type is IArrayTypeSymbol array){Visit(array.ElementType);return;}
+            if(depth>32||!visited.Add(type))return;
+            if(type is IArrayTypeSymbol array){Visit(array.ElementType,depth+1);return;}
             if(type is not INamedTypeSymbol named)return;
-            foreach(var argument in named.TypeArguments)Visit(argument);
+            foreach(var argument in named.TypeArguments)Visit(argument,depth+1);
+            if(!definitions.Add(named.OriginalDefinition))return;
             if(!named.Locations.Any(location=>location.IsInSource))return;
             types[Name(named.OriginalDefinition)]=named.OriginalDefinition;
-            if(named.BaseType is not null)Visit(named.BaseType);
-            foreach(var property in named.GetMembers().OfType<IPropertySymbol>().Where(property=>!property.IsStatic&&property.GetMethod?.DeclaredAccessibility==Accessibility.Public))Visit(property.Type);
+            if(named.BaseType is not null)Visit(named.BaseType,depth+1);
+            foreach(var property in named.GetMembers().OfType<IPropertySymbol>().Where(property=>!property.IsStatic&&property.GetMethod?.DeclaredAccessibility==Accessibility.Public))Visit(property.Type,depth+1);
         }
         foreach(var endpoint in endpoints){Visit(endpoint.Handler.ReturnType);foreach(var parameter in endpoint.Handler.Parameters)Visit(parameter.Type);}
         var code=new StringBuilder("""
