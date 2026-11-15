@@ -4,8 +4,13 @@ import { matchesPath } from '../related-endpoints/mappings.js'
 import { childEntries, pageRange, PREVIEW_PAGE_SIZE, STRING_PAGE_SIZE } from './preview.js'
 import { isPrefix } from '../payload-search/search.js'
 import PreviewPager from './PreviewPager.vue'
+import XmlPreview from './XmlPreview.vue'
+import { looksLikeXml } from './xmlDetection.js'
 const props = defineProps({ value: {}, path: { type: Array, required: true }, selectors: Array, selected: Array, navigation: Object, root: Boolean })
 defineEmits(['select'])
+const xmlOpen = ref(false)
+const xmlAvailable = computed(() => looksLikeXml(props.value))
+watch(() => props.value, () => { xmlOpen.value = false })
 const container = computed(() => props.value !== null && typeof props.value === 'object')
 const array = computed(() => Array.isArray(props.value))
 const keys = computed(() => container.value && !array.value ? Object.keys(props.value) : [])
@@ -39,6 +44,7 @@ function keyTarget(key) {
 watch([() => props.navigation, () => props.value], () => {
   const navigation = props.navigation
   if (!navigation) return
+  if (target.value) xmlOpen.value = false
   if (!isPrefix(props.path, navigation.path)) { expanded.value = props.root || props.path.length < 2; return }
   if (container.value) {
     expanded.value = true
@@ -56,8 +62,10 @@ watch([() => props.navigation, () => props.value], () => {
 
 <template>
   <span v-if="!container" :data-search-target="target ? 'true' : undefined" :class="{ 'search-hit': target }">
-    <span :class="'token-' + kind"><template v-if="parts">{{ parts.quoted ? '"' : '' }}{{ parts.before }}<mark data-search-match="true">{{ parts.match }}</mark>{{ parts.after }}{{ parts.quoted ? '"' : '' }}</template><template v-else>{{ scalar }}</template></span>
-    <PreviewPager v-if="kind === 'string'" :range="range" label="String characters" @change="page = $event" />
+    <button v-if="xmlAvailable" type="button" class="object-selector" :aria-expanded="xmlOpen" :aria-label="(xmlOpen ? 'Close XML preview at ' : 'Preview XML at ') + JSON.stringify(path)" @click="xmlOpen = !xmlOpen">{{ xmlOpen ? 'Back to string' : 'XML preview' }}</button>
+    <XmlPreview v-if="xmlOpen" :text="value" />
+    <span v-else :class="'token-' + kind"><template v-if="parts">{{ parts.quoted ? '"' : '' }}{{ parts.before }}<mark data-search-match="true">{{ parts.match }}</mark>{{ parts.after }}{{ parts.quoted ? '"' : '' }}</template><template v-else>{{ scalar }}</template></span>
+    <PreviewPager v-if="kind === 'string' && !xmlOpen" :range="range" label="String characters" @change="page = $event" />
   </span>
   <span v-else class="json-object" :data-search-target="target ? 'true' : undefined" :class="{ selected: active, 'search-hit': target }">
     <button v-if="selectable" type="button" class="object-selector" :aria-pressed="Boolean(active)"

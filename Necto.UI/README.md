@@ -33,6 +33,12 @@ it. Preview and colors work even without endpoint mappings.
 
 Response data is shown before continuation forms. **Next request** shares the response toolbar. On wide screens, related requests can be pinned beside the response; narrower screens open them on demand. Requests without mappings use the full response width.
 
+## XML responses and XML inside JSON
+
+XML responses have a colored, collapsible Preview alongside Raw. JSON strings that look like XML offer an opt-in **XML preview** button and **Back to string**. Short scalar elements stay inline; child nodes, attributes and long values are paged locally. Parsing runs in a worker, with cancellation and explicit resource limits. Raw/download and existing JSON mappings retain their original values. XML-internal selection and whole-document XML search are not included.
+
+See the [XML preview guide](../docs/xml-preview/README.md) for examples, screenshots and limits.
+
 ## Large responses
 
 Preview pagination is local to the UI: it never adds API query parameters or

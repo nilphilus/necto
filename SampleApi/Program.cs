@@ -48,6 +48,36 @@ invoices = invoices.Select(invoice => invoice with
     Total = invoiceLines.Where(line => line.InvoiceId == invoice.Id).Sum(line => line.Quantity * line.UnitPrice)
 }).ToArray();
 
+// XML previews: a whole document and an XML string carried inside a mapped JSON object.
+app.MapGet("/invoices/xml-preview", (int count = 1200) =>
+    {
+        var xml = new System.Xml.Linq.XElement("invoices",
+            Enumerable.Range(100000, Math.Clamp(count, 1, 10000)).Select(id =>
+                new System.Xml.Linq.XElement("invoice", new System.Xml.Linq.XAttribute("id", id),
+                    new System.Xml.Linq.XElement("reference", $"INV-{id}"),
+                    new System.Xml.Linq.XElement("total", new System.Xml.Linq.XAttribute("currency", "PLN"), 125.00m))));
+        return TypedResults.Text(xml.ToString(), "application/xml");
+    })
+    .WithName("InvoiceXmlPreview")
+    .WithTags("Invoices")
+    .WithSummary("XML invoice collection")
+    .WithDescription("Synthetic XML collection for Preview pagination. count controls 1–10,000 invoices.")
+    .Produces<string>(StatusCodes.Status200OK, "application/xml");
+
+app.MapGet("/invoices/{invoiceId:int}/xml-document", Results<Ok<InvoiceXmlPayload>, NotFound> (int invoiceId) =>
+    {
+        if (invoices.FirstOrDefault(invoice => invoice.Id == invoiceId) is not { } invoice)
+            return TypedResults.NotFound();
+        var xml = new System.Xml.Linq.XElement("invoice", new System.Xml.Linq.XAttribute("id", invoice.Id),
+            new System.Xml.Linq.XElement("reference", invoice.Reference),
+            new System.Xml.Linq.XElement("total", new System.Xml.Linq.XAttribute("currency", "PLN"), invoice.Total));
+        return TypedResults.Ok(new InvoiceXmlPayload(invoice.Id, invoice.Reference, xml.ToString()));
+    })
+    .WithName("InvoiceXmlDocument")
+    .WithTags("Invoices")
+    .WithSummary("Invoice with an embedded XML document")
+    .WithDescription("Open XML preview beside document. The surrounding JSON object remains selectable for related requests.");
+
 var summaries = new[]
 {
     "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
@@ -194,3 +224,5 @@ record Customer(CustomerId Id, string Name);
 record CustomerSearch(CustomerId SelectedCustomer);
 
 public partial class Program;
+
+record InvoiceXmlPayload([property: EndpointValue("invoiceId")] int Id, string Reference, string Document);
