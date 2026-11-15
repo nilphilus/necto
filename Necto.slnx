@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="Generator.Tests/Generator.Tests.csproj" />
   <Project Path="Necto/Necto.csproj" />
   <Project Path="Necto.Generator/Necto.Generator.csproj" />
   <Project Path="SampleApi/SampleApi.csproj" />
