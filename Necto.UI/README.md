@@ -238,7 +238,9 @@ external endpoints. No proxy is introduced by Necto.
 
 ## Request presets
 
-Active presets are always shown above the API workspace, even when they do not match the current endpoint. Their chips open the selected preset editor or deactivate that preset. Parameter notes identify the winning preset; JSON body overrides can be expanded to inspect field paths and sources. Related requests show effective preset inputs even when a preset replaces their editable field. Header values are hidden in these summaries. External APIs that have not opted into presets show an explicit exclusion note.
+The **Presets** bar above the API workspace shows active presets first, followed by inactive presets that match the current endpoint. Click a tag to toggle it. Active tags use their configured color. The tags keep their positions until the mouse leaves the bar.
+
+Parameter notes identify the winning preset and link to its editor. Expand JSON body overrides to inspect field paths and sources. Related requests show effective preset inputs when a preset replaces an editable field. These summaries hide header values. External APIs that have not opted into presets show an exclusion note.
 
 Use **Settings → Presets** to add a named preset. Choose **Add field**, enter its name and value, and choose **Save values**.
 
@@ -248,7 +250,7 @@ Use **Settings → Presets** to add a named preset. Choose **Add field**, enter 
 | `customer` | `customer-42` |
 | `locale` | `pl-PL` |
 
-Choose presets above the endpoint title in the API view. The selector shows presets that can affect the current endpoint. If you switch endpoints, presets that are hidden keep their selection and activation order. When multiple presets supply the same field, the most recently enabled preset wins for that field. The browser saves the presets and their activation order for this OpenAPI URL in local storage. Existing saved environments appear as presets.
+Active presets stay visible as you switch endpoints, even when they apply to a different request. When multiple presets supply the same field, the most recently enabled preset wins for that field. The browser saves the presets and their activation order for this OpenAPI URL in local storage. Existing saved environments appear as presets.
 
 Each entry fills matching header, query, route, and JSON body fields. Exact names take precedence within a preset. Case differences are accepted when the match is unambiguous. Necto keeps the endpoint's parameter spelling. Use JSON text for array or object values. For example, a `customer` entry can fill both `/{customer}/Invoice/{id}` and a JSON property named `customer` in the same request. Previously saved header entries still send their headers when OpenAPI omits them.
 
@@ -316,7 +318,7 @@ search, replace the response, or leave the view to terminate the worker. Search
 never refetches the response or changes API pagination. Browsers without worker
 support retain Preview, Raw and download, and display a search error.
 
-The API workspace reserves a preset column only when presets match the current request. On narrow screens, matching presets are available through a **Presets** disclosure above the full-width request, rather than a permanent side column. Desktop expand/collapse remains independent of the mobile panel.
+On narrow screens, scroll the **Presets** bar horizontally to reach more tags.
 
 ## Bring your agent
 

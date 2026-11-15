@@ -66,7 +66,6 @@ const overwriteScenario = computed(() => scenarios.value.find(scenario =>
 const scenarioBusy = computed(() => scenarioPending.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
 const presets = ref(new Map())
 const presetColors = ref(new Map())
-const presetDialog = ref(null)
 const catalogMedia = matchMedia('(max-width: 760px)')
 const catalogOpen = ref(!catalogMedia.matches)
 const catalogWidth = ref(240)
@@ -171,6 +170,23 @@ const visiblePresetNames = computed(() => {
     .filter(([, preset]) => hasPresetFor(operation, session.body, valuesFor(operation, [preset])))
     .map(([name]) => name)
 })
+const presetOrder = computed(() => {
+  const active = activePresetNames.value
+  const inactive = visiblePresetNames.value.filter(name => !active.includes(name))
+  return { names: [...active, ...inactive], firstInactive: active.length ? inactive[0] : undefined }
+})
+const hoveredPresetOrder = ref(null)
+const displayedPresetOrder = computed(() => hoveredPresetOrder.value ?? presetOrder.value)
+
+function holdPresetOrder(event) {
+  if (event.pointerType === 'mouse') hoveredPresetOrder.value = presetOrder.value
+}
+
+function releasePresetOrder() {
+  hoveredPresetOrder.value = null
+}
+
+watch([graphView, settingsOpen, storageKey], releasePresetOrder)
 
 function valuesFor(operation, layers = activePresetValues.value) {
   if (operation.apiId && operation.apiId !== 'local' && !operation.usePresets) return new Map()
@@ -783,14 +799,18 @@ function removeScenario(id) {
           </details>
         </template>
       </ScenarioPanel>
-      <section :inert="settingsOpen" v-if="!graphView && activePresetNames.length" class="active-presets" aria-label="Active presets">
-        <strong>Active presets</strong>
-        <span v-for="name in activePresetNames" :key="name" class="active-preset-chip">
-          <button type="button" :disabled="scenarioPending" :aria-label="'Edit active preset ' + name" @click="editActivePreset(name)">{{ name }}</button>
-          <button type="button" :disabled="scenarioPending" :aria-label="'Deactivate preset ' + name" @click="togglePreset(name, false)">×</button>
-        </span>
-        <small v-if="current?.operation.apiId && current.operation.apiId !== 'local' && !current.operation.usePresets">Not applied to this external API.</small>
-        <small v-else-if="!visiblePresetNames.some(name => activePresetNames.includes(name))">None apply to this request; related requests may still use them.</small>
+      <section v-if="!graphView && displayedPresetOrder.names.length" :inert="settingsOpen" class="preset-bar"
+        aria-label="Presets" @pointerenter="holdPresetOrder" @pointerleave="releasePresetOrder">
+        <strong>Presets</strong>
+        <button v-for="name in displayedPresetOrder.names" :key="name" type="button" class="preset-toggle"
+          :class="{ 'preset-group-start': name === displayedPresetOrder.firstInactive }"
+          :disabled="scenarioPending" :aria-pressed="activePresetNames.includes(name)"
+          :style="{ '--preset-color': presetColors.get(name) ?? defaultPresetColor }"
+          @click="togglePreset(name, !activePresetNames.includes(name))">{{ name }}</button>
+        <template v-if="activePresetNames.length">
+          <small v-if="current?.operation.apiId && current.operation.apiId !== 'local' && !current.operation.usePresets">Not applied to this external API.</small>
+          <small v-else-if="!visiblePresetNames.some(name => activePresetNames.includes(name))">None apply to this request; related requests may still use them.</small>
+        </template>
       </section>
       <div :inert="settingsOpen" v-show="!graphView" class="layout navigation-layout" :style="{ '--catalog-width': catalogOpen ? catalogWidth + 'px' : '0px' }">
         <div v-show="catalogOpen" class="catalog-container">
@@ -811,31 +831,9 @@ function removeScenario(id) {
 
         </div>
         <div ref="workArea" class="work-area">
-          <div v-if="!catalogOpen || visiblePresetNames.length" class="workspace-tools">
-            <button v-if="!catalogOpen" type="button" class="secondary" aria-label="Show endpoint catalog" @click="catalogOpen = true">Endpoints</button>
-            <button v-if="visiblePresetNames.length" type="button" class="secondary" :disabled="scenarioPending" aria-haspopup="dialog" @click="presetDialog.showModal()">Presets ({{ visiblePresetNames.length }})</button>
+          <div v-if="!catalogOpen" class="workspace-tools">
+            <button type="button" class="secondary" aria-label="Show endpoint catalog" @click="catalogOpen = true">Endpoints</button>
           </div>
-          <dialog v-if="visiblePresetNames.length" ref="presetDialog" class="endpoint-dialog preset-picker" aria-label="Matching presets">
-            <header><h3>Presets</h3><button type="button" class="secondary" @click="presetDialog.close()">Close presets</button></header>
-            <p class="muted">Activate shared values for this request.</p>
-          <div id="request-presets" class="presets-list" role="group" aria-label="Request presets">
-            <button
-              v-for="name in visiblePresetNames"
-              :key="name"
-              type="button"
-              class="preset-toggle"
-              :aria-label="name"
-              :title="name"
-              :aria-pressed="activePresetNames.includes(name)"
-              :style="{ '--preset-color': presetColors.get(name) ?? defaultPresetColor }"
-              @click="togglePreset(name, !activePresetNames.includes(name))"
-            >
-              <span class="preset-dot" aria-hidden="true"></span>
-              <span class="preset-name">{{ name }}</span>
-            </button>
-          </div>
-
-          </dialog>
           <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
           <article v-if="current && !pendingRoute" :inert="scenarioPending" aria-labelledby="endpoint-title">
             <div v-if="chain.length > 1 || editingScenario" class="chain-header">
@@ -1023,13 +1021,13 @@ body { margin: 0; background: #eef2ee; }
 .brand-button:hover { background: var(--surface); }
 .brand-mark { display: grid; place-items: center; width: 1.65rem; height: 1.65rem; border-radius: .45rem; background: var(--accent); color: white; }
 .api-title small { padding: .125rem .375rem; border: 1px solid var(--line); border-radius: .375rem; color: var(--muted); font-size: .72rem; }
-.active-presets { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: .4rem; padding: .45rem 1rem; border-bottom: 1px solid var(--line); background: var(--accent-soft); font-size: .78rem; }
-.active-preset-chip { display: inline-flex; border: 1px solid #b4cdc0; border-radius: 1rem; background: var(--surface); }
-.active-preset-chip button { padding: .2rem .45rem; }
-.active-preset-chip button + button { border-left: 1px solid var(--line); }
-.active-presets small { color: var(--muted); }
+.preset-bar { display: flex; flex: none; align-items: center; gap: .4rem; overflow-x: auto; white-space: nowrap; padding: .35rem 1rem; border-bottom: 1px solid var(--line); background: var(--surface); font-size: .78rem; }
+.preset-bar small { color: var(--muted); }
+.preset-toggle { flex: none; padding: .2rem .55rem; border: 1px solid var(--line); border-radius: 1rem; font-size: inherit; }
+.preset-toggle[aria-pressed="false"]:hover { background: var(--subtle); }
+.preset-toggle[aria-pressed="true"] { border-color: var(--preset-color); background: color-mix(in srgb, var(--preset-color) 24%, var(--surface)); }
+.preset-toggle.preset-group-start { margin-inline-start: .45rem; }
 .layout {
-  --presets-width: 9rem;
   display: grid;
   flex: 1;
   min-height: 0;
@@ -1046,9 +1044,6 @@ body { margin: 0; background: #eef2ee; }
 .catalog-size label { position: absolute; left: 0; z-index: 4; width: 11rem; padding: .5rem; background: var(--surface); border: 1px solid var(--line); }
 .catalog-size input { width: 100%; }
 .workspace-tools { margin-bottom: .5rem; font-size: .8rem; }
-.preset-picker header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
-.preset-picker h3 { margin: 0; }
-.preset-picker .presets-list { display: grid; }
 @media (max-width: 760px) {
   .navigation-layout { grid-template-columns: minmax(0, 1fr); }
   .navigation-layout > .work-area { grid-column: 1; }
@@ -1057,35 +1052,6 @@ body { margin: 0; background: #eef2ee; }
   .workspace-tools button { min-height: 44px; }
 }
 
-.layout.has-presets { grid-template-columns: clamp(14rem, 23vw, 18rem) var(--presets-width) minmax(0, 1fr); }
-.mobile-presets-toggle { display: none; }
-.layout.presets-collapsed .presets-header h2, .layout.presets-collapsed .preset-name { display: none; }
-.layout.presets-collapsed { --presets-width: 3rem; }
-.presets-column { min-width: 0; overflow: auto; padding: .65rem .4rem; border-right: 1px solid var(--line); }
-.presets-header { display: flex; align-items: center; justify-content: space-between; gap: .25rem; margin-bottom: .5rem; }
-.presets-header h2 { margin: 0 0 0 .35rem; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
-.presets-toggle.secondary { display: grid; flex: none; place-items: center; width: 2rem; height: 2rem; padding: 0; font-size: 1.25rem; line-height: 1; }
-.presets-list { display: grid; gap: .2rem; }
-.presets-list p { margin: .35rem; font-size: .75rem; }
-.preset-toggle {
-  display: flex;
-  align-items: center;
-  gap: .45rem;
-  min-width: 0;
-  min-height: 2rem;
-  padding: .25rem .35rem;
-  border: 1px solid transparent;
-  border-radius: .4rem;
-  background: transparent;
-  color: inherit;
-  font-size: .8rem;
-  text-align: left;
-  overflow-wrap: anywhere;
-}
-.preset-toggle:hover { background: var(--canvas); border-color: var(--line); }
-.preset-dot { flex: none; width: 1rem; height: 1rem; border: 3px solid var(--preset-color); border-radius: 50%; }
-.preset-toggle[aria-pressed="true"] .preset-dot { background: var(--preset-color); }
-.presets-collapsed .presets-header, .presets-collapsed .preset-toggle { justify-content: center; }
 .work-area { overflow: auto; min-width: 0; padding: 1.5rem; background: var(--canvas); scroll-padding-block: 1rem; }
 .app-message { margin: 1rem; }
 .mapping-notice { margin: 0 0 1rem; }
@@ -1201,14 +1167,7 @@ input:not([type="checkbox"]), select, textarea {
   .brand-stamp { top: .8rem; left: .5rem; }
 
   .app { height: auto; min-height: calc(100dvh - 2 * var(--app-gutter)); }
-  .layout, .layout.has-presets { grid-template-columns: minmax(0, 1fr); }
-  .mobile-presets-toggle { display: flex; justify-content: space-between; align-items: center; margin: .5rem 1rem; }
-  .presets-column { display: none; border-right: 0; border-bottom: 1px solid var(--line); padding: .5rem 1rem; }
-  .presets-column.mobile-open { display: block; }
-  .presets-column .presets-header { display: none; }
-  .presets-column .presets-list { display: flex; flex-wrap: wrap; gap: .4rem; }
-  .layout.presets-collapsed .preset-name { display: inline; }
-  .layout.presets-collapsed .preset-toggle { justify-content: start; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
   .layout > .catalog { grid-column: 1 / -1; }
   .work-area { overflow: visible; padding: 1rem; }
   .settings { overflow: auto; }
