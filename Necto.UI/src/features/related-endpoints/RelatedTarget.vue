@@ -48,13 +48,15 @@ const ready = computed(() => props.canSend(props.target.operation, choices.value
 
 <template>
   <li>
-    <div class="destination-title">
+    <div class="destination-actions">
       <span class="method" :data-method="target.operation.method">{{ target.operation.method }}</span>
+      <button type="button" class="secondary open-request" :aria-label="'Open request ' + target.operation.name"
+        @click="emit('follow', target.operation, choices, false)">Open request</button>
+    </div>
+    <div class="destination-title">
       <strong>{{ target.operation.name }}</strong>
       <small v-if="target.preferred" class="link-origin">OpenAPI Link</small>
       <DescriptionHelp :label="(target.preferred ? 'About link to ' : 'Why related request ') + target.operation.name" :description="target.description" />
-      <button type="button" class="secondary open-request" :aria-label="'Open request ' + target.operation.name"
-        @click="emit('follow', target.operation, choices, false)">Open request</button>
       <small v-if="target.operation.apiId && target.operation.apiId !== 'local'">{{ target.operation.apiName }} [{{ target.operation.apiId }}]</small>
     </div>
     <ul v-if="target.presetInputs?.length" class="preset-inputs" aria-label="Preset inputs for this request">
@@ -87,8 +89,9 @@ const ready = computed(() => props.canSend(props.target.operation, choices.value
 .preset-link { color: var(--accent); text-decoration: underline; padding: .1rem .2rem; }
 li { padding: .65rem 0; }
 li + li { border-top: 1px solid var(--line); }
+.destination-actions { display: flex; align-items: center; justify-content: space-between; gap: .4rem; margin-bottom: .25rem; }
 .destination-title { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; font-size: .87rem; }
-.open-request { margin-left: auto; font-size: .75rem; }
+.open-request { font-size: .75rem; }
 form { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin-top: .45rem; }
 .fields { display: flex; flex: 1 1 12rem; flex-wrap: wrap; align-items: end; gap: .5rem; min-width: 0; }
 .field { min-width: min(12rem, 100%); max-width: 100%; font-size: .8rem; }
