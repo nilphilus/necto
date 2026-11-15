@@ -19,6 +19,8 @@ const props = defineProps({
   session: { type: Object, required: true },
   run: { type: Function, required: true },
   values: { type: Map, required: true },
+  presetColors: { type: Map, required: true },
+  defaultPresetColor: { type: String, required: true },
   selectors: { type: Array, default: () => [] },
   hasRelated: Boolean,
   cancel: Function,
@@ -39,6 +41,10 @@ const responseStale = computed(() => {
 
 const previewPreferences = computed(() => props.session.previewPreferences ??= { tables: {} })
 const parameters = computed(() => supportedParameters(props.operation))
+const parameterFields = computed(() => parameters.value.map(parameter => {
+  const key = contextKey(parameter)
+  return { parameter, key, source: presetSource(props.values, key) }
+}))
 const parameterIdPrefix = useId()
 const content = computed(() => jsonContent(props.operation, props.session.mediaType))
 const bodyPresetResult = computed(() => applyBodyPresets(props.operation, props.session.body, props.values, props.session.mediaType))
@@ -228,29 +234,30 @@ function parameterHint(parameter) {
         <ImportedInputs :session="session" />
         <p v-if="!parameters.length && !operation.requestBody" class="muted empty">Ready to send. This endpoint has no inputs.</p>
 
-        <div v-for="(parameter, index) in parameters" :key="fieldKey(parameter)" class="field">
+        <div v-for="({ parameter, key, source }, index) in parameterFields" :key="fieldKey(parameter)" class="field">
           <div class="parameter-heading">
             <label class="field-label" :for="`${parameterIdPrefix}-${index}`">
               <code>{{ parameter.name }}</code>
               <small>{{ parameter.in }}<template v-if="parameter.required || parameter.in === 'path'"> · required</template></small>
             </label>
-            <span v-if="values.has(contextKey(parameter))" class="muted preset-origin" :id="`${parameterIdPrefix}-${index}-preset`">
-              Set by preset
-              <button v-if="presetSource(values, contextKey(parameter))" type="button" class="preset-link"
-                :title="presetSource(values, contextKey(parameter))"
-                @click="emit('edit-preset', presetSource(values, contextKey(parameter)))">{{ presetSource(values, contextKey(parameter)) }}</button>
-            </span>
             <DescriptionHelp :label="'About parameter ' + parameter.name" :description="parameter.description" />
           </div>
-          <input
-            v-if="values.has(contextKey(parameter))"
-            class="preset-value"
-            :id="`${parameterIdPrefix}-${index}`"
-            :aria-describedby="`${parameterIdPrefix}-${index}-preset`"
-            :value="values.get(contextKey(parameter))"
-            readonly
-            spellcheck="false"
-          >
+          <div v-if="values.has(key)" class="preset-field"
+            :style="{ '--preset-color': presetColors.get(source) ?? defaultPresetColor }">
+            <input
+              class="preset-value"
+              :id="`${parameterIdPrefix}-${index}`"
+              :aria-describedby="`${parameterIdPrefix}-${index}-preset`"
+              :value="values.get(key)"
+              readonly
+              spellcheck="false"
+            >
+            <button v-if="source" type="button" class="preset-stamp"
+              :id="`${parameterIdPrefix}-${index}-preset`"
+              :aria-label="`Edit preset ${source}`" :title="`Edit preset ${source}`"
+              @click="emit('edit-preset', source)">{{ source }}</button>
+            <span v-else class="preset-stamp" :id="`${parameterIdPrefix}-${index}-preset`">Preset</span>
+          </div>
           <template v-else>
             <slot name="parameter-input" :parameter="parameter" :hint="parameterHint(parameter)" :id="`${parameterIdPrefix}-${index}`">
               <input :id="`${parameterIdPrefix}-${index}`" v-model="session.fields[fieldKey(parameter)]"
@@ -344,8 +351,6 @@ function parameterHint(parameter) {
 .parameter-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-bottom: .35rem; }
 .parameter-heading .field-label { display: block; min-width: 0; font-size: .88rem; font-weight: 650; overflow-wrap: anywhere; }
 .parameter-heading .description-help { margin-left: auto; }
-.preset-origin { display: flex; align-items: center; gap: .2rem; min-width: 0; max-width: 100%; font-size: .75rem; white-space: nowrap; }
-.preset-origin .preset-link { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: inherit; padding-block: 0; }
 
 .settings-error { margin:.5rem .85rem; font-size:.8rem; }
 .runner {
@@ -407,12 +412,40 @@ function parameterHint(parameter) {
 .field-label span { font-weight: 650; font-size: .88rem; }
 .field-label small { margin-left: .4rem; color: var(--muted); font-weight: 400; }
 .field > input, .field-label textarea { width: 100%; }
-.field > .preset-value {
-  width: auto;
+.preset-field {
+  position: relative;
+  width: fit-content;
   min-width: min(12rem, 100%);
   max-width: 100%;
-  field-sizing: content;
+  margin-bottom: .5rem;
 }
+.preset-field .preset-value {
+  display: block;
+  width: auto;
+  min-width: 100%;
+  max-width: 100%;
+  field-sizing: content;
+  padding-bottom: .75rem;
+  border-color: var(--preset-color);
+}
+.preset-stamp {
+  position: absolute;
+  right: .45rem;
+  bottom: 0;
+  transform: translateY(40%);
+  max-width: calc(100% - .9rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: .1rem .4rem;
+  border: 1px solid var(--preset-color);
+  border-radius: .3rem;
+  background: color-mix(in srgb, var(--preset-color) 24%, var(--surface));
+  font-size: .7rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+button.preset-stamp:hover { background: color-mix(in srgb, var(--preset-color) 34%, var(--surface)); }
 .field-label textarea {
   field-sizing: content;
   min-height: min(4.5rem, var(--body-height-limit, 70dvh));
