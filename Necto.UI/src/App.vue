@@ -860,28 +860,36 @@ function removeScenario(id) {
           <small v-else-if="!visiblePresetNames.some(name => activePresetNames.includes(name))">None apply to this request; related requests may still use them.</small>
         </template>
       </section>
-      <div :inert="settingsOpen" v-show="!graphView" class="layout navigation-layout" :style="{ '--catalog-width': catalogOpen ? catalogWidth + 'px' : '0px' }">
-        <div v-show="catalogOpen" class="catalog-container">
-          <div class="catalog-controls">
-            <button type="button" class="secondary" aria-label="Hide endpoint catalog" @click="catalogOpen = false">Hide catalog</button>
-            <details class="catalog-size"><summary>Width</summary><label>Catalog width <input v-model.number="catalogWidth" type="range" min="180" max="360" step="10"></label></details>
+      <div :inert="settingsOpen" v-show="!graphView" class="layout navigation-layout" :class="{ 'catalog-collapsed': !catalogOpen }" :style="{ '--catalog-width': catalogWidth + 'px' }">
+        <div class="catalog-sidebar">
+          <button
+            type="button"
+            class="catalog-toggle"
+            :aria-expanded="catalogOpen"
+            aria-controls="endpoint-catalog"
+            :aria-label="catalogOpen ? 'Collapse endpoint catalog' : 'Expand endpoint catalog'"
+            :title="catalogOpen ? 'Collapse endpoint catalog' : 'Expand endpoint catalog'"
+            @click="catalogOpen = !catalogOpen"
+          >
+            <span aria-hidden="true">{{ catalogOpen ? '‹' : '›' }}</span>
+          </button>
+          <div v-show="catalogOpen" id="endpoint-catalog" class="catalog-container">
+            <div class="catalog-controls">
+              <details class="catalog-size"><summary>Width</summary><label>Catalog width <input v-model.number="catalogWidth" type="range" min="180" max="360" step="10"></label></details>
+            </div>
+            <EndpointCatalog :inert="scenarioPending"
+              :groups="groups"
+              :external-count="connections.length" :show-external="showExternalApis" :external-loading="externalPending"
+              @toggle-external="showExternalApis = $event"
+              :active-group="current?.group ?? ''"
+              :active-operation="current?.operation.key ?? ''"
+              @select-operation="selectCatalogOperation"
+            >
+              <template #actions><OperationTasks :configuration="configuration" :authentication="authentication" :operations="operations" @open-operation="operation => selectCatalogOperation(operation, operation.tags[0])" /><CurlImport :operations="operations" :configuration="configuration" :disabled="scenarioBusy" @import="loadCurlDraft" /></template>
+            </EndpointCatalog>
           </div>
-        <EndpointCatalog :inert="scenarioPending"
-          :groups="groups"
-          :external-count="connections.length" :show-external="showExternalApis" :external-loading="externalPending"
-          @toggle-external="showExternalApis = $event"
-          :active-group="current?.group ?? ''"
-          :active-operation="current?.operation.key ?? ''"
-          @select-operation="selectCatalogOperation"
-        >
-          <template #actions><OperationTasks :configuration="configuration" :authentication="authentication" :operations="operations" @open-operation="operation => selectCatalogOperation(operation, operation.tags[0])" /><CurlImport :operations="operations" :configuration="configuration" :disabled="scenarioBusy" @import="loadCurlDraft" /></template>
-        </EndpointCatalog>
-
         </div>
         <div ref="workArea" class="work-area">
-          <div v-if="!catalogOpen" class="workspace-tools">
-            <button type="button" class="secondary" aria-label="Show endpoint catalog" @click="catalogOpen = true">Endpoints</button>
-          </div>
           <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
           <article v-if="current && !pendingRoute" :inert="scenarioPending" aria-labelledby="endpoint-title">
             <div v-if="chain.length > 1 || editingScenario" class="chain-header">
@@ -1082,22 +1090,25 @@ body { margin: 0; background: #eef2ee; }
   grid-template-columns: clamp(14rem, 23vw, 18rem) minmax(0, 1fr);
 }
 .navigation-layout { grid-template-columns: var(--catalog-width, 240px) minmax(0, 1fr); }
-.navigation-layout > .work-area { grid-column: 2; }
-.catalog-container { min-width: 0; min-height: 0; overflow: auto; border-right: 1px solid var(--line); }
+.navigation-layout.catalog-collapsed { grid-template-columns: 2rem minmax(0, 1fr); }
+.catalog-sidebar { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--line); }
+.catalog-toggle { position: absolute; inset: .25rem .25rem auto auto; display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; color: var(--accent); font-size: 1.5rem; line-height: 1; }
+.catalog-toggle:focus-visible { outline-offset: -3px; }
+.catalog-collapsed .catalog-toggle { position: static; place-items: start center; width: 100%; height: 100%; padding-top: .5rem; border-radius: 0; background: var(--surface); }
+.catalog-collapsed .catalog-toggle:hover { background: var(--accent-soft); }
+.catalog-container { min-width: 0; min-height: 0; overflow: auto; }
 .catalog-container .catalog { border-right: 0; overflow: visible; }
-.catalog-controls, .workspace-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
-.catalog-controls { padding: .5rem; font-size: .75rem; }
+.catalog-controls { display: flex; align-items: center; min-height: 2.5rem; padding: .5rem 2.5rem .5rem .5rem; font-size: .75rem; }
 .catalog-size { position: relative; }
 .catalog-size summary { cursor: pointer; }
 .catalog-size label { position: absolute; left: 0; z-index: 4; width: 11rem; padding: .5rem; background: var(--surface); border: 1px solid var(--line); }
 .catalog-size input { width: 100%; }
-.workspace-tools { margin-bottom: .5rem; font-size: .8rem; }
 @media (max-width: 760px) {
-  .navigation-layout { grid-template-columns: minmax(0, 1fr); }
-  .navigation-layout > .work-area { grid-column: 1; }
-  .catalog-size { display: none; }
-  .catalog-container { border-right: 0; border-bottom: 1px solid var(--line); }
-  .workspace-tools button { min-height: 44px; }
+  .navigation-layout, .navigation-layout.catalog-collapsed { grid-template-columns: minmax(0, 1fr); }
+  .catalog-sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
+  .catalog-toggle, .catalog-collapsed .catalog-toggle { position: static; place-items: center; width: 100%; height: 44px; padding: 0; }
+  .catalog-toggle span { transform: rotate(90deg); }
+  .catalog-controls { display: none; }
 }
 
 .work-area { overflow: auto; min-width: 0; padding: 1.5rem; background: var(--canvas); scroll-padding-block: 1rem; }
