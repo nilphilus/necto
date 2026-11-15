@@ -18,7 +18,6 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
-    app.MapNectoEndpointMappings();
     app.MapNectoEntityCatalog();
     app.MapNectoAgent();
     app.MapNectoOperationRoles();

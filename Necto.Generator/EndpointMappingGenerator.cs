@@ -293,7 +293,14 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
             using Microsoft.AspNetCore.Http;
             using Microsoft.AspNetCore.Routing;
 
+            [assembly: Necto.GeneratedNectoMappings]
+
             namespace Necto;
+
+            internal sealed class GeneratedNectoMappingsAttribute : NectoMappingsAttribute
+            {
+                public override void Map(IEndpointRouteBuilder endpoints) => endpoints.MapNectoEndpointMappings();
+            }
 
             internal static class GeneratedEndpointMappings
             {
@@ -324,9 +331,7 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
 
                 internal static RouteHandlerBuilder MapNectoEndpointMappings(
                     this IEndpointRouteBuilder endpoints, string pattern = "/necto/endpoint-mappings") =>
-                    EndpointMappingsMetadata.Register(endpoints,
-                        endpoints.MapGet(pattern, () => Results.Json(Mappings, System.Text.Json.JsonSerializerOptions.Web))
-                            .ExcludeFromDescription());
+                    EndpointMappingsMetadata.Map(endpoints, pattern, Mappings);
             }
             """);
         EmitEntityCatalog(context, ordered);

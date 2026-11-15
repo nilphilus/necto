@@ -42,6 +42,60 @@ public sealed class NectoUIMetadataTests
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/protected")).StatusCode);
     }
 
+    [Theory]
+    [InlineData("automatic")]
+    [InlineData("manual-before")]
+    [InlineData("manual-after")]
+    [InlineData("custom-before")]
+    [InlineData("custom-after")]
+    public async Task ConvenienceRegistrationServesGeneratedMappingsWithoutDuplicateRoutes(string mode)
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            ApplicationName = typeof(Program).Assembly.GetName().Name
+        });
+        builder.WebHost.UseTestServer();
+        await using var app = builder.Build();
+        var provider = System.Reflection.CustomAttributeExtensions
+            .GetCustomAttribute<NectoMappingsAttribute>(typeof(Program).Assembly)!;
+        const string custom = "/custom/mappings";
+        if (mode == "manual-before") provider.Map(app);
+        if (mode == "custom-before") EndpointMappingsMetadata.Map(app, custom, []);
+        app.UseNectoUI(endpointMappingsPath: mode == "custom-after" ? custom : null,
+            metadataAttribute: new SkipRequiredHeaderAttribute());
+        if (mode == "manual-after") provider.Map(app);
+        if (mode == "custom-after") EndpointMappingsMetadata.Map(app, custom, []);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+        var expected = mode.StartsWith("custom") ? custom : "/necto/endpoint-mappings";
+        var configuration = await client.GetFromJsonAsync<JsonObject>("/necto/configuration");
+        Assert.Equal(expected, configuration!["endpointMappingsUrl"]!.GetValue<string>());
+        var mappings = await client.GetFromJsonAsync<EndpointMapping[]>(expected);
+        if (!mode.StartsWith("custom")) Assert.NotEmpty(mappings!);
+        var routes = ((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)app).DataSources
+            .SelectMany(source => source.Endpoints)
+            .Where(endpoint => endpoint.Metadata.GetMetadata<EndpointMappingsMetadata>() is not null).ToArray();
+        Assert.Single(routes);
+        Assert.NotNull(routes[0].Metadata.GetMetadata<SkipRequiredHeaderAttribute>());
+    }
+
+    [Fact]
+    public async Task ManualUiRegistrationDoesNotExposeMappingsAutomatically()
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            ApplicationName = typeof(Program).Assembly.GetName().Name
+        });
+        builder.WebHost.UseTestServer();
+        await using var app = builder.Build();
+        app.MapNectoUI();
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+        var configuration = await client.GetFromJsonAsync<JsonObject>("/necto/configuration");
+        Assert.False(configuration!.ContainsKey("endpointMappingsUrl"));
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/necto/endpoint-mappings")).StatusCode);
+    }
+
     private sealed class SkipRequiredHeaderAttribute : Attribute;
 
     [Theory]

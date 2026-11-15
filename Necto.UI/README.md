@@ -271,15 +271,18 @@ if (app.Environment.IsDevelopment())
 }
 ```
 
+`UseNectoUI()` also registers the application’s source-generated mappings automatically at `/necto/endpoint-mappings`; it does not register the OpenAPI document. Existing mappings registered beforehand are reused. Passing `endpointMappingsPath` opts out of automatic registration for a manually managed route.
+
 The UI opens at `/necto/` and reads `/openapi/v1.json` by default. Both paths are relative to the ASP.NET Core application's path base. To use a different UI path and an existing OpenAPI endpoint, call `app.UseNectoUI(routePrefix: "/docs/api", openApiPath: "/swagger/v1/swagger.json")`.
 
 Use `MapNectoUI` in place of `UseNectoUI` to attach ASP.NET Core endpoint metadata to all UI routes, including the configuration and assets. Replace `SkipRequiredHeaderAttribute` with the attribute your header validation recognizes.
 
 ```csharp
+app.MapNectoEndpointMappings().WithMetadata(new SkipRequiredHeaderAttribute());
 app.MapNectoUI().WithMetadata(new SkipRequiredHeaderAttribute());
 ```
 
-To apply the same attribute to the UI and routes registered with `MapNectoEndpointMappings`, call `app.UseNectoUI(metadataAttribute: new SkipRequiredHeaderAttribute())`. The mappings route can be registered before or after the UI. For OpenAPI JSON, agent routes, or a custom mappings route registered with `MapGet`, apply metadata on that route's registration.
+To apply the same attribute to the UI and routes registered with `MapNectoEndpointMappings`, call `app.UseNectoUI(metadataAttribute: new SkipRequiredHeaderAttribute())`. The default generated mappings route can still be registered before or after the UI without duplication. Register a custom path before the UI, or supply `endpointMappingsPath` when registering it afterwards. For OpenAPI JSON, agent routes, or a custom mappings route registered with `MapGet`, apply metadata on that route's registration.
 
 ## Development
 

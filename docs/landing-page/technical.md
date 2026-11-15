@@ -12,16 +12,15 @@ dotnet add package Necto.OpenApi
 
 ### Existing application
 
-Keep your existing OpenAPI service and document registrations. Add only the missing Necto registrations after `builder.Build()`:
+Keep your existing OpenAPI service and document registrations. Add Necto once after `builder.Build()`:
 
 ```csharp
-app.MapNectoEndpointMappings();
 app.UseNectoUI();
 ```
 
-Register each route once. `MapNectoEndpointMappings()` exposes relationship metadata; `UseNectoUI()` serves the workspace. They work together. `MapOpenApi()` serves the OpenAPI document: keep your existing call rather than adding another for the same document route. If that route differs from `/openapi/v1.json`, pass it as `openApiPath`.
+`UseNectoUI()` serves the workspace and registers the application’s generated relationship mappings automatically. It reuses mappings registered beforehand. `MapOpenApi()` serves the OpenAPI document: keep your existing call rather than adding another for the same document route. If that route differs from `/openapi/v1.json`, pass it as `openApiPath`.
 
-`MapNectoUI()` is an alternative to `UseNectoUI()` when you need endpoint conventions such as `.RequireAuthorization()`. Use one of them for a given UI path.
+`MapNectoUI()` is an alternative to `UseNectoUI()` when you need endpoint conventions such as `.RequireAuthorization()`. Use one of them for a given UI path. With manual UI registration, also register the mappings explicitly.
 
 ### New application
 
@@ -39,7 +38,6 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.MapNectoEndpointMappings();
     app.UseNectoUI();
 }
 
