@@ -15,14 +15,14 @@ public static class NectoAccessHints
             if(operation.OperationId is null || !registry.TryGetValue(operation.OperationId,out var declaration))return;
             var metadata=context.Description.ActionDescriptor.EndpointMetadata;
             var authorize=metadata.OfType<IAuthorizeData>().ToArray();
-            var anonymous=metadata.OfType<IAllowAnonymous>().Any() || declaration.Anonymous;
+            var anonymous=metadata.Count>0?metadata.OfType<IAllowAnonymous>().Any():declaration.Anonymous;
             var dynamicPolicy=metadata.OfType<AuthorizationPolicy>().Any();
-            if(!anonymous && authorize.Length==0 && declaration.Rules.Length==0 && !dynamicPolicy)
+            if(!anonymous && authorize.Length==0 && (metadata.Count>0 || declaration.Rules.Length==0) && !dynamicPolicy)
             {
                 var provider=context.ApplicationServices.GetService<IAuthorizationPolicyProvider>();
                 dynamicPolicy=provider is not null && await provider.GetFallbackPolicyAsync() is not null;
             }
-            var rules=authorize.Length>0?authorize.Select(item=>new NectoAccessRule(item.Policy,item.Roles,item.AuthenticationSchemes)).ToArray():declaration.Rules;
+            var rules=metadata.Count>0?authorize.Select(item=>new NectoAccessRule(item.Policy,item.Roles,item.AuthenticationSchemes)).ToArray():declaration.Rules;
             operation.Extensions??=new Dictionary<string,IOpenApiExtension>();
             operation.Extensions.TryAdd("x-necto-access",new JsonNodeExtension(Describe(anonymous,rules,dynamicPolicy)));
         });return options;
