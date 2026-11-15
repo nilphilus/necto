@@ -344,7 +344,7 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
         if(attribute?.ConstructorArguments.FirstOrDefault().Value is not INamedTypeSymbol target)return null;
         var name=attribute.ConstructorArguments.Length>1?attribute.ConstructorArguments[1].Value as string:"Id";
         var destination=JsonProperties(target).FirstOrDefault(item=>item.Name==name);
-        if(destination is null || !SymbolEqualityComparer.Default.Equals(NonNullable(property.Type),NonNullable(destination.Type)))return null;
+        if(destination is null || Attribute(destination,"System.Text.Json.Serialization.JsonConverterAttribute") is not null || !SymbolEqualityComparer.Default.Equals(NonNullable(property.Type),NonNullable(destination.Type)))return null;
         return new(target.ToDisplayString(),destination.Name,JsonName(destination));
     }
 
