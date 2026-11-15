@@ -119,9 +119,11 @@ selectors allow response values to flow between configured services. See the
 ## Endpoint mappings
 
 Necto generates suggestions for reusing response values in other API requests. The
-NuGet package includes a Roslyn source generator. Call
-`app.MapNectoEndpointMappings()` to expose the generated suggestions alongside
-your OpenAPI document. The default path is `/necto/endpoint-mappings`.
+NuGet package includes a Roslyn source generator. `app.UseNectoUI()` automatically
+exposes the application’s generated suggestions at `/necto/endpoint-mappings`.
+For manual configuration, use `app.MapNectoEndpointMappings()` alongside
+`app.MapNectoUI()`; both return builders for endpoint metadata. Register custom
+mappings before `UseNectoUI()`, or pass `endpointMappingsPath` to manage the route yourself.
 Necto UI discovers a single registered mappings route. For a custom JSON endpoint
 or multiple registered mappings routes, pass the desired path as
 `endpointMappingsPath` to `UseNectoUI` or `MapNectoUI`.

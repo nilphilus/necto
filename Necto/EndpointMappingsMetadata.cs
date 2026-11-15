@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Http;
 
 namespace Necto;
 
@@ -20,6 +21,21 @@ public sealed class EndpointMappingsMetadata
         return route;
     }
 
+    /// <summary>Maps generated values once per route builder and path, preserving endpoint conventions.</summary>
+    public static RouteHandlerBuilder Map(IEndpointRouteBuilder endpoints, string pattern, EndpointMapping[] mappings)
+    {
+        var conventions = Conventions.GetOrCreateValue(endpoints.ServiceProvider);
+        var key = (endpoints, pattern);
+        if (conventions.GeneratedRoutes.TryGetValue(key, out var existing)) return existing;
+        var route = Register(endpoints, endpoints.MapGet(pattern,
+            () => Results.Json(mappings, System.Text.Json.JsonSerializerOptions.Web)).ExcludeFromDescription());
+        conventions.GeneratedRoutes.Add(key, route);
+        return route;
+    }
+
+    internal static bool HasMappings(IServiceProvider services) =>
+        Conventions.TryGetValue(services, out var conventions) && conventions.Routes.Count > 0;
+
     internal static void ApplyAttribute(IServiceProvider services, Attribute attribute)
     {
         var conventions = Conventions.GetOrCreateValue(services);
@@ -30,6 +46,7 @@ public sealed class EndpointMappingsMetadata
 
     private sealed class RouteConventions
     {
+        public Dictionary<(IEndpointRouteBuilder, string), RouteHandlerBuilder> GeneratedRoutes { get; } = [];
         public List<Attribute> Attributes { get; } = [];
         public List<RouteHandlerBuilder> Routes { get; } = [];
     }
