@@ -137,3 +137,12 @@ test('a newer documentation authorization replaces a conflicting transport while
   globalThis.fetch = async (url, options) => { assert.equal(options.headers.get('Authorization'), 'Bearer new'); assert.equal(options.headers.get('X-Key'), 'key-secret'); return { ok: true } }
   try { await store.metadataFetch(configuration.openApiUrl) } finally { globalThis.fetch = previous }
 })
+
+test('anonymous and undeclared security cannot enable redirects for manual keys or presets', () => {
+  for (const security of [null, [], [{}]]) {
+    const result = authorizeRequest({ ...request(origin + '/redirect', { 'X-API-Key': 'manual-secret' }),
+      options: { ...request().options, headers: new Headers({ 'X-API-Key': 'manual-secret' }), redirect: 'follow' } }, operation(security), {})
+    assert.equal(result.options.redirect, 'error')
+    assert.equal(result.options.headers.get('X-API-Key'), 'manual-secret')
+  }
+})
