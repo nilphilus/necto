@@ -43,6 +43,7 @@ onScopeDispose(() => media?.removeEventListener('change', resize))
 </template>
 <style scoped>
 .next-requests { min-width: 0; }
+.next-requests.pinned { --value-suggestions-position: static; }
 .next-request-trigger { font-size: .8rem; }
 .next-requests > header, .next-request-dialog > header { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: space-between; align-items: center; margin-bottom: .5rem; }
 .next-requests > header { font-size: .8rem; }

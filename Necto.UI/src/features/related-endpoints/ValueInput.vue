@@ -1,10 +1,11 @@
 <script setup>
-import { computed, nextTick, ref, useId } from 'vue'
+import { computed, nextTick, ref, useId, watch } from 'vue'
 defineOptions({ inheritAttrs: false })
 const props = defineProps({ modelValue: { default: '' }, choices: { type: Array, default: () => [] }, dropdown: Boolean, searchableResponse: Boolean })
 const emit = defineEmits(['update:modelValue', 'choose', 'search-response'])
 const id = useId()
 const input = ref(null)
+const popup = ref(null)
 const open = ref(false)
 const query = ref('')
 const active = ref(-1)
@@ -13,6 +14,12 @@ const options = computed(() => [...new Set(props.choices.map(optionValue))])
 const matches = computed(() => options.value.filter(value => value.toLowerCase().includes(query.value.toLowerCase())))
 const activeValue = computed(() => matches.value[active.value])
 const optionId = index => `${id}-option-${index}`
+
+watch(popup, element => {
+  if (element && getComputedStyle(element).position === 'static') {
+    element.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }
+}, { flush: 'post' })
 
 function update(value) {
   emit('update:modelValue', value)
@@ -80,19 +87,19 @@ async function navigate(event) {
           @input="search" @click="open = true" @blur="close" @keydown="navigate">
         <button type="button" class="toggle" tabindex="-1" :aria-label="open ? 'Hide suggestions' : 'Show suggestions'"
           @pointerdown.prevent @click="toggle"><span aria-hidden="true">▾</span></button>
-        <div v-if="open" class="popup">
-          <ul :id="id + '-list'" role="listbox" aria-label="Suggested values">
-            <li v-for="(value, index) in matches" :id="optionId(index)" :key="value" role="option"
-              :aria-selected="active === index" @mousedown.prevent @click="select(value)">
-              <span>{{ value }}</span>
-              <span v-if="value === modelValue" class="check" aria-hidden="true">✓</span>
-            </li>
-          </ul>
-          <p v-if="!matches.length" role="status">No matching suggestions</p>
-          <button v-if="!matches.length && query.trim() && searchableResponse" type="button" class="search-response" @pointerdown.prevent @click="emit('search-response', query); close()">Search whole response</button>
-        </div>
       </div>
       <slot name="trailing" />
+    </div>
+    <div v-if="open" ref="popup" class="popup">
+      <ul :id="id + '-list'" role="listbox" aria-label="Suggested values">
+        <li v-for="(value, index) in matches" :id="optionId(index)" :key="value" role="option"
+          :aria-selected="active === index" @mousedown.prevent @click="select(value)">
+          <span>{{ value }}</span>
+          <span v-if="value === modelValue" class="check" aria-hidden="true">✓</span>
+        </li>
+      </ul>
+      <p v-if="!matches.length" role="status">No matching suggestions</p>
+      <button v-if="!matches.length && query.trim() && searchableResponse" type="button" class="search-response" @pointerdown.prevent @click="emit('search-response', query); close()">Search whole response</button>
     </div>
   </div>
   <template v-else>
@@ -105,7 +112,7 @@ async function navigate(event) {
 </template>
 
 <style scoped>
-.dropdown { display: grid; gap: .25rem; min-width: 0; }
+.dropdown { position: relative; display: grid; gap: .25rem; min-width: 0; }
 .control { display: flex; min-width: 0; border: 1px solid #a2b2a9; border-radius: .5rem; background: var(--surface); }
 .control:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .picker { position: relative; display: grid; flex: 1 1 auto; min-width: 0; }
@@ -134,7 +141,7 @@ async function navigate(event) {
 .toggle { position: absolute; inset: 1px 1px 1px auto; width: 1.8rem; color: var(--accent); }
 .toggle[aria-expanded="true"] span { display: inline-block; transform: rotate(180deg); }
 .popup {
-  position: absolute;
+  position: var(--value-suggestions-position, absolute);
   z-index: 2;
   inset: calc(100% + .2rem) 0 auto;
   max-height: 14rem;
