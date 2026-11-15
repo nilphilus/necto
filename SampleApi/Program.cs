@@ -78,6 +78,8 @@ app.MapGet("/invoices/{invoiceId:int}/xml-document", Results<Ok<InvoiceXmlPayloa
     .WithSummary("Invoice with an embedded XML document")
     .WithDescription("Open XML preview beside document. The surrounding JSON object remains selectable for related requests.");
 
+app.MapGet("/invoices/related-model", () => new RelatedInvoice(42, new CustomerId(17))).WithName("RelatedInvoice").WithTags("Invoices");
+
 var summaries = new[]
 {
     "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
@@ -226,3 +228,5 @@ record CustomerSearch(CustomerId SelectedCustomer);
 public partial class Program;
 
 record InvoiceXmlPayload([property: EndpointValue("invoiceId")] int Id, string Reference, string Document);
+
+record RelatedInvoice(int Id, [property: NectoRelation(typeof(Customer))] CustomerId CustomerId);
