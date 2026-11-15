@@ -1,6 +1,11 @@
 using Necto.Generator;
 public sealed class FieldConstraintGeneratorTests
 {
+    [Fact] public void ReadsReachableDtosFromAReferencedAssembly()
+    {
+        var result=ContractGeneratorFixture.Generate(new FieldConstraintsGenerator(), "app.MapGet(\"/shared\",()=>new Shared.Input(\"x\")).WithName(\"Shared\");", "namespace Shared { public record Input([property:System.ComponentModel.DataAnnotations.StringLength(17)] string Code); }");
+        Assert.Contains("StringLengthAttribute",result.GeneratedTrees.Single().ToString());
+    }
     [Fact] public void EmitsSupportedAttributesWithClrNamesAndEscapedPatterns()
     {
         var result=ContractGeneratorFixture.Generate(new FieldConstraintsGenerator(),"""
