@@ -821,7 +821,7 @@ function removeScenario(id) {
                 </div>
               </div>
             </section>
-            <WorkspaceSettings v-show="settingsTab === 'workspace'" :import-document="importDocument" :document-source="documentSource" :restore-document="restoreServerDocument" :operations="operations" />
+            <WorkspaceSettings v-show="settingsTab === 'workspace'" v-model:catalog-width="catalogWidth" :import-document="importDocument" :document-source="documentSource" :restore-document="restoreServerDocument" :operations="operations" />
             <ExternalApiSettings v-show="settingsTab === 'connections'" v-model:show="showExternalApis" :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
               :save="externalApis.saveConnection" :remove="externalApis.removeConnection" :test="externalApis.testConnection" />
           </div>
@@ -874,9 +874,6 @@ function removeScenario(id) {
             <span aria-hidden="true">{{ catalogOpen ? '‹' : '›' }}</span>
           </button>
           <div v-show="catalogOpen" id="endpoint-catalog" class="catalog-container">
-            <div class="catalog-controls">
-              <details class="catalog-size"><summary>Width</summary><label>Catalog width <input v-model.number="catalogWidth" type="range" min="180" max="360" step="10"></label></details>
-            </div>
             <EndpointCatalog :inert="scenarioPending"
               :groups="groups"
               :external-count="connections.length" :show-external="showExternalApis" :external-loading="externalPending"
@@ -1091,24 +1088,18 @@ body { margin: 0; background: #eef2ee; }
 }
 .navigation-layout { grid-template-columns: var(--catalog-width, 240px) minmax(0, 1fr); }
 .navigation-layout.catalog-collapsed { grid-template-columns: 2rem minmax(0, 1fr); }
-.catalog-sidebar { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--line); }
-.catalog-toggle { position: absolute; inset: .25rem .25rem auto auto; display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; color: var(--accent); font-size: 1.5rem; line-height: 1; }
+.catalog-sidebar { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--line); }
+.catalog-toggle { display: grid; place-items: center; flex: none; align-self: flex-end; width: 2rem; height: 2rem; margin: .25rem; padding: 0; color: var(--accent); font-size: 1.5rem; line-height: 1; }
 .catalog-toggle:focus-visible { outline-offset: -3px; }
-.catalog-collapsed .catalog-toggle { position: static; place-items: start center; width: 100%; height: 100%; padding-top: .5rem; border-radius: 0; background: var(--surface); }
+.catalog-collapsed .catalog-toggle { place-items: start center; width: 100%; height: 100%; margin: 0; padding-top: .5rem; border-radius: 0; background: var(--surface); }
 .catalog-collapsed .catalog-toggle:hover { background: var(--accent-soft); }
 .catalog-container { min-width: 0; min-height: 0; overflow: auto; }
 .catalog-container .catalog { border-right: 0; overflow: visible; }
-.catalog-controls { display: flex; align-items: center; min-height: 2.5rem; padding: .5rem 2.5rem .5rem .5rem; font-size: .75rem; }
-.catalog-size { position: relative; }
-.catalog-size summary { cursor: pointer; }
-.catalog-size label { position: absolute; left: 0; z-index: 4; width: 11rem; padding: .5rem; background: var(--surface); border: 1px solid var(--line); }
-.catalog-size input { width: 100%; }
 @media (max-width: 760px) {
   .navigation-layout, .navigation-layout.catalog-collapsed { grid-template-columns: minmax(0, 1fr); }
   .catalog-sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
-  .catalog-toggle, .catalog-collapsed .catalog-toggle { position: static; place-items: center; width: 100%; height: 44px; padding: 0; }
+  .catalog-toggle, .catalog-collapsed .catalog-toggle { place-items: center; width: 100%; height: 44px; margin: 0; padding: 0; }
   .catalog-toggle span { transform: rotate(90deg); }
-  .catalog-controls { display: none; }
 }
 
 .work-area { overflow: auto; min-width: 0; padding: 1.5rem; background: var(--canvas); scroll-padding-block: 1rem; }
