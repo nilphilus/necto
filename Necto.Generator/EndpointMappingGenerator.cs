@@ -313,7 +313,7 @@ public sealed class EndpointMappingGenerator : IIncrementalGenerator
             var objectPath = source.ObjectPath is null ? "" : " { ObjectPath = new string?[] { "
                 + string.Join(", ", source.ObjectPath.Select(Literal)) + " } }";
             code.AppendLine($"        new(new ResponseValue({Literal(producer.Id)}, {(source.EachItem ? "true" : "false")}, {Literal(source.WireName)}){objectPath}, "
-                + $"new({Literal(consumer.Id)}, {Literal(target.Location)}, {Literal(target.WireName)}), {Literal(match)}, {Literal(suggestion)}),");
+                + $"new({Literal(consumer.Id)}, {Literal(target.Location)}, {Literal(target.WireName)}), {Literal(match)}, {Literal(suggestion)}) {{ Evidence = new({Literal(source.Type.ToDisplayString())}, {Literal(target.Type.ToDisplayString())}, {Literal(source.ConventionName)}, {Literal(target.ConventionName)}, {Literal(source.Key ?? target.Key)}) }},");
         }
         code.AppendLine("""
                 };

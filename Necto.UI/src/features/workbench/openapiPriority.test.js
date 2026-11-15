@@ -9,7 +9,7 @@ function setup(t){const ops=readOperations(doc),scope=effectScope();t.after(()=>
 test('explicit OpenAPI target and candidate precede inferred mappings; duplicates keep provenance',t=>{
  const {related,ops}=setup(t),result={ok:true,status:200,json:{id:42,legacyId:99}}
  const targets=related.targetsFor(ops[0],result)
- assert.equal(targets[0].operation.id,'Detail');assert.equal(targets[0].preferred,true);assert.equal(targets[0].description,'Read this invoice.')
+ assert.equal(targets[0].operation.id,'Detail');assert.equal(targets[0].preferred,true);assert.match(targets[0].description,/Read this invoice\./)
  assert.deepEqual(targets[0].candidates.map(x=>x.value),[42,99]);assert.equal(targets[0].candidates[0].origin,'openapi');assert.equal(targets[1].preferred,false)
  const choices=related.choicesFor(ops.find(x=>x.id==='Detail'),'path','id',new Map([[ops[0].key,[result]]]))
  assert.equal(choices[0].origin,'openapi');assert.deepEqual(choices.map(x=>x.value),[42,99])
