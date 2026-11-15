@@ -7,10 +7,11 @@ using Microsoft.CodeAnalysis.Operations;
 namespace Necto.Generator;
 
 [Generator]
-public sealed class EndpointMappingGenerator : IIncrementalGenerator
+public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        RegisterDiagnostics(context);
         var endpoints = context.SyntaxProvider.CreateSyntaxProvider(
             static (node, _) => node is InvocationExpressionSyntax
             {
