@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Follow response values into your next API request. Explore connected endpoints, replay workflows, and navigate large JSON responses with Necto for ASP.NET Core.">
+  <meta name="theme-color" content="#173f35">
+  <title>Necto — Follow the data. Test the whole flow.</title>
+  <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="landing.css">
+  <script src="landing.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header wrap">
+    <a class="brand" href="index.html" aria-label="Necto home"><img src="assets/mark.svg" alt="" width="34" height="34">necto<span class="brand-dot">.</span></a>
+    <nav aria-label="Main navigation"><a href="#workflow">The workflow</a><a href="#developers">For developers</a><a class="nav-github" href="https://github.com/nilphilus/necto">GitHub <span aria-hidden="true">↗︎</span></a></nav>
+  </header>
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="small-mark" aria-hidden="true"></span> OpenAPI UI with a backbone.</p>
+        <h1 id="hero-title">Follow the data.<br><span>Test the whole flow.</span></h1>
+        <p class="hero-intro">Select an object. Carry its values into your next request. Save the journey and run it again.</p>
+        <ul class="hero-benefits"><li>Less copying IDs</li><li>Repeatable workflows</li><li>Room for the response</li></ul>
+        <div class="hero-actions"><a class="button primary" href="#walkthrough">Try the workflow <span aria-hidden="true">→</span></a><a class="button text-button" href="#developers">Add to your API <span aria-hidden="true">→</span></a></div>
+        <p class="hero-note">Built for developers and QA working with ASP.NET Core APIs.</p>
+      </div>
+      <div id="walkthrough" class="flow-demo" aria-label="Interactive invoice workflow example">
+        <div class="demo-topline"><span><span class="live-dot" aria-hidden="true"></span> A response worth following</span><span class="demo-label">Interactive example</span></div>
+        <div class="demo-request"><span class="method">GET</span><code id="demo-path">/invoices</code><span class="demo-status">200 OK</span></div>
+        <div class="demo-json" aria-label="Example JSON response"><span class="muted-code">[</span><div class="demo-object" id="demo-object"><span class="muted-code">{</span><div><span class="json-key">"id"</span>: <span class="json-number" id="demo-id">42</span>,</div><div><span class="json-key">"reference"</span>: <span class="json-string" id="demo-reference">"INV-42"</span>,</div><div><span class="json-key">"total"</span>: <span class="json-number">510</span></div><span class="muted-code">}</span><button type="button" id="select-example" aria-pressed="false">Select invoice <span aria-hidden="true">+</span></button></div><span class="muted-code">]</span></div>
+        <div class="flow-connector"><span aria-hidden="true">↓</span><p id="demo-hint" role="status" aria-live="polite">Select the invoice to carry its ID forward.</p></div>
+        <div class="demo-next"><div><span class="method">GET</span><strong>Invoice lines</strong><span class="connected-tag" id="connected-tag" hidden>Connected</span></div><label for="next-invoice">invoiceId <small>from the selected response</small></label><div class="next-input"><input id="next-invoice" value="" placeholder="Waiting for a selection" readonly><button type="button" id="next-example" disabled>Next request <span aria-hidden="true">→</span></button></div></div>
+        <div class="demo-result" id="demo-result" hidden><strong>42 → 17</strong><p>Invoice 42 has a line with ID 17. Necto can carry that line's ID into its details request, too.</p><button type="button" class="reset-example" id="reset-example">Start again ↺</button></div>
+        <p class="demo-footnote">Sample data. This example does not call an API.</p>
+      </div>
+    </section>
+
+    <section id="workflow" class="product-section wrap" aria-labelledby="product-title">
+      <div class="section-heading"><div><p class="eyebrow">Your API, connected</p><h2 id="product-title">One answer.<br>More ways forward.</h2></div><p>Go from “what did I get?” to “what can I do next?”<br class="desktop-break"> Keep the data, the context, and the next step together.</p></div>
+      <div class="product-tabs" role="tablist" aria-label="Explore Necto features">
+        <button type="button" role="tab" id="tab-workflow" aria-controls="product-panel" aria-selected="true" data-feature="workflow"><span>01</span> Follow the data</button>
+        <button type="button" role="tab" id="tab-scenarios" aria-controls="product-panel" aria-selected="false" tabindex="-1" data-feature="scenarios"><span>02</span> Replay the flow</button>
+        <button type="button" role="tab" id="tab-search" aria-controls="product-panel" aria-selected="false" tabindex="-1" data-feature="search"><span>03</span> Find your object</button>
+        <button type="button" role="tab" id="tab-graph" aria-controls="product-panel" aria-selected="false" tabindex="-1" data-feature="graph"><span>04</span> See the connections</button>
+      </div>
+      <div class="product-frame" id="product-panel" role="tabpanel" aria-labelledby="tab-workflow" tabindex="0">
+        <div class="frame-bar"><span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>Necto / Sample API · main</span><button type="button" id="expand-screenshot">Expand image <span aria-hidden="true">+</span></button></div>
+        <img id="product-image" src="assets/workflow.png" alt="Necto showing a selected invoice and its response values." width="1366" height="768" loading="lazy">
+      </div>
+      <div class="feature-caption" aria-live="polite"><h3 id="feature-title">The right value. Already in the next request.</h3><p id="feature-description">Select an invoice, choose a related request, and carry its ID forward. Open the form to review or edit before sending.</p><a id="feature-link" href="technical.html#connections">How connections work <span aria-hidden="true">→</span></a></div>
+    </section>
+
+    <section class="possibilities wrap" aria-labelledby="context-title">
+      <div class="context-heading"><p class="eyebrow">Make it your workspace</p><h2 id="context-title">Set the context.<br>Keep your momentum.</h2></div>
+      <div class="extra-features">
+        <article><span class="feature-symbol" aria-hidden="true">⌘</span><h3>Presets that travel with you</h3><p>Reuse headers and parameters across requests. Switch tenant or environment without filling the same fields again.</p></article>
+        <article><span class="feature-symbol" aria-hidden="true">⇄</span><h3>More than one API</h3><p>Bring in external OpenAPI documents and Necto mappings. Follow connected values across configured services.</p></article>
+        <article><span class="feature-symbol" aria-hidden="true">✳</span><h3>Bring your own agent</h3><p>Give your MCP-capable agent the API context. Keep your own model, HTTP tools, and credentials.</p><a href="technical.html#agent">Explore the MCP bridge →</a></article>
+      </div>
+    </section>
+
+    <section id="developers" class="developer-section" aria-labelledby="developer-title"><div class="developer-inner wrap">
+      <div><p class="eyebrow">At home in ASP.NET Core</p><h2 id="developer-title">Your API.<br>One more useful route.</h2><p>Necto ships its UI in the .NET package and reads your OpenAPI document. Serve the workspace alongside the API you already have.</p><ul><li>No separate frontend deployment</li><li>Connections informed by your C# code</li><li>A short path from install to first request</li></ul><a class="button light-button" href="technical.html">Read the setup guide <span aria-hidden="true">→</span></a></div>
+      <div class="setup-code"><div class="code-heading"><span>Get started</span><span>ASP.NET Core · .NET 10</span></div><div class="install-line"><code>dotnet add package Necto.OpenApi</code><button type="button" class="copy-button" data-copy="install">Copy</button></div><div class="code-file"><span>Program.cs</span><button type="button" class="copy-button" data-copy="setup">Copy</button></div><pre><code><span class="code-comment">// With OpenAPI already configured</span>
+app.<span class="code-call">MapOpenApi</span>();
+app.<span class="code-call">MapNectoEndpointMappings</span>();
+app.<span class="code-call">UseNectoUI</span>();</code></pre><div class="code-footer"><span class="live-dot" aria-hidden="true"></span> Open <code>/necto/</code> and follow your first response.</div></div>
+    </div></section>
+
+    <aside class="name-origin wrap" aria-labelledby="name-origin-title"><h2 id="name-origin-title">Why Necto?</h2><p>From the Latin <a href="https://cld.bbaw.de/lemma/lat/necto" lang="la">nectō</a> — “I bind” or “I connect.” A name for what we do: connect responses, values, and your next request.</p></aside>
+    <section class="last-call wrap"><p class="eyebrow">Start with a single response</p><h2>See where your API can take you.</h2><div><a class="button primary" href="technical.html#quickstart">Get started <span aria-hidden="true">→</span></a><a class="button text-button" href="https://github.com/nilphilus/necto">Explore on GitHub ↗︎</a></div></section>
+  </main>
+  <footer class="site-footer wrap"><a class="brand" href="index.html"><img src="assets/mark.svg" alt="" width="26" height="26">necto<span class="brand-dot">.</span></a><p>OpenAPI UI with a backbone.</p><nav aria-label="Footer"><a href="technical.html">Technical guide</a><a href="https://github.com/nilphilus/necto/blob/main/LICENSE.txt">License</a><a href="https://www.nuget.org/packages/Necto.OpenApi">NuGet ↗︎</a></nav></footer>
+  <dialog id="image-viewer" class="image-viewer" aria-labelledby="viewer-title"><header><h2 id="viewer-title">Necto workflow</h2><button type="button" id="close-viewer">Close <span aria-hidden="true">×</span></button></header><img id="viewer-image" src="assets/workflow.png" alt="Full-size Necto workspace screenshot."></dialog>
+  <p class="copy-status" id="copy-status" role="status" aria-live="polite"></p>
+</body>
+</html>

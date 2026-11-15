@@ -1,55 +1,36 @@
-# Necto
+# Necto — polska wersja do konsultacji
 
-## OpenAPI UI with a backbone.
+Publiczna strona jest po angielsku: [index.html](index.html). Poniższy tekst zachowuje polski punkt odniesienia dla propozycji.
 
-### Nadaj swojemu API kierunek.
+**OpenAPI UI with a backbone.**
 
-Zamień odpowiedź w kolejny request. Necto łączy endpointy w ścieżki, które możesz odkrywać — z danymi pod ręką i kolejnym krokiem w zasięgu kliknięcia.
+## Podążaj za danymi. Sprawdzaj cały przepływ.
 
-**[Wypróbuj Necto](../../README.md)** · **[Zobacz projekt na GitHubie](https://github.com/nilphilus/necto)**
+Zaznacz obiekt. Przenieś jego wartości do kolejnego requestu. Zapisz całą drogę i uruchom ją ponownie.
 
-[Zajrzyj pod maskę →](technical.md)
+- Mniej przepisywania ID
+- Powtarzalne przepływy
+- Więcej miejsca na odpowiedź
 
-## Podążaj za danymi. Odkryj kolejny krok.
+**Zobacz przepływ** · **Dodaj do swojego API** · **GitHub**
 
-Masz już klienta. Teraz potrzebujesz jego faktur. Potem ich pozycji. Następnie szczegółów.
+Dla programistów i QA pracujących z API ASP.NET Core.
 
-Necto pomaga przejść tę drogę. Zaznacz obiekt w odpowiedzi, wybierz powiązany request, a odpowiednia wartość będzie już na swoim miejscu. Skup się na tym, co chcesz sprawdzić.
+## Jedna odpowiedź. Więcej kolejnych kroków.
 
-**Klient → Faktury → Pozycje → Szczegóły**
+- **Podążaj za danymi:** wybierz fakturę i wykorzystaj jej ID w powiązanym requeście. Sprawdź lub popraw dane przed wysłaniem.
+- **Powtórz przepływ:** zapisz łańcuch i uruchom go z wartościami ze świeżych odpowiedzi.
+- **Znajdź obiekt:** przeszukuj całą odpowiedź, przejdź do właściwej strony i zaznacz wynik.
+- **Zobacz połączenia:** poznaj graf encji lub endpointów i otwórz właściwy request.
 
-## Wykorzystaj każdą odpowiedź.
+## Ustaw kontekst i pracuj dalej.
 
-Odpowiedź jest początkiem kolejnego kroku. Czytelny podgląd JSON-a pomaga odnaleźć potrzebne dane. Zaznacz fakturę lub jej pozycję i wykorzystaj jej wartości w powiązanym requeście.
+Presety współdzielą wartości między requestami. Połączenia zewnętrzne dodają inne API i ich mapowania. Most MCP przekazuje kontekst Twojemu agentowi, który korzysta z własnego modelu, narzędzi HTTP i poświadczeń.
 
-Zachowaj podpowiedź, wyszukaj inną wartość albo wpisz własną. Ty decydujesz, co wyślesz dalej.
+## Dlaczego Necto?
 
-## Poznaj całą historię.
+Od łacińskiego [nectō](https://cld.bbaw.de/lemma/lat/necto) — „wiążę” lub „łączę”. Nazwa oddaje ideę produktu: łączenie odpowiedzi, wartości i kolejnego requestu.
 
-Każdy powiązany request staje się krokiem, do którego możesz wrócić. Otwórz wcześniejszą odpowiedź, wybierz inną ścieżkę i zobacz, dokąd prowadzą dane.
+## Twoje API. Jeszcze jedna przydatna ścieżka.
 
-To przestrzeń do poznawania zależności w API, sprawdzania scenariuszy klienta i wdrażania się w serwis, z którym dopiero zaczynasz pracować.
-
-## Duża odpowiedź. Przestrzeń do odkrywania.
-
-Długa odpowiedź też zasługuje na wygodny podgląd. Przeglądaj kolekcje strona po stronie, rozwijaj potrzebne szczegóły i zaznaczaj elementy tam, gdzie je znajdziesz. Stronicowanie Preview działa także wtedy, gdy API zwraca wszystkie dane naraz.
-
-Potrzebujesz oryginału? Przełącz na Raw albo pobierz pełną odpowiedź.
-
-**Sprawdzone na 100 000 rekordów w odpowiedzi o wielkości 117 MB.** [Zobacz pomiar i ograniczenia →](technical.md#large-response-preview)
-
-## Ustaw kontekst raz.
-
-Zapisz często używane nagłówki i parametry jako nazwane presety. Połącz kontekst potrzebny do bieżącego zadania i przechodź między requestami z mniejszą liczbą pól do ponownego uzupełnienia.
-
-## U siebie w Twoim API ASP.NET Core.
-
-Dodaj Necto do aplikacji, którą już masz. Wykorzysta Twój dokument OpenAPI i udostępni interfejs obok API. Zespół zyska jedno miejsce do przeglądania endpointów i podążania za danymi między nimi.
-
-Podpowiedzi powiązań wynikają z kodu C#. [Zobacz, jak Necto znajduje kolejne requesty →](technical.md#how-connections-work)
-
-## Zobacz, dokąd prowadzi Twoje API.
-
-Wypróbuj przykładowy przepływ faktur. Zaznacz wartość w odpowiedzi. Przejdź do kolejnego requestu. Sprawdź inną ścieżkę.
-
-**[Zacznij z Necto](../../README.md)** · **[Przeczytaj opis techniczny](technical.md)**
+Interfejs jest dołączony do pakietu .NET i korzysta z dokumentu OpenAPI. Szczegóły wdrożenia, działania mapowań i ograniczeń są na osobnej stronie technicznej.
