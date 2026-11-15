@@ -6,6 +6,7 @@ import {
   inspectWorkspace
 } from './workspace.js'
 const props = defineProps({ importDocument: Function, operations: Array, documentSource: Object, restoreDocument: Function })
+const catalogWidth = defineModel('catalogWidth', { type: Number, required: true })
 const documentAssociation = ref('separate'), workspaceName = ref('')
 const includeBodies = ref(false),
   preview = ref(null),
@@ -80,6 +81,21 @@ async function loadDocument(event) {
 </script>
 <template>
   <section class="workspace-settings">
+    <h3>Layout</h3>
+    <label for="catalog-width">
+      Endpoint catalog width <span>{{ catalogWidth }} px</span>
+    </label>
+    <p id="catalog-width-description">Sets the width of the left endpoint catalog when it is expanded on desktop.</p>
+    <input
+      id="catalog-width"
+      v-model.number="catalogWidth"
+      class="catalog-width"
+      type="range"
+      min="180"
+      max="360"
+      step="10"
+      aria-describedby="catalog-width-description"
+    />
     <h3>Workspace</h3>
     <p>
       Transfer saved requests, scenarios, presets and API connections.
@@ -160,6 +176,10 @@ label {
 }
 input[type='file'] {
   max-width: 100%;
+}
+.catalog-width {
+  width: min(100%, 16rem);
+  margin: 0 0 .5rem;
 }
 button {
   justify-self: start;
