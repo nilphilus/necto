@@ -244,6 +244,7 @@ function parameterHint(parameter) {
           </div>
           <input
             v-if="values.has(contextKey(parameter))"
+            class="preset-value"
             :id="`${parameterIdPrefix}-${index}`"
             :aria-describedby="`${parameterIdPrefix}-${index}-preset`"
             :value="values.get(contextKey(parameter))"
@@ -340,9 +341,10 @@ function parameterHint(parameter) {
 </template>
 
 <style scoped>
-.parameter-heading { display: flex; align-items: center; gap: .35rem; margin-bottom: .35rem; }
-.parameter-heading .field-label { display: block; flex: 1; min-width: 0; font-size: .88rem; font-weight: 650; overflow-wrap: anywhere; }
-.preset-origin { display: flex; align-items: center; gap: .2rem; min-width: 0; max-width: 60%; font-size: .75rem; white-space: nowrap; }
+.parameter-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-bottom: .35rem; }
+.parameter-heading .field-label { display: block; min-width: 0; font-size: .88rem; font-weight: 650; overflow-wrap: anywhere; }
+.parameter-heading .description-help { margin-left: auto; }
+.preset-origin { display: flex; align-items: center; gap: .2rem; min-width: 0; max-width: 100%; font-size: .75rem; white-space: nowrap; }
 .preset-origin .preset-link { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: inherit; padding-block: 0; }
 
 .settings-error { margin:.5rem .85rem; font-size:.8rem; }
@@ -405,6 +407,12 @@ function parameterHint(parameter) {
 .field-label span { font-weight: 650; font-size: .88rem; }
 .field-label small { margin-left: .4rem; color: var(--muted); font-weight: 400; }
 .field > input, .field-label textarea { width: 100%; }
+.field > .preset-value {
+  width: auto;
+  min-width: min(12rem, 100%);
+  max-width: 100%;
+  field-sizing: content;
+}
 .field-label textarea {
   field-sizing: content;
   min-height: min(4.5rem, var(--body-height-limit, 70dvh));
