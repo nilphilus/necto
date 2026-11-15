@@ -34,7 +34,7 @@ public sealed partial class EndpointMappingGenerator
                 if(item.Handler is null)continue;
                 var type=UnwrapSuccess(Unwrap(item.Handler.ReturnType,"System.Threading.Tasks.Task<TResult>","System.Threading.Tasks.ValueTask<TResult>"));
                 if(type is not INamedTypeSymbol named || named.Name is not ("PagedResult" or "PagedResponse" or "PageResult") || Attribute(type,"Necto.NectoResponseCollectionAttribute") is not null)continue;
-                var count=JsonProperties(type).Count(property=>property.Type is IArrayTypeSymbol || EnumerableItem(property.Type) is not null);
+                var count=ContractSymbols.Properties(named).Count(property=>property.Type is IArrayTypeSymbol || EnumerableItem(property.Type) is not null);
                 if(count!=1)ctx.ReportDiagnostic(Diagnostic.Create(UnclearWrapper,item.Location,named.Name,count));
             }
         });
@@ -45,7 +45,7 @@ public sealed partial class EndpointMappingGenerator
                 if(Attribute(type,"Necto.NectoResponseCollectionAttribute") is { } wrapper)
                 {
                     var name=wrapper.ConstructorArguments.FirstOrDefault().Value as string;
-                    var property=JsonProperties(type).FirstOrDefault(property=>property.Name==name);
+                    var property=ContractSymbols.Properties(type).FirstOrDefault(property=>property.Name==name);
                     if(property is null || Attribute(property,"System.Text.Json.Serialization.JsonConverterAttribute") is not null || !(property.Type is IArrayTypeSymbol || EnumerableItem(property.Type) is not null))Report(ctx,wrapper,type,"the collection member is missing, ignored, converted or not enumerable");
                 }
                 foreach(var property in type.GetMembers().OfType<IPropertySymbol>())
