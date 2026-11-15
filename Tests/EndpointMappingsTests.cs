@@ -85,15 +85,15 @@ public sealed class EndpointMappingsTests : IClassFixture<WebApplicationFactory<
 
         Assert.NotNull(mappings);
         Assert.Contains(new EndpointMapping(new("Invoices", true, "id"),
-            new("InvoiceLines", "parameter", "invoiceId"), "name", "InvoiceId"), mappings);
+            new("InvoiceLines", "parameter", "invoiceId"), "name", "InvoiceId"), mappings.Select(mapping => mapping with { Evidence = null }));
         Assert.Contains(new EndpointMapping(new("InvoiceLines", true, "lineId"),
-            new("InvoiceLine", "parameter", "lineId"), "name", "LineId"), mappings);
+            new("InvoiceLine", "parameter", "lineId"), "name", "LineId"), mappings.Select(mapping => mapping with { Evidence = null }));
         Assert.Contains(new EndpointMapping(new("InvoiceLine", false, "detailId"),
-            new("InvoiceLineDetails", "parameter", "detailId"), "name", "DetailId"), mappings);
+            new("InvoiceLineDetails", "parameter", "detailId"), "name", "DetailId"), mappings.Select(mapping => mapping with { Evidence = null }));
         Assert.Contains(new EndpointMapping(new("Customers", true, "id"),
-            new("FindCustomer", "body", "selectedCustomer"), "type", null), mappings);
+            new("FindCustomer", "body", "selectedCustomer"), "type", null), mappings.Select(mapping => mapping with { Evidence = null }));
         Assert.Contains(new EndpointMapping(new("Invoices", true, "legacyNumber"),
-            new("InvoiceByLegacyNumber", "parameter", "number"), "attribute", null), mappings);
+            new("InvoiceByLegacyNumber", "parameter", "number"), "attribute", null), mappings.Select(mapping => mapping with { Evidence = null }));
         Assert.DoesNotContain(mappings, mapping => mapping.Source.OperationId == "Invoices"
             && mapping.Source.Property == "id" && mapping.Target.Name == "number");
     }
@@ -104,9 +104,9 @@ public sealed class EndpointMappingsTests : IClassFixture<WebApplicationFactory<
         var mappings = await client.GetFromJsonAsync<EndpointMapping[]>("/necto/endpoint-mappings");
         Assert.NotNull(mappings);
         Assert.Contains(new EndpointMapping(new("Invoices", true, "reference"),
-            new("InvoiceByReference", "query", "invoiceReference"), "name", null), mappings);
+            new("InvoiceByReference", "query", "invoiceReference"), "name", null), mappings.Select(mapping => mapping with { Evidence = null }));
         Assert.Contains(new EndpointMapping(new("InvoiceByReference", false, "reference"),
-            new("Invoices", "query", "reference"), "name", null), mappings);
+            new("Invoices", "query", "reference"), "name", null), mappings.Select(mapping => mapping with { Evidence = null }));
 
         var invoice = await client.GetFromJsonAsync<JsonObject>("/invoices/by-reference?invoiceReference=INV-42");
         Assert.Equal("INV-42", invoice!["reference"]!.GetValue<string>());

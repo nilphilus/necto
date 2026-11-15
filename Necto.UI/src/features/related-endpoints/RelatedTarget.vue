@@ -52,7 +52,7 @@ const ready = computed(() => props.canSend(props.target.operation, choices.value
       <span class="method" :data-method="target.operation.method">{{ target.operation.method }}</span>
       <strong>{{ target.operation.name }}</strong>
       <small v-if="target.preferred" class="link-origin">OpenAPI Link</small>
-      <DescriptionHelp :label="'About link to ' + target.operation.name" :description="target.description" />
+      <DescriptionHelp :label="(target.preferred ? 'About link to ' : 'Why related request ') + target.operation.name" :description="target.description" />
       <button type="button" class="secondary open-request" :aria-label="'Open request ' + target.operation.name"
         @click="emit('follow', target.operation, choices, false)">Open request</button>
       <small v-if="target.operation.apiId && target.operation.apiId !== 'local'">{{ target.operation.apiName }} [{{ target.operation.apiId }}]</small>
