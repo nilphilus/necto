@@ -49,6 +49,9 @@ const displayedBody = computed({
   set: body => { props.session.body = body },
 })
 const relatedPinned = ref(false)
+watch([() => props.session, () => props.hasRelated && Boolean(props.session.result)], ([, available]) => {
+  relatedPinned.value = available
+}, { immediate: true })
 const pinnedToolsHost = ref(null)
 const form = ref(null)
 const requestFooter = ref(null)
@@ -281,7 +284,7 @@ function parameterHint(parameter) {
           <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }">
           <div class="response-body">
             <ResponsePreview ref="responsePreview" :result="session.result" :presentation="previewPreferences" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="responseStale">
-              <template #actions><NextRequestsPanel ref="nextRequests" v-if="hasRelated" :operation-key="operation.key" :pin-target="pinnedToolsHost" @pin="relatedPinned = $event"><slot name="related" :search-response="searchResponse" /></NextRequestsPanel></template>
+              <template #actions><NextRequestsPanel ref="nextRequests" v-if="hasRelated" v-model:pinned="relatedPinned" :operation-key="operation.key" :pin-target="pinnedToolsHost"><slot name="related" :search-response="searchResponse" /></NextRequestsPanel></template>
             </ResponsePreview>
 
           </div>
