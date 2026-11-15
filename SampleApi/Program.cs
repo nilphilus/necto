@@ -21,6 +21,7 @@ if (app.Environment.IsDevelopment())
     app.MapNectoEndpointMappings();
     app.MapNectoEntityCatalog();
     app.MapNectoAgent();
+    app.MapNectoOperationRoles();
     app.UseNectoUI(agentPath: "/necto/agent");
 }
 
@@ -98,7 +99,7 @@ app.MapGet("/invoices/preview", () => new InvoicePreview(
     .WithTags("Invoices")
     .WithSummary("Nested invoice lines preview");
 
-app.MapGet("/invoices", ([FromQuery] string? reference) => reference is null
+app.MapGet("/invoices", [NectoOperation(typeof(Invoice), NectoOperationRole.Search, Description = "Find invoices before opening their related records.")] ([FromQuery] string? reference) => reference is null
         ? invoices
         : invoices.Where(invoice => invoice.Reference == reference).ToArray())
     .WithName("Invoices")
@@ -170,6 +171,7 @@ app.MapPost("/customers/search", ([FromBody] CustomerSearch search) =>
         return Task.CompletedTask;
     });
 
+app.MapPost("/role-invoices", RoleInvoiceHandlers.Create).WithName("CreateRoleInvoice");
 app.Run();
 
 record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
