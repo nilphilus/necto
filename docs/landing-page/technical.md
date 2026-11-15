@@ -1,84 +1,85 @@
 # How Necto works
 
-Necto serves an OpenAPI UI from an ASP.NET Core application. The compiled Vue
-frontend is embedded in the .NET package. It reads the configured OpenAPI JSON
-document to discover operations and build request forms.
+[Product overview](en.md) · [Rendered technical guide](technical.html)
 
-This guide covers the functionality in main plus PR #1 and PR #2, which are
-included in the landing page's product scope.
+## Quickstart
 
-## How connections work
+The current package targets .NET 10. Start with an ASP.NET Core application that has Microsoft's OpenAPI integration configured (`AddOpenApi`). Install:
 
-A Roslyn source generator examines supported Minimal API registrations during
-compilation. It matches response fields to request inputs using:
+```sh
+dotnet add package Necto.OpenApi
+```
 
-- The same dedicated CLR identifier type, such as `CustomerId`.
-- Matching identifier names with compatible CLR types.
-- Explicit logical keys supplied by `[EndpointValue("...")]`.
+In `Program.cs`:
 
-Supported registrations have a constant `.WithName(...)` operation ID in the
-same fluent chain. Response paths describe nested objects and array items and
-honor JSON property names. Recursive traversal stops at repeated types and is
-limited to 16 path segments. Custom JSON converters are opaque to the generator.
+```csharp
+using Necto;
 
-The application exposes these mappings beside its OpenAPI document. The UI
-resolves operation IDs and fields against that document before offering links.
-Explicit mappings can also be provided; the FastEndpoints sample uses this
-approach. Suggestions describe compatible values, not inferred business rules
-or a guarantee that a request will succeed.
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddOpenApi();
+var app = builder.Build();
 
-## Response selection and request inputs
+// Register your endpoints here.
 
-JSON Preview colors keys and scalar values. Mapped objects have a Select
-button. Selecting an object fills matching related-request inputs, including
-values from nested arrays. Inputs remain editable and offer native dropdown
-suggestions; users can also send values they enter themselves.
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+    app.MapNectoEndpointMappings();
+    app.UseNectoUI();
+}
 
-Suggestions are bounded to 200 values per mapping. A selection from any Preview
-page can supply a value beyond that initial set. Related GET/HEAD requests can
-be sent directly when their required inputs are available and valid. Other
-requests can be opened in the editor. Breadcrumbs preserve the request chain
-so users can return to earlier responses and continue along another path.
+app.Run();
+```
 
-## Large response preview
+Open `/necto/`. The compiled Vue frontend is embedded in the .NET assembly; consumers need no separate frontend build or deployment. Use `openApiPath` for another document route. A single registered generated mappings route is discovered automatically; custom or multiple routes require `endpointMappingsPath`.
 
-Preview renders arrays and objects in pages of 25 entries. Each nested container
-has its own pagination and containers at depth two start collapsed. Array
-indices remain absolute, so a selection on a later page refers to the correct
-response item. This is entirely local UI pagination: it does not change the
-request or require pagination support from the API.
+The gallery shows current main. Published NuGet releases may have an earlier UI; run the samples from the repository for the latest changes.
 
-Long strings show 2,000 characters per page. Raw and non-JSON text show 20,000
-characters per page. Download response saves the complete original text.
+## Connections
 
-JSON above one million characters is parsed in a Web Worker. The implementation
-avoids a second pretty-printed copy and keeps parsed objects outside Vue deep
-reactivity. The full response and parsed JSON still occupy browser memory, and
-worker-to-main-thread transfer can briefly block the main thread.
+1. OpenAPI supplies operations, input fields, schemas and responses.
+2. A Roslyn source generator emits response-to-request value mappings during compilation.
+3. The UI resolves those mappings against OpenAPI and offers related requests.
 
-One headless Chromium run against the sample endpoint measured:
+Rules use dedicated CLR identifier types, supported scalar field names with compatible types, or `[EndpointValue("…")]` keys. `Invoice.Id` can supply `invoiceId`; `Invoice.Reference` can match `reference` or `invoiceReference`.
 
-| Measurement | Result |
-| --- | --- |
-| Response | 117,200,001 characters, approximately 117 MB |
-| Records | 100,000 |
-| Time to Preview | Approximately 2.2 seconds |
-| Preview DOM elements, first / last page | 886 / 886 |
-| API calls while browsing pages | 1 |
-| Longest observed main-thread task | 307 ms |
+Automatic generation currently supports Minimal API registrations with a constant `.WithName("…")` in the same fluent chain. Nested objects/arrays and JSON property names are supported. Traversal stops at repeated types and has a 16-segment limit. Custom JSON converters are opaque. Other integrations can provide explicit mappings; the FastEndpoints sample does this.
 
-This is a development-environment measurement, not a performance guarantee for
-every browser, device, payload shape, or network. The sample endpoint is
-`GET /invoices/large-payload?count=100000&noteSize=1024` from PR #2.
+Selection fills matching inputs without adding metadata to business responses. Values stay editable. Related GET/HEAD requests with valid inputs can be sent directly; writes open in the editor. Mappings describe compatible values, not inferred business rules or guaranteed success.
 
-## Presets and hosting
+## Scenarios
 
-Named presets store recurring header, path, and query values. Multiple presets
-can be active together; for overlapping fields, the most recently enabled
-preset wins. Presets are saved in browser local storage for the configured
-OpenAPI URL.
+Saved requests retain inputs for one endpoint; presets supply shared values; scenarios retain a chain and response bindings. Replay runs sequentially and resolves those values from fresh responses. Array selection is positional; reordering may select another item. Missing values, HTTP errors and network failures stop later steps.
 
-Applications using the packaged UI do not need a separate frontend build.
-Building Necto itself from source requires Node.js and pnpm. See the
-[setup guide](../../Necto.UI/README.md) and [sample applications](../../README.md)
-for configuration and examples.
+Saved configurations live in browser storage; run results remain in workspace memory. Writes run only when explicitly executed. See the [scenario guide](../../Necto.UI/README.md#saved-scenarios) for storage and execution details.
+
+## Large responses
+
+Preview renders arrays and objects in local pages of 25 entries. Page changes do not call the API or modify its pagination. Whole-response search runs in a worker and can reveal mapped objects on other pages. Long strings and raw text are paged; downloading saves the full original text.
+
+Large JSON is parsed in a background worker. The full response and parsed JSON still occupy browser memory: pagination bounds rendering, not download size or memory use. Device, browser and payload shape affect performance. See [limits and measurements](../../Necto.UI/README.md#large-responses).
+
+## Graphs
+
+The entity graph explores OpenAPI models and their associated operations. The endpoint graph explores response-to-request mappings. Both allow inspection and opening requests. They describe available metadata, not observed runtime traffic.
+
+## External APIs
+
+Add OpenAPI documents and Necto mappings in Settings. Each API keeps scoped operation identities and request URLs. Explicit API-scoped mappings can carry values across services. Cross-origin metadata and requests require appropriate API CORS configuration; sharing presets is opt-in. See the [external API guide](../../Necto.UI/README.md#external-apis).
+
+## Agent
+
+The optional MCP bridge shares the visible API catalog, types and relationships, queues prompts, and displays progress/results reported by the connected agent. The agent needs its own model, HTTP tools and API credentials. Necto does not start an arbitrary agent or execute HTTP requests through the bridge.
+
+```csharp
+app.MapNectoAgent();
+app.UseNectoUI(agentPath: "/necto/agent");
+```
+
+See [MCP setup and task ownership](../bring-your-agent/README.md).
+
+## Hosting
+
+The quickstart enables Necto in Development. For other environments, configure UI/bridge access through the host application's authentication and endpoint policies. API authorization and CORS still govern requests. Building Necto from source requires the .NET SDK, Node.js and pnpm; using the package requires no frontend toolchain.
+
+[Full integration guide](../../Necto.UI/README.md) · [License, including Commons Clause](../../LICENSE.txt)
