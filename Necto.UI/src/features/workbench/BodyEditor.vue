@@ -2,7 +2,8 @@
 import { computed, watch } from 'vue'
 import { bodyContent, formFields, isJson } from './body.js'
 import { schemaIssues } from './schema.js'
-import { initialBody } from '../request-runner/request.js'
+import { initialPayload } from '../request-runner/request.js'
+import { schemaTemplate, formatTemplate, TemplateLimitError, TEMPLATE_NOTICE } from '../request-runner/schemaTemplate.js'
 const props = defineProps({ operation: Object, session: Object })
 const media = computed(() => bodyContent(props.operation, props.session))
 const forms = computed(() =>
@@ -40,7 +41,15 @@ function variant(index) {
   props.session.variantIndex = index
   const schema = props.operation.resolve(media.value?.[1]?.schema)
   const selected = variants.value[index]
-  const value = template(props.operation.resolve(selected))
+  let value
+  try { value = schemaTemplate(props.operation, selected) }
+  catch (error) {
+    if (!(error instanceof TemplateLimitError)) throw error
+    props.session.body = variantDrafts.get(`${media.value[0]}:${index}`) ?? ''
+    props.session.bodyNotice = TEMPLATE_NOTICE
+    return
+  }
+  props.session.bodyNotice = ''
   if (schema?.discriminator && value && typeof value === 'object') {
     const tag =
       Object.entries(schema.discriminator.mapping ?? {}).find(
@@ -48,46 +57,28 @@ function variant(index) {
       )?.[0] ?? selected.$ref?.split('/').pop()
     if (tag) value[schema.discriminator.propertyName] = tag
   }
-  props.session.body =
-    variantDrafts.get(`${media.value[0]}:${index}`) ??
-    JSON.stringify(value, null, 2)
-}
-function template(schema = {}, depth = 0) {
-  if (depth > 8) return null
-  if (schema.example !== undefined) return schema.example
-  if (schema.const !== undefined) return schema.const
-  if (schema.default !== undefined) return schema.default
-  if (schema.enum) return schema.enum[0]
-  if (schema.type === 'object' || schema.properties)
-    return Object.fromEntries(
-      Object.entries(schema.properties ?? {})
-        .filter(([, child]) => !props.operation.resolve(child)?.readOnly)
-        .map(([name, child]) => [
-          name,
-          template(props.operation.resolve(child), depth + 1)
-        ])
-    )
-  return schema.type === 'array'
-    ? []
-    : schema.type === 'integer' || schema.type === 'number'
-      ? 0
-      : schema.type === 'boolean'
-        ? false
-        : ''
+  try { props.session.body = variantDrafts.get(`${media.value[0]}:${index}`) ?? formatTemplate(value) }
+  catch (error) {
+    if (!(error instanceof TemplateLimitError)) throw error
+    props.session.body = ''; props.session.bodyNotice = TEMPLATE_NOTICE
+  }
 }
 const drafts = new Map()
 function selectMedia(value) {
   drafts.set(media.value?.[0], {
     body: props.session.body,
+    bodyNotice: props.session.bodyNotice,
     variantIndex: props.session.variantIndex,
     formFields: props.session.formFields,
     binaryFile: props.session.binaryFile
   })
   props.session.mediaType = value
+  const generated = drafts.has(value) ? null : initialPayload(props.operation, value)
   Object.assign(
     props.session,
     drafts.get(value) ?? {
-      body: initialBody(props.operation, value),
+      body: generated.body,
+      bodyNotice: generated.notice,
       variantIndex: undefined,
       formFields: formFields(props.operation, value),
       binaryFile: undefined
@@ -113,6 +104,7 @@ watch(
 </script>
 <template>
   <div v-if="media" class="body-editor">
+    <p v-if="session.bodyNotice && !session.body?.trim()" role="status" class="generation-notice">{{ session.bodyNotice }}</p>
     <label v-if="Object.keys(operation.requestBody.content).length > 1"
       >Body format
       <select :value="media[0]" @change="selectMedia($event.target.value)">

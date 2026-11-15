@@ -6,7 +6,7 @@ import { markRaw, onScopeDispose, reactive, watch } from 'vue'
 import { redactedRequest } from '../authentication/authentication.js'
 import { evaluateAssertions, validateAssertions } from '../workbench/assertions.js'
 import { useRequestHistory } from '../workbench/history.js'
-import { buildRequest, initialBody, sendRequest } from './request.js'
+import { buildRequest, initialPayload, sendRequest } from './request.js'
 
 export function useRequestRunner(configuration, authentication) {
   const running = new Map()
@@ -25,6 +25,7 @@ export function useRequestRunner(configuration, authentication) {
   watch(() => workspaceIdentity(configuration.value), (next, previous) => { if (previous && next !== previous) { cancel(); sessions.clear() } }, { flush: 'sync' })
 
   function createSession(operation) {
+    const payload = initialPayload(operation)
     return reactive({
       apiId: operation.apiId ?? 'local',
       fields: {},
@@ -33,7 +34,8 @@ export function useRequestRunner(configuration, authentication) {
       timeout: 30000,
       responseLimitMiB: 32,
       bindings: [],
-      body: initialBody(operation),
+      body: payload.body,
+      bodyNotice: payload.notice,
       result: null,
       pending: false,
       error: '',
