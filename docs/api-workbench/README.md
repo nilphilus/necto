@@ -97,3 +97,7 @@ JSON step reports include a 1-based `step` and a `failure` object with a stable
 Budget/timeout failures include `limitMiB`/`timeoutMs`; received HTTP failures
 include `httpStatus`. JUnit uses the same codes and numeric context. Diagnostics
 omit raw exception text, request URLs, headers and response values.
+
+### External references in the CLI
+
+The runner does not fetch external `$ref` documents by default. Prefer the bundled CI export; for trusted metadata servers, pass a repeatable `--allow-ref-origin https://schemas.example`. This is an explicit network permission, including for internal origins. Redirects are rejected, with per-document/aggregate byte budgets and a metadata deadline. See [CI metadata policy](../security/ci-references.md).
