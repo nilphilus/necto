@@ -116,6 +116,10 @@ own request URLs and operation identities. Explicit `source.apiId` / `target.api
 selectors allow response values to flow between configured services. See the
 [external API guide](Necto.UI/README.md#external-apis) for configuration and CORS.
 
+## XML preview
+
+Inspect XML responses or open XML stored in a JSON string without leaving the response. Preview colors syntax, collapses nested elements and pages large collections; Raw keeps the original response text. [Examples and limits](docs/xml-preview/README.md).
+
 ## Endpoint mappings
 
 Necto generates suggestions for reusing response values in other API requests. The

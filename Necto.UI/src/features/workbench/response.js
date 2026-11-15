@@ -253,11 +253,13 @@ export function responseFilename(result) {
     'image/jpeg': 'jpg',
     'image/gif': 'gif',
     'image/webp': 'webp',
-    'application/xml': 'xml'
+    'application/xml': 'xml',
+    'text/xml': 'xml'
   }
   return (
     'response.' +
-    (extensions[result.contentType?.split(';')[0].trim()] ??
+    (extensions[result.contentType?.split(';')[0].trim().toLowerCase()] ??
+      (/\+xml(?:;|$)/i.test(result.contentType || '') ? 'xml' : undefined) ??
       (result.binary ? 'bin' : result.json === undefined ? 'txt' : 'json'))
   )
 }

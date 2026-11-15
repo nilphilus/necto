@@ -10,6 +10,8 @@ import { usePreviewHeight } from './usePreviewHeight.js'
 import PayloadSearch from '../payload-search/PayloadSearch.vue'
 import { valueAtPath, pathLabel } from '../payload-search/search.js'
 import JsonNode from './JsonNode.vue'
+import XmlPreview from './XmlPreview.vue'
+import { isXmlResponse } from './xmlDetection.js'
 import { selectionLabel } from './selection.js'
 const props = defineProps({ result: { type: Object, required: true }, selectors: { type: Array, default: () => [] }, operation: Object, presentation: Object, pending: Boolean, stale: Boolean })
 const responseTarget = computed(() => {
@@ -27,6 +29,10 @@ const searchOpen = ref(false)
 const finderButton = ref(null)
 const finderPanel = ref(null)
 const searchId = useId()
+function handleFind(event) {
+  if (props.result.json === undefined) return
+  event.preventDefault(); event.stopPropagation(); toggleSearch(true)
+}
 async function toggleSearch(open = !searchOpen.value) {
   searchOpen.value = open
   await nextTick()
@@ -50,6 +56,7 @@ watch([raw, table, textPage, focusPath], () => nextTick(schedulePreviewHeight))
 let navigationId = 0
 const previewValue = computed(() => valueAtPath(props.result.json, focusPath.value))
 const text = computed(() => props.result.stream?.view?.selectedIndex !== undefined ? JSON.stringify(props.result.json, null, 2) : props.result.rawText ?? props.result.text ?? '')
+const xmlAvailable = computed(() => text.value.length > 0 && !props.result.incomplete && !props.result.binary && !props.result.stream && props.result.json === undefined && isXmlResponse(props.result.contentType, text.value))
 const range = computed(() => pageRange(text.value.length, textPage.value, TEXT_PAGE_SIZE))
 const visibleText = computed(() => text.value.slice(range.value.start, range.value.end))
 watch(() => props.result, (result, previous) => { if (result.stream?.view && result.stream.view === previous?.stream?.view) return; textPage.value = 1; raw.value = false; table.value = Boolean(props.presentation?.view === 'table' && props.presentation.viewKey === tablePreferenceKey(props.operation, [], result.json)); tableReturn.value = null; navigation.value = null; focusPath.value = []; navigationId++ }, { immediate: true })
@@ -100,18 +107,18 @@ function download() {
 </script>
 
 <template>
-  <div class="response-preview" @keydown.ctrl.f.prevent.stop="toggleSearch(true)" @keydown.meta.f.prevent.stop="toggleSearch(true)">
+  <div class="response-preview" @keydown.ctrl.f="handleFind" @keydown.meta.f="handleFind">
     <div class="preview-toolbar" aria-label="Response tools">
       <h3>{{ result.incomplete ? (result.receiving ? 'Response in progress' : 'Incomplete response') : pending || stale ? 'Last response' : 'Response' }}</h3>
       <details v-if="operation" class="mobile-response-context" @keydown.esc.stop.prevent="$event.currentTarget.open = false; $event.currentTarget.querySelector('summary').focus()"><summary :title="`${operation.method} ${operation.path} · ${responseTarget}`"><strong>{{ operation.method }} {{ operation.path }}</strong><small>{{ responseTarget }}</small></summary><div><strong>{{ pending || stale ? 'Last response' : 'Response' }} · {{ operation.method }} {{ operation.path }}</strong><code>{{ responseTarget }}</code></div></details>
       <span class="status" :class="{ failed: !result.ok || (result.incomplete && !result.receiving) }" role="status">{{ result.status }} {{ result.statusText }}</span>
       <span>{{ result.elapsed }} ms</span>
       <slot name="actions" />
-      <template v-if="result.json !== undefined">
+      <template v-if="result.json !== undefined || xmlAvailable">
         <button type="button" :aria-pressed="!raw && !table" @click="showPreview">Preview</button>
         <button type="button" :aria-pressed="raw" @click="showRaw">Raw</button>
         <button v-if="tableAvailable" type="button" :aria-pressed="table && !raw" @click="showTable">Table</button>
-        <button ref="finderButton" type="button" :aria-expanded="searchOpen" :aria-controls="searchId" title="Find in response (Ctrl or ⌘ + F while the preview is focused)" @click="toggleSearch()">Find</button>
+        <button v-if="result.json !== undefined" ref="finderButton" type="button" :aria-expanded="searchOpen" :aria-controls="searchId" title="Find in response (Ctrl or ⌘ + F while the preview is focused)" @click="toggleSearch()">Find</button>
       </template>
       <details class="response-details" @keydown.esc.stop.prevent="$event.currentTarget.open = false; $event.currentTarget.querySelector('summary').focus()">
         <summary>Details</summary>
@@ -141,7 +148,8 @@ function download() {
     <p v-if="result.incomplete" role="status">{{ result.receiving ? (result.progress?.phase === 'parsing' ? 'Parsing response…' : 'Receiving response…') : 'Reception stopped; response incomplete.' }} {{ (result.byteLength / 1024 / 1024).toFixed(1) }} MiB received. <template v-if="result.progress?.total">Server reports {{ (result.progress.total / 1024 / 1024).toFixed(1) }} MiB (may differ after decompression).</template> Preview budget: {{ Math.round((result.progress?.limit || 0) / 1024 / 1024) }} MiB.</p>
     <p v-if="result.stream" role="status">{{ streamEvents.length }} events · {{ result.stream.reason ? "Interrupted" : result.stream.done ? "Finished" : "Receiving…" }}<template v-if="result.stream.limited"> · Preview limit reached; connection closed.</template></p>
     <details v-for="event in streamEvents" v-show="result.stream?.view?.selectedIndex === undefined" :key="event.index"><summary>{{ event.index + 1 }} · {{ event.event }} {{ event.id }} {{ event.error }}</summary><button type="button" :disabled="!!event.error" @click="inspectEvent(event)">Inspect event {{ event.index + 1 }}</button><pre>{{ JSON.stringify(event.data, null, 2) }}</pre></details>
-    <div v-if="(!result.stream || result.stream.view?.selectedIndex !== undefined) && text && (raw || result.json === undefined)" class="raw-preview">
+    <XmlPreview v-if="xmlAvailable && !raw" :text="text" />
+    <div v-if="(!result.stream || result.stream.view?.selectedIndex !== undefined) && text && (raw || (result.json === undefined && !xmlAvailable))" class="raw-preview">
       <PreviewPager :range="range" label="Text characters" @change="textPage = $event" />
       <pre tabindex="0"><code>{{ visibleText }}</code></pre>
     </div>
