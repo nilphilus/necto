@@ -919,8 +919,8 @@ function removeScenario(id) {
                 <RequestSamples :key="sampleStorageKey(current.operation)" ref="requestSamples" :storage-key="sampleStorageKey(current.operation)"
                   :operation="current.operation" :session="current.session" :values="requestValues" />
               </template>
-              <template #parameter-input="{ parameter, hint }">
-                <ValueInput v-model="current.session.fields[fieldKey(parameter)]"
+              <template #parameter-input="{ parameter, hint, id }">
+                <ValueInput :id="id" v-model="current.session.fields[fieldKey(parameter)]"
                   :choices="choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
                   :required="parameter.required || parameter.in === 'path'" :placeholder="hint"
                   @choose="choose(current.session, parameter.in, $event)" />
