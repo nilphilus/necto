@@ -8,4 +8,3 @@ export function isXmlResponse(contentType, text) {
 export function looksLikeXml(value) {
   return typeof value === 'string' && /^\s*<(?:\?xml\s|[\p{L}_:]|!--|!DOCTYPE\s)/u.test(value.slice(0, 512))
 }
-
