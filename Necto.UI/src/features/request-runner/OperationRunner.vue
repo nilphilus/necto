@@ -320,7 +320,7 @@ function parameterHint(parameter) {
           <span v-if="session.result?.reception.error">{{ session.result?.reception.error }}</span>
         </p>
         <template v-if="session.result">
-          <p v-if="responseStale" class="muted response-stale" role="status">{{ session.error ? (session.result?.incomplete ? 'Response reception did not complete. No complete preview is available.' : 'The latest request did not complete. Showing the previous response.') : 'Inputs changed. This response belongs to the previous request.' }}</p>
+          <p v-if="responseStale" class="muted response-stale" :class="{ 'response-stale-info': !session.error }" role="status">{{ session.error ? (session.result?.incomplete ? 'Response reception did not complete. No complete preview is available.' : 'The latest request did not complete. Showing the previous response.') : 'Inputs changed. This response belongs to the previous request.' }}</p>
           <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }">
           <div class="response-body">
             <ResponsePreview ref="responsePreview" :result="session.result" :presentation="previewPreferences" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="responseStale">
@@ -381,6 +381,16 @@ function parameterHint(parameter) {
 .request-actions button, .request-actions :slotted(button) { font-size: .84rem; }
 .pane-header button span { margin-left: .25rem; }
 .pane-body { padding: .85rem; }
+.response-stale.response-stale-info {
+  margin: 0 0 .65rem;
+  padding: .45rem .65rem;
+  border-radius: .35rem;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: .8rem;
+  line-height: 1.5;
+}
 .empty { margin: 0; font-size: .85rem; }
 .preset-link { padding: .1rem .3rem; color: var(--accent); text-decoration: underline; text-underline-offset: .15rem; }
 .body-preset-origins { font-size: .78rem; margin-top: .5rem; overflow-wrap: anywhere; }
