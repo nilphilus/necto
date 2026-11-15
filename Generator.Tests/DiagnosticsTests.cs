@@ -23,7 +23,7 @@ public sealed class DiagnosticsTests
     public void DuplicatesAreReportedAndExcludedFromGeneratedMappingTable()
     {
         var result=Generate("app.MapGet(\"/a\",()=>new Invoice(1)).WithName(\"Same\"); app.MapGet(\"/b/{invoiceId}\",(int invoiceId)=>new Invoice(invoiceId)).WithName(\"Same\"); record Invoice(int Id);");
-        Assert.Equal(2,result.Diagnostics.Count(item=>item.Id=="NECTO002"));Assert.DoesNotContain("new(new ResponseValue",result.GeneratedTrees.Single().ToString());
+        Assert.Equal(2,result.Diagnostics.Count(item=>item.Id=="NECTO002"));Assert.DoesNotContain("new(new ResponseValue",result.GeneratedTrees.Single(tree=>tree.FilePath.EndsWith("EndpointMappings.g.cs",StringComparison.Ordinal)).ToString());
         Assert.All(result.Diagnostics.Where(item=>item.Id=="NECTO002"),item=>Assert.True(item.Location.IsInSource));
     }
     [Fact]
