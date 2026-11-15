@@ -87,7 +87,10 @@ let stampClicks = 0
 let firstStampClick = 0
 const settingsButton = ref(null)
 const settingsCloseButton = ref(null)
-const presetEditor = ref(null)
+const presetList = ref(null)
+const presetNameInput = ref(null)
+const presetFields = ref(null)
+const presetDeleteControl = ref(null)
 const graphView = ref('')
 const basePath = new URL(document.baseURI).pathname
 const historyEntries = new Map()
@@ -97,8 +100,10 @@ let activeRoute
 const editedPresetName = ref('')
 const newPresetName = ref('')
 const presetError = ref('')
+const confirmingPresetDeletion = ref(false)
 const activePresetValues = computed(() => activePresetNames.value.map(name => presets.value.get(name)))
 const editedPresetValues = computed(() => presets.value.get(editedPresetName.value))
+watch([editedPresetName, settingsOpen, settingsTab], () => { confirmingPresetDeletion.value = false })
 // Keep the original storage key so saved environments carry over to presets.
 const storageKey = computed(() => 'necto:environments:' + workspaceIdentity(configuration.value))
 const endpointHeading = ref(null)
@@ -318,7 +323,9 @@ async function toggleSettings() {
   editedPresetName.value = activePresetNames.value.at(-1) ?? presets.value.keys().next().value ?? ''
   settingsOpen.value = true
   await nextTick()
-  settingsCloseButton.value?.focus()
+  const firstControl = settingsTab.value === 'presets' && !presets.value.size
+    ? presetNameInput.value : settingsCloseButton.value
+  firstControl?.focus()
 }
 
 async function editActivePreset(name) {
@@ -326,7 +333,7 @@ async function editActivePreset(name) {
   editedPresetName.value = name
   settingsOpen.value = true
   await nextTick()
-  presetEditor.value?.focus()
+  presetList.value?.querySelector('[aria-current="true"]')?.focus()
 }
 
 function clickBrandStamp(event) {
@@ -361,7 +368,7 @@ function trapSettingsFocus(event) {
   }
 }
 
-function addPreset() {
+async function addPreset() {
   const name = newPresetName.value.trim()
   if (!name) return
   if (presets.value.has(name)) {
@@ -372,6 +379,8 @@ function addPreset() {
   newPresetName.value = ''
   editedPresetName.value = name
   savePresets()
+  await nextTick()
+  presetFields.value?.addRow()
 }
 
 function savePresetValues(values) {
@@ -386,13 +395,22 @@ function savePresetColor(color) {
   savePresets()
 }
 
-function removePreset() {
+async function removePreset() {
   const name = editedPresetName.value
   presets.value.delete(name)
   presetColors.value.delete(name)
   editedPresetName.value = presets.value.keys().next().value ?? ''
   if (activePresetNames.value.includes(name)) togglePreset(name, false)
   else savePresets()
+  await nextTick()
+  const nextControl = presetList.value?.querySelector('[aria-current="true"]') ?? presetNameInput.value
+  nextControl?.focus()
+}
+
+async function confirmPresetDeletion(open) {
+  confirmingPresetDeletion.value = open
+  await nextTick()
+  presetDeleteControl.value?.focus()
 }
 
 function runInContext(operation, session) {
@@ -735,7 +753,7 @@ function removeScenario(id) {
       <p v-else-if="pendingRoute" class="app-message" role="status">Loading workspace view…</p>
       <div v-if="settingsOpen" class="settings-backdrop" aria-hidden="true" @click="closeSettings"></div>
       <Transition name="settings-drawer">
-        <aside v-if="settingsOpen" id="settings-panel" class="work-area settings" role="dialog" aria-modal="true" @keydown="trapSettingsFocus" aria-labelledby="settings-title" @keydown.esc.stop="closeSettings">
+        <aside v-if="settingsOpen" id="settings-panel" class="work-area settings" :class="{ 'settings-presets': settingsTab === 'presets' }" role="dialog" aria-modal="true" @keydown="trapSettingsFocus" aria-labelledby="settings-title" @keydown.esc.stop="closeSettings">
           <div class="settings-header">
             <h2 id="settings-title">Settings</h2>
             <button ref="settingsCloseButton" type="button" class="secondary settings-icon" aria-label="Close settings" @click="closeSettings">
@@ -749,29 +767,59 @@ function removeScenario(id) {
           </div>
           <div :inert="scenarioPending">
             <section v-show="settingsTab === 'presets'" class="preset-panel" aria-labelledby="presets-title">
-              <h3 id="presets-title">Presets</h3>
-              <p class="muted">Presets supply shared values across requests. Saved requests keep inputs for one endpoint; scenarios replay a chain of requests.</p>
-              <p v-if="!presets.size" class="muted" role="status">No presets yet. Create one below, add values, then activate it for matching requests.</p>
-              <form class="preset-actions" @submit.prevent="addPreset">
-                <label>New preset <input v-model="newPresetName" required></label>
-                <button type="submit" class="secondary">Add</button>
-              </form>
-              <template v-if="presets.size">
-                <label>
-                  Edit preset
-                  <select ref="presetEditor" v-model="editedPresetName">
-                    <option v-for="name in presets.keys()" :key="name" :value="name">{{ name }}</option>
-                  </select>
-                </label>
-                <label class="preset-color-field">
-                  Preset color
-                  <input type="color" :value="presetColors.get(editedPresetName) ?? defaultPresetColor"
-                    @input="savePresetColor($event.target.value)">
-                </label>
-                <ValuesEditor v-if="editedPresetValues" :values="editedPresetValues" label="Preset values" @save="savePresetValues" />
-                <button type="button" class="secondary" @click="removePreset">Delete {{ editedPresetName }}</button>
-              </template>
+              <header class="preset-intro">
+                <h3 id="presets-title">Request presets</h3>
+                <p class="muted">Save shared values and activate a preset to use them in matching requests.</p>
+              </header>
               <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
+              <div class="preset-layout">
+                <div class="preset-picker">
+                  <ul v-if="presets.size" ref="presetList" class="preset-list" aria-label="Presets">
+                    <li v-for="name in presets.keys()" :key="name">
+                      <button type="button" :aria-current="editedPresetName === name ? 'true' : undefined" @click="editedPresetName = name">
+                        <span class="preset-dot" :style="{ backgroundColor: presetColors.get(name) ?? defaultPresetColor }" aria-hidden="true"></span>
+                        <span class="preset-item-name">{{ name }}</span>
+                        <small v-if="activePresetNames.includes(name)">Active</small>
+                      </button>
+                    </li>
+                  </ul>
+                  <form class="preset-create" @submit.prevent="addPreset">
+                    <label for="new-preset-name">New preset</label>
+                    <div>
+                      <input id="new-preset-name" ref="presetNameInput" v-model="newPresetName" placeholder="e.g. Staging" required>
+                      <button type="submit" :class="presets.size ? 'secondary' : 'primary'">Add</button>
+                    </div>
+                  </form>
+                </div>
+                <div v-if="editedPresetValues" class="preset-detail">
+                  <header class="preset-detail-header">
+                    <h4>{{ editedPresetName }}</h4>
+                    <label class="preset-color-field">
+                      Color
+                      <input type="color" :value="presetColors.get(editedPresetName) ?? defaultPresetColor"
+                        @input="savePresetColor($event.target.value)">
+                    </label>
+                    <label class="preset-active-field">
+                      <input type="checkbox" :checked="activePresetNames.includes(editedPresetName)"
+                        @change="togglePreset(editedPresetName, $event.target.checked)">
+                      Use in requests
+                    </label>
+                  </header>
+                  <ValuesEditor :key="editedPresetName" ref="presetFields" :values="editedPresetValues" label="Preset fields" @save="savePresetValues" />
+                  <footer class="preset-detail-footer">
+                    <button v-if="!confirmingPresetDeletion" ref="presetDeleteControl" type="button" class="preset-delete secondary" @click="confirmPresetDeletion(true)">Delete preset</button>
+                    <div v-else class="preset-delete-confirmation">
+                      <p>Delete this preset and its fields?</p>
+                      <button ref="presetDeleteControl" type="button" class="secondary" @click="confirmPresetDeletion(false)">Cancel</button>
+                      <button type="button" class="preset-delete secondary" @click="removePreset">Delete preset</button>
+                    </div>
+                  </footer>
+                </div>
+                <div v-else class="preset-empty">
+                  <h4>{{ presets.size ? 'Select a preset' : 'No presets yet' }}</h4>
+                  <p class="muted">{{ presets.size ? 'Choose a preset to edit its fields.' : 'Name your first preset to start adding fields.' }}</p>
+                </div>
+              </div>
             </section>
             <WorkspaceSettings v-show="settingsTab === 'workspace'" :import-document="importDocument" :document-source="documentSource" :restore-document="restoreServerDocument" :operations="operations" />
             <ExternalApiSettings v-show="settingsTab === 'connections'" v-model:show="showExternalApis" :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
@@ -1057,11 +1105,34 @@ body { margin: 0; background: #eef2ee; }
 .mapping-notice { margin: 0 0 1rem; }
 .preset-guidance { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; margin-bottom: .65rem; color: var(--muted); font-size: .75rem; }
 .preset-guidance button { padding: .2rem .4rem; font-size: inherit; }
-.preset-panel { min-width: 0; margin-inline: 0; display: grid; gap: .45rem; margin-bottom: 1rem; padding: .75rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); font-size: .85rem; }
-.preset-color-field { display: flex; align-items: center; gap: .5rem; }
-.preset-color-field input { width: 2.5rem; height: 1.75rem; padding: .15rem; cursor: pointer; }
-.preset-panel > label select { margin-left: .35rem; max-width: 70%; }
 .preset-panel p { margin: 0; }
+.preset-panel { display: grid; gap: 1rem; font-size: .875rem; }
+.preset-intro { display: grid; gap: .3rem; }
+.preset-layout { display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr); gap: .85rem; align-items: start; }
+.preset-picker, .preset-detail, .preset-empty { min-width: 0; border: 1px solid var(--line); border-radius: .7rem; background: var(--surface); }
+.preset-picker { padding: .6rem; }
+.preset-list { display: grid; gap: .2rem; max-height: min(45vh, 25rem); overflow: auto; list-style: none; margin: 0; padding: .2rem; }
+.preset-list button { display: flex; align-items: center; gap: .5rem; width: 100%; min-height: 2.5rem; padding: .45rem .55rem; text-align: left; }
+.preset-list [aria-current="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+.preset-dot { width: .65rem; height: .65rem; flex: none; border: 1px solid #0003; border-radius: 50%; }
+.preset-item-name { min-width: 0; overflow-wrap: anywhere; }
+.preset-list small { margin-inline-start: auto; color: var(--muted); }
+.preset-create { display: grid; gap: .35rem; padding: .25rem; }
+.preset-list + .preset-create { margin-top: .55rem; padding-top: .65rem; border-top: 1px solid var(--line); }
+.preset-create label { font-weight: 600; }
+.preset-create > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem; }
+.preset-create input { width: 100%; min-width: 0; }
+.preset-detail-header { display: flex; align-items: center; gap: .6rem 1rem; flex-wrap: wrap; padding: .9rem 1rem; border-bottom: 1px solid var(--line); }
+.preset-panel h4 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.preset-detail-header h4 { flex-basis: 100%; font-size: 1.15rem; }
+.preset-color-field, .preset-active-field { display: inline-flex; align-items: center; gap: .45rem; cursor: pointer; }
+.preset-color-field input[type="color"] { width: 2rem; height: 1.55rem; padding: .15rem; cursor: pointer; }
+.preset-active-field input { margin: 0; accent-color: var(--accent); }
+.preset-detail-footer { padding: .55rem 1rem; border-top: 1px solid var(--line); }
+.preset-delete.secondary { color: var(--error, #a13336); }
+.preset-delete-confirmation { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; }
+.preset-delete-confirmation p { flex: 1 1 10rem; }
+.preset-empty { display: grid; gap: .3rem; padding: 1rem; }
 .endpoint-dialog { width: min(30rem, calc(100% - 2rem)); padding: 1.25rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); color: inherit; box-shadow: 0 1rem 3rem #202b2733; }
 .endpoint-dialog::backdrop { background: #202b2766; }
 .endpoint-dialog h3 { margin: 0 0 1rem; }
@@ -1090,14 +1161,18 @@ body { margin: 0; background: #eef2ee; }
 .settings-header { position: sticky; top: 0; z-index: 3; padding: 1rem 0; background: var(--canvas); display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--line); }
 .settings h2 { margin: 0; }
 .settings h3 { margin: 0; font-size: 1rem; }
-.settings .preset-panel { max-width: 48rem; gap: .85rem; justify-items: start; }
-.settings .preset-panel > label { width: 100%; }
+.settings-presets { width: min(46rem, calc(100% - 2 * var(--app-gutter))); }
+@media (max-width: 630px) {
+  .settings.settings-presets { padding-inline: .85rem; }
+  .preset-layout { grid-template-columns: minmax(0, 1fr); }
+  .preset-list { max-height: 9rem; }
+  .preset-list button, .preset-create button { min-height: 2.75rem; }
+}
 .settings-drawer-enter-active, .settings-drawer-leave-active { transition: transform 180ms ease-out; }
 .settings-drawer-enter-from, .settings-drawer-leave-to { transform: translateX(calc(100% + var(--app-gutter))); }
 @media (prefers-reduced-motion: reduce) {
   .settings-drawer-enter-active, .settings-drawer-leave-active { transition: none; }
 }
-.preset-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .6rem; }
 .scenario-edit-context { display: grid; gap: .6rem; padding: .8rem; margin-bottom: 1rem; border: 1px solid #b4cdc0; border-radius: .6rem; background: var(--accent-soft); font-size: .8rem; }
 .scenario-edit-context > div { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
 .scenario-edit-context summary { cursor: pointer; }
