@@ -63,10 +63,9 @@
 
     <section id="developers" class="developer-section" aria-labelledby="developer-title"><div class="developer-inner wrap">
       <div><p class="eyebrow">At home in ASP.NET Core</p><h2 id="developer-title">Your API.<br>One more useful route.</h2><p>Necto ships its UI in the .NET package and reads your OpenAPI document. Serve the workspace alongside the API you already have.</p><ul><li>No separate frontend deployment</li><li>Connections informed by your C# code</li><li>A short path from install to first request</li></ul><a class="button light-button" href="technical.html">Read the setup guide <span aria-hidden="true">→</span></a></div>
-      <div class="setup-code"><div class="code-heading"><span>Get started</span><span>ASP.NET Core · .NET 10</span></div><div class="install-line"><code>dotnet add package Necto.OpenApi</code><button type="button" class="copy-button" data-copy="install">Copy</button></div><div class="code-file"><span>Program.cs</span><button type="button" class="copy-button" data-copy="setup">Copy</button></div><pre><code><span class="code-comment">// With OpenAPI already configured</span>
-app.<span class="code-call">MapOpenApi</span>();
+      <div class="setup-code"><div class="code-heading"><span>Get started</span><span>ASP.NET Core · .NET 10</span></div><div class="install-line"><code>dotnet add package Necto.OpenApi</code><button type="button" class="copy-button" data-copy="install">Copy</button></div><div class="code-file"><span>Program.cs</span><button type="button" class="copy-button" data-copy="setup">Copy</button></div><pre><code><span class="code-comment">// Keep your existing OpenAPI registration</span>
 app.<span class="code-call">MapNectoEndpointMappings</span>();
-app.<span class="code-call">UseNectoUI</span>();</code></pre><div class="code-footer"><span class="live-dot" aria-hidden="true"></span> Open <code>/necto/</code> and follow your first response.</div></div>
+app.<span class="code-call">UseNectoUI</span>();</code></pre><div class="code-footer"><span class="live-dot" aria-hidden="true"></span> Add these once after <code>builder.Build()</code>. Keep your existing OpenAPI route. Open <code>/necto/</code>.</div></div>
     </div></section>
 
     <aside class="name-origin wrap" aria-labelledby="name-origin-title"><h2 id="name-origin-title">Why Necto?</h2><p>From the Latin <a href="https://cld.bbaw.de/lemma/lat/necto" lang="la">nectō</a> — “I bind” or “I connect.” A name for what we do: connect responses, values, and your next request.</p></aside>
