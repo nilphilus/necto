@@ -54,6 +54,7 @@ export function readOperations(spec, api = { id: 'local' }) {
         summary: operation.summary,
         name: operation.summary || operation.operationId || path,
         description: operation.description,
+        accessHint: operation['x-necto-access'],
         tags: (operation.tags?.length ? [...new Set(operation.tags)] : ['Other'])
           .map(tag => api.id === 'local' ? tag : `${api.name} [${api.id}] · ${tag}`),
         parameters: [...parameters.values()],
