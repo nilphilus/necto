@@ -11,7 +11,14 @@ public sealed record EndpointMapping(
     ResponseValue Source,
     RequestValue Target,
     string Match,
-    string? SuggestedIdentifierType);
+    string? SuggestedIdentifierType)
+{
+    /// <summary>Compile-time evidence, not a guarantee of business validity.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public MappingEvidence? Evidence { get; init; }
+}
+
+public sealed record MappingEvidence(string SourceType, string TargetType, string? SourceName, string? TargetName, string? LogicalKey);
 
 /// <param name="OperationId">The OpenAPI operation ID.</param>
 /// <param name="EachItem">Whether the response is an array and the selector applies to each item.</param>

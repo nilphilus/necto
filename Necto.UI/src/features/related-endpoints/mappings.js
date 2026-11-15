@@ -1,3 +1,4 @@
+import { mappingExplanation } from './mappingExplanation.js'
 import { openApiMappingLinks } from '../workbench/openapiLinks.js'
 import { computed, ref, watch } from 'vue'
 
@@ -66,7 +67,7 @@ export function resolveMappingLinks(operations, catalogs) {
         ['path', 'query', 'header'].includes(parameter.in) && parameter.name === target.name)?.in
       if (location === 'body' ? !to.requestBody : !['path', 'query', 'header'].includes(location) ||
         !to.parameters.some(parameter => parameter.in === location && parameter.name === target.name)) continue
-      links.push({ from, to, location, name: target.name, source, origin: 'mapping', match: mapping.match ?? 'explicit' })
+      links.push({ from, to, location, name: target.name, source, origin: 'mapping', evidence: mapping.evidence, description: mappingExplanation(mapping), match: mapping.match ?? 'explicit' })
     }
   }
   return links
@@ -120,15 +121,16 @@ export function useRelatedEndpoints(configuration, operations, externalContexts 
       .filter(entry => link.location === 'body' || entry.value !== null)
   }
   function provenance(link, entry, result) {
-    return { binding: entry.path ? { operationKey: link.from.key, path: entry.path } : undefined, sourceResult: result, origin: link.origin, linkName: link.linkName, description: link.description }
+    return { binding: entry.path ? { operationKey: link.from.key, path: entry.path } : undefined, sourceResult: result, origin: link.origin, linkName: link.linkName, evidence: link.evidence, match: link.match, description: link.description }
   }
 
   function targetsFor(operation, result) {
-    const byTarget = new Map(), declared = new Map()
+    const byTarget = new Map(), declared = new Map(), descriptions = new Map()
     for (const link of links.value) {
       if (link.from.key !== operation.key) continue
       const values = mappedEntries(link, result)
       if (!values.length) continue
+      if (link.description) descriptions.set(link.to, [...(descriptions.get(link.to) ?? []), link.description])
       if (link.origin === 'openapi') declared.set(link.to, [...(declared.get(link.to) ?? []), link.description].filter(Boolean))
       const matches = byTarget.get(link.to) ?? new Map()
       for (const entry of link.navigationOnly ? [] : values) {
@@ -138,7 +140,7 @@ export function useRelatedEndpoints(configuration, operations, externalContexts 
       }
       byTarget.set(link.to, matches)
     }
-    return [...byTarget].map(([operation, matches]) => ({ operation, candidates: [...matches.values()], preferred: declared.has(operation), description: [...new Set(declared.get(operation) ?? [])].join('\n\n') }))
+    return [...byTarget].map(([operation, matches]) => ({ operation, candidates: [...matches.values()], preferred: declared.has(operation), description: [...new Set(descriptions.get(operation) ?? [])].join('\n\n') }))
   }
 
   function choicesFor(operation, location, name, results) {
