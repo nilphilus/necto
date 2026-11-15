@@ -1,17 +1,18 @@
 #!/usr/bin/env node
+import { resolveCiReferences } from './ci-references.mjs'
 import { failureDiagnostic } from './failure-diagnostic.mjs'
 import { executionOptions } from '../Necto.UI/src/features/workbench/executionOptions.js'
 import { junitReport } from './junit.mjs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 import {
-  parseDocument,
-  bundleReferences
+  parseDocument
 } from '../Necto.UI/src/features/workbench/document.js'
 import { readOperations } from '../Necto.UI/src/features/api-catalog/catalog.js'
 import { resolveMappingLinks } from '../Necto.UI/src/features/related-endpoints/mappings.js'
 import {
   prepareScenario,
+  validateScenario,
   executeScenario
 } from '../Necto.UI/src/features/scenarios/scenario.js'
 import {
@@ -21,6 +22,11 @@ import {
 } from '../Necto.UI/src/features/request-runner/request.js'
 import { evaluateAssertions } from '../Necto.UI/src/features/workbench/assertions.js'
 import { safeRequest } from '../Necto.UI/src/features/workbench/privacy.js'
+function requireWritePermission(scenario, allowWrites) {
+  validateScenario(scenario)
+  if (!allowWrites && scenario.steps.some(step => !['GET', 'HEAD', 'OPTIONS'].includes(step.method)))
+    throw new Error('This scenario contains writes. Pass --allow-writes explicitly.')
+}
 export async function runScenario({
   scenario,
   document,
@@ -41,15 +47,7 @@ export async function runScenario({
     servers: []
   }))
   const links = resolveMappingLinks(operations, [{ apiId: 'local', mappings }])
-  if (
-    !allowWrites &&
-    scenario.steps.some(
-      (step) => !['GET', 'HEAD', 'OPTIONS'].includes(step.method)
-    )
-  )
-    throw new Error(
-      'This scenario contains writes. Pass --allow-writes explicitly.'
-    )
+  requireWritePermission(scenario, allowWrites)
   const plan = prepareScenario(scenario, {
     operations,
     links,
@@ -114,7 +112,10 @@ async function main() {
   const args = Object.create(null)
   for (let index = 2; index < process.argv.length; index++) {
     const key = process.argv[index]
-    if (key === '--allow-writes') args[key] = true
+    if (key === '--allow-ref-origin') {
+      if (!process.argv[index + 1] || process.argv[index + 1].startsWith('--')) throw new Error('Missing value for --allow-ref-origin')
+      ;(args[key] ??= []).push(process.argv[++index])
+    } else if (key === '--allow-writes') args[key] = true
     else if (
       !key.startsWith('--') ||
       !process.argv[index + 1] ||
@@ -125,7 +126,7 @@ async function main() {
   }
   if (!args['--base-url'] || !args['--bundle'] && (!args['--scenario'] || !args['--document']))
     throw new Error(
-      'Usage: node tools/necto-run.mjs --bundle necto-ci.json --base-url URL [--junit report.xml] OR --scenario scenario.json --document openapi.yaml --base-url https://api.example.com [--mappings mappings.json] [--name scenario-name] [--bearer-env TOKEN_ENV] [--allow-writes] [--report report.json]'
+      'Usage: node tools/necto-run.mjs --bundle necto-ci.json --base-url URL [--junit report.xml] OR --scenario scenario.json --document openapi.yaml --base-url https://api.example.com [--mappings mappings.json] [--name scenario-name] [--bearer-env TOKEN_ENV] [--allow-writes] [--allow-ref-origin https://trusted.example] [--report report.json]'
     )
   const bundle = args['--bundle'] ? JSON.parse(await readFile(args['--bundle'], 'utf8')) : undefined
   if (bundle && (bundle.format !== 'necto-ci-bundle' || ![1, 2].includes(bundle.version) || !bundle.scenario || !bundle.document || !Array.isArray(bundle.mappings))) throw new Error('Invalid CI bundle.')
@@ -140,12 +141,13 @@ async function main() {
       ? candidates[0]
       : undefined
   if (!scenario) throw new Error('Select a scenario with --name.')
+  requireWritePermission(scenario, args['--allow-writes'])
   const baseUrl = args['--base-url'],
     parsed = parseDocument(bundle ? JSON.stringify(bundle.document) : await readFile(args['--document'], 'utf8'))
-  const document = bundle ? parsed : await bundleReferences(
-    parsed,
-    new URL('/openapi.json', baseUrl).href
-  )
+  const document = await resolveCiReferences(parsed, new URL('/openapi.json', baseUrl).href, {
+    allowedOrigins: args['--allow-ref-origin'] ?? [],
+    timeout: args['--timeout'] ? Number(args['--timeout']) : 30000
+  })
   const bearer = args['--bearer-env']
     ? process.env[args['--bearer-env']]
     : undefined
