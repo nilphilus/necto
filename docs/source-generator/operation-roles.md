@@ -17,3 +17,7 @@ The compact **Find by task** button in the endpoint catalog opens a searchable, 
 Validation: 32 .NET Release tests cover declared lambda/method roles, omission of unannotated operations and route discovery; 186 UI/module tests cover scoping, ambiguity, pagination and validation. Chromium verified that a Create task opens the POST editor with zero writes.
 
 ![Author-declared tasks](operation-roles.png)
+
+![Mobile tasks](operation-roles-mobile.png)
+
+Screenshots come from local combined validation of the six generator PRs. Combined checks: 38 .NET integration tests, 8 Roslyn tests, 189 UI/module tests and desktop/mobile browser flows. Selecting tasks performed no writes.
