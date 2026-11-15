@@ -1,8 +1,9 @@
 <script setup>
+import IdentifierCatalog from './IdentifierCatalog.vue'
 import { computed, nextTick, ref, watch, useId } from 'vue'
 import { useGraphViewport } from '../graph-viewport.js'
 import { buildEntityGraph, connectionPath, entitySize, groupConnections, layoutGraph } from './graph.js'
-const props = defineProps({ spec: Object, operations: Array, mappings: Array, mappingError: String, initialOperationKey: String, apis: { type: Array, default: () => [] } })
+const props = defineProps({ configuration: Object, authentication: Object, spec: Object, operations: Array, mappings: Array, mappingError: String, initialOperationKey: String, apis: { type: Array, default: () => [] } })
 defineEmits(['open-operation'])
 const search = ref('')
 const selectedId = ref('')
@@ -67,6 +68,7 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
       <span class="counts">{{ graph.nodes.length }} entities · {{ graph.edges.length }} connections</span>
     </header>
     <div class="graph-controls">
+      <IdentifierCatalog :configuration="configuration" :authentication="authentication" :operations="operations" @open-operation="$emit('open-operation', $event)" />
       <label>Find an entity <input v-model="search" type="search" placeholder="Invoice, Customer…"></label>
       <label>Connections <select v-model="kind" aria-label="Connections"><option value="all">All connections</option><option value="schema">Schema references</option><option value="mapping">Value flows</option></select></label>
       <button type="button" class="secondary" :disabled="!selected" :aria-pressed="focused" @click="focused = !focused">Focus on selected entity</button>

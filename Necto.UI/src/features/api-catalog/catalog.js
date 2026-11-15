@@ -132,7 +132,7 @@ export function useCatalog(authentication) {
     const imported = parseDocument(text)
     const bundled = await bundleReferences(imported, configuration.value.openApiUrl, (url, options) => fetch(url, { ...options, signal }))
     if (version !== generation) return
-    if (association === 'separate') configuration.value = { ...configuration.value, workspaceId, overrideServer: false, serverProfiles: {}, endpointMappingsUrl: undefined }
+    if (association === 'separate') configuration.value = { ...configuration.value, workspaceId, overrideServer: false, serverProfiles: {}, endpointMappingsUrl: undefined, entityCatalogUrl: undefined, operationRolesUrl: undefined }
     spec.value = bundled
     documentSource.value = { kind: 'import', name, workspaceName: association === 'separate' ? workspaceName.trim() : documentSource.value.workspaceName }
     error.value = ''

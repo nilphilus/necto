@@ -91,6 +91,7 @@ public static class NectoUIApplicationExtensions
                 ["openApiUrl"] = context.Request.PathBase.Add(openApi).ToUriComponent(),
                 ["apiBaseUrl"] = context.Request.PathBase.ToUriComponent() + "/"
             };
+            foreach (var item in NectoGeneratedMetadata.Discover(dataSources, context.Request.PathBase)) configuration[item.Key] = item.Value;
             var mappingsPath = endpointMappingsPath ?? FindEndpointMappingsPath(dataSources);
             if (mappingsPath is not null)
                 configuration["endpointMappingsUrl"] = context.Request.PathBase.Add(new PathString(mappingsPath)).ToUriComponent();
