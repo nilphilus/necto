@@ -57,7 +57,7 @@ export function useAuthentication() {
     const api = apis.get(id)
     if (!api) return options
     const target = new URL(url, api.configuration.openApiUrl)
-    const known = [api.configuration.openApiUrl, api.configuration.endpointMappingsUrl, api.configuration.configurationUrl].filter(Boolean).map(value => new URL(value, api.configuration.openApiUrl).href)
+    const known = [api.configuration.openApiUrl, api.configuration.endpointMappingsUrl, api.configuration.configurationUrl, api.configuration.entityCatalogUrl, api.configuration.operationRolesUrl].filter(Boolean).map(value => new URL(value, api.configuration.openApiUrl).href)
     if (!known.includes(target.href)) return options
     const selected = Object.entries(api.credentials).filter(([, value]) => value.metadata && value.origins.includes(target.origin)).map(([name, credential]) => ({ scheme: api.schemes[name], credential }))
     if (api.access?.metadata && api.access.origins.includes(target.origin)) selected.push({ scheme: api.accessScheme, credential: api.access })

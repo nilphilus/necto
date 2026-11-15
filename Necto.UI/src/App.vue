@@ -1,4 +1,5 @@
 <script setup>
+import OperationTasks from './features/api-catalog/OperationTasks.vue'
 import DescriptionHelp from './features/workbench/DescriptionHelp.vue'
 import { scenarioTargets } from './features/workbench/scenarioTargets.js'
 import { workspaceIdentity } from './features/workbench/workspaceIdentity.js'
@@ -805,7 +806,7 @@ function removeScenario(id) {
           :active-operation="current?.operation.key ?? ''"
           @select-operation="selectCatalogOperation"
         >
-          <template #actions><CurlImport :operations="operations" :configuration="configuration" :disabled="scenarioBusy" @import="loadCurlDraft" /></template>
+          <template #actions><OperationTasks :configuration="configuration" :authentication="authentication" :operations="operations" @open-operation="operation => selectCatalogOperation(operation, operation.tags[0])" /><CurlImport :operations="operations" :configuration="configuration" :disabled="scenarioBusy" @import="loadCurlDraft" /></template>
         </EndpointCatalog>
 
         </div>
