@@ -26,13 +26,13 @@ function choose(operation){dialog.value.close();emit('open-operation',operation)
 <template>
  <button v-if="configuration?.operationRolesUrl" ref="trigger" type="button" class="secondary task-trigger" aria-label="Find by task" title="Find by task" @click="open">▤</button>
  <Teleport to="body"><dialog ref="dialog" aria-label="Find API requests by task" @close="closed">
-  <header><h3>What do you want to do?</h3><button type="button" @click="dialog.close()">Close</button></header>
+  <header><h3>What do you want to do?</h3><button class="secondary" type="button" @click="dialog.close()">Close</button></header>
   <p>Purposes declared by the API author. Opening a request does not send it.</p>
   <label>Find a task<input v-model="query" type="search" placeholder="Find invoices, create a customer…"></label>
   <p v-if="pending" role="status">Loading tasks…</p><p v-if="error" role="alert">{{error}}</p>
-  <ul><li v-for="entry in result.items" :key="JSON.stringify([entry.operationId,entry.entityId,entry.role])"><strong>{{entry.role}} {{entry.entityName}}</strong><DescriptionHelp :label="'About task '+entry.role+' '+entry.entityName" :description="entry.description"/><span class="method" :data-method="entry.operation.method">{{entry.operation.method}}</span><button type="button" @click="choose(entry.operation)">Open {{entry.operation.name}}</button></li></ul>
+  <ul><li v-for="entry in result.items" :key="JSON.stringify([entry.operationId,entry.entityId,entry.role])"><strong>{{entry.role}} {{entry.entityName}}</strong><DescriptionHelp :label="'About task '+entry.role+' '+entry.entityName" :description="entry.description"/><span class="method" :data-method="entry.operation.method">{{entry.operation.method}}</span><button class="secondary" type="button" @click="choose(entry.operation)">Open {{entry.operation.name}}</button></li></ul>
   <p v-if="!pending&&!error&&!result.total">No declared tasks match the current catalog.</p>
-  <button type="button" :disabled="page===1" @click="page--">Previous</button><span> {{page}} / {{Math.max(1,Math.ceil(result.total/25))}} </span><button type="button" :disabled="page*25>=result.total" @click="page++">Next</button>
+  <button class="secondary" type="button" :disabled="page===1" @click="page--">Previous</button><span> {{page}} / {{Math.max(1,Math.ceil(result.total/25))}} </span><button class="secondary" type="button" :disabled="page*25>=result.total" @click="page++">Next</button>
  </dialog></Teleport>
 </template>
 <style scoped>
