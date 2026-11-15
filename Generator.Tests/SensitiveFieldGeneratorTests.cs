@@ -1,6 +1,11 @@
 using Necto.Generator;
 public sealed class SensitiveFieldGeneratorTests
 {
+    [Fact] public void ReadsReachableDtosFromAReferencedAssembly()
+    {
+        var result=ContractGeneratorFixture.Generate(new SensitiveFieldsGenerator(), "app.MapGet(\"/shared\",()=>new Shared.Input(\"x\")).WithName(\"Shared\");", "namespace Shared { public record Input([property:Necto.NectoSensitive] string Code); }");
+        Assert.Contains("Code",result.GeneratedTrees.Single().ToString());
+    }
     [Fact] public void MarksFieldsByDeclarationWithoutReadingRuntimeSecrets()
     {
         var result=ContractGeneratorFixture.Generate(new SensitiveFieldsGenerator(),"""

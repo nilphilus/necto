@@ -14,8 +14,9 @@ public static class NectoSensitiveMetadata
         var registry=fields.GroupBy(item=>item.ClrName).ToDictionary(group=>group.Key,group=>group.Select(item=>item.Property).ToHashSet());
         options.AddSchemaTransformer((schema,context,_)=>{
             var type=context.JsonTypeInfo.Type;var key=(type.IsGenericType?type.GetGenericTypeDefinition():type).FullName?.Replace('+','.');
-            if(key is null || !registry.TryGetValue(key,out var members))return Task.CompletedTask;
-            var names=context.JsonTypeInfo.Properties.Where(property=>property.AttributeProvider is PropertyInfo info&&members.Contains(info.Name)&&schema.Properties?.ContainsKey(property.Name)==true).Select(property=>property.Name).ToHashSet();
+            if(key is null)return Task.CompletedTask;
+            if(!registry.TryGetValue(key,out var members))members=[];
+            var names=context.JsonTypeInfo.Properties.Where(property=>property.AttributeProvider is PropertyInfo info&&(members.Contains(info.Name)||info.IsDefined(typeof(NectoSensitiveAttribute),true))&&schema.Properties?.ContainsKey(property.Name)==true).Select(property=>property.Name).ToHashSet();
             if(names.Count==0)return Task.CompletedTask;
             schema.Extensions??=new Dictionary<string,IOpenApiExtension>();
             if(schema.Extensions.TryGetValue("x-necto-sensitive-properties",out var existing)&&existing is JsonNodeExtension {Node:JsonArray values})
