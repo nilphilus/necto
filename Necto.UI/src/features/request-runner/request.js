@@ -1,3 +1,4 @@
+import { schemaTemplate, formatTemplate, TemplateLimitError, TEMPLATE_CHARACTER_LIMIT, TEMPLATE_NOTICE } from './schemaTemplate.js'
 import { bodyContent, buildNonJsonBody, isJson } from '../workbench/body.js'
 import { jsonBodyIssue } from './bodyHelp.js'
 export const formatJson = value => JSON.stringify(value, null, 2)
@@ -80,44 +81,28 @@ export function jsonContent(operation, mediaType) {
   )
 }
 
-function schemaExample(operation, schema, ancestors = new Set(), useExamples = true) {
-  schema = operation.resolve(schema)
-  if (!schema || ancestors.has(schema)) return null
-  const nested = new Set(ancestors).add(schema)
-  const example = schema.examples?.[0] ?? schema.enum?.[0] ?? schema.const ?? schema.default
-  if (useExamples && Object.hasOwn(schema, 'example')) return schema.example
-  if (useExamples && example !== undefined) return example
-  if (schema.oneOf || schema.anyOf) return schemaExample(operation, (schema.oneOf ?? schema.anyOf)[0], nested, useExamples)
-  if (schema.allOf) return Object.assign({}, ...schema.allOf.map(part => schemaExample(operation, part, nested, useExamples)))
-
-  const type = Array.isArray(schema.type) ? schema.type.find(type => type !== 'null') : schema.type
-  if (type === 'object' || schema.properties) {
-    return Object.fromEntries(Object.entries(schema.properties ?? {})
-      .filter(([, property]) => !operation.resolve(property)?.readOnly)
-      .map(([name, property]) => [name, schemaExample(operation, property, nested, useExamples)]))
+export function initialPayload(operation, mediaType) {
+  try {
+    const entry = bodyContent(operation, { mediaType })
+    const content = entry?.[1]
+    if (entry && !isJson(entry[0])) {
+      const example = content.example ?? Object.values(content.examples ?? {}).map(operation.resolve).find(value => value && Object.hasOwn(value, 'value'))?.value
+      if (typeof example === 'string' && example.length > TEMPLATE_CHARACTER_LIMIT) throw new TemplateLimitError()
+      return { body: example === undefined ? '' : typeof example === 'string' ? example : formatTemplate(example), notice: '' }
+    }
+    if (!content) return { body: '', notice: '' }
+    if (Object.hasOwn(content, 'example')) return { body: formatTemplate(content.example), notice: '' }
+    for (const entry of Object.values(content.examples ?? {})) {
+      const example = operation.resolve(entry)
+      if (example && Object.hasOwn(example, 'value')) return { body: formatTemplate(example.value), notice: '' }
+    }
+    return { body: formatTemplate(content.schema ? schemaTemplate(operation, content.schema) : {}), notice: '' }
+  } catch (error) {
+    if (!(error instanceof TemplateLimitError)) throw error
+    return { body: '', notice: TEMPLATE_NOTICE }
   }
-  if (type === 'array') return schema.items ? [schemaExample(operation, schema.items, nested, useExamples)] : []
-  if (type === 'boolean') return false
-  if (type === 'integer' || type === 'number') return schema.minimum ?? 0
-  if (type === 'string') return 'string'
-  return null
 }
-
-export function initialBody(operation, mediaType) {
-  const entry = bodyContent(operation, { mediaType })
-  const content = entry?.[1]
-  if (entry && !isJson(entry[0])) {
-    const example = content.example ?? Object.values(content.examples ?? {}).map(operation.resolve).find(value => value && Object.hasOwn(value, 'value'))?.value
-    return example === undefined ? '' : typeof example === 'string' ? example : formatJson(example)
-  }
-  if (!content) return ''
-  if (Object.hasOwn(content, 'example')) return formatJson(content.example)
-  for (const entry of Object.values(content.examples ?? {})) {
-    const example = operation.resolve(entry)
-    if (example && Object.hasOwn(example, 'value')) return formatJson(example.value)
-  }
-  return formatJson(content.schema ? schemaExample(operation, content.schema) : {})
-}
+export const initialBody = (operation, mediaType) => initialPayload(operation, mediaType).body
 
 function bodyValue(value, example) {
   if (typeof example === 'string') return value
@@ -132,9 +117,16 @@ export function applyBodyPresets(operation, body, values, mediaType) {
   if (!layers) return { body, matches, sources }
   let parsed
   try { parsed = JSON.parse(body.trim() ? body : '{}') } catch { return { body, matches, sources } }
-  const shape = schemaExample(operation, jsonContent(operation, mediaType)?.[1].schema, new Set(), false)
+  let shape
+  try { shape = schemaTemplate(operation, jsonContent(operation, mediaType)?.[1].schema, false) }
+  catch (error) {
+    if (!(error instanceof TemplateLimitError)) throw error
+    return { body, matches, sources, notice: 'Automatic body presets exceed the generation budget. Disable body presets and enter the request body manually.' }
+  }
   let applied = false
+  let visited = 0
   function fill(value, example, root = false, path = []) {
+    if (++visited > 5000 || path.length > 24) throw new TemplateLimitError()
     if (Array.isArray(value)) return value.map((item, index) => fill(item, example?.[index] ?? example?.[0], false, [...path, index]))
     if (!value || typeof value !== 'object') return value
     if (!example || typeof example !== 'object' || Array.isArray(example)) example = {}
@@ -163,8 +155,13 @@ export function applyBodyPresets(operation, body, values, mediaType) {
     }
     return Object.fromEntries(entries)
   }
-  const filled = fill(parsed, shape, true)
-  return { body: applied ? formatJson(filled) : body, matches, applied, sources }
+  try {
+    const filled = fill(parsed, shape, true)
+    return { body: applied ? formatJson(filled) : body, matches, applied, sources }
+  } catch (error) {
+    if (!(error instanceof TemplateLimitError)) throw error
+    return { body, matches: new Set(), sources: [], notice: 'Automatic body presets exceed the generation budget. Disable body presets and enter the request body manually.' }
+  }
 }
 
 export function presetInputs(operation, body, values) {
@@ -277,7 +274,8 @@ export function buildRequest(operation, configuration, draft, values = new Map()
     const content = bodyContent(operation, draft)
     if (!content) throw new Error('This request has no supported media type.')
     if (isJson(content[0])) {
-      const { body } = applyBodyPresets(operation, draft.body ?? '', values, content[0])
+      const { body, notice } = applyBodyPresets(operation, draft.body ?? '', values, content[0])
+      if (notice) throw new Error(notice)
       if (body.trim() || operation.requestBody.required) {
         try { JSON.parse(body) } catch (cause) { throw new Error(jsonBodyIssue(body, cause)) }
         options.body = body
