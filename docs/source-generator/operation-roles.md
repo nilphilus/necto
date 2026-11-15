@@ -14,6 +14,6 @@ Register `app.MapNectoOperationRoles()` and apply the host authorization policy 
 
 The compact **Find by task** button in the endpoint catalog opens a searchable, paged dialog. Selecting a task opens its current visible request for review; it never sends a request. Hidden or ambiguous operations are omitted. Descriptions remain behind an information button. Imported unrelated workspaces drop host role URLs; metadata loads use scoped authentication and bounded reads.
 
-Validation: 30 .NET Release tests cover declared lambda/method roles, omission of unannotated operations and route discovery; 186 UI/module tests cover scoping, ambiguity, pagination and validation. Chromium verified that a Create task opens the POST editor with zero writes.
+Validation: 32 .NET Release tests cover declared lambda/method roles, omission of unannotated operations and route discovery; 186 UI/module tests cover scoping, ambiguity, pagination and validation. Chromium verified that a Create task opens the POST editor with zero writes.
 
 ![Author-declared tasks](operation-roles.png)
