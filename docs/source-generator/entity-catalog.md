@@ -9,3 +9,7 @@ The source generator uses JSON-visible properties, CLR qualification and existin
 Validation: 32 .NET Release tests, UI/module coverage for scoped navigation, pagination and malformed metadata; Chromium verified a real generated InvoiceId with producers and consumers.
 
 ![Generated catalog](entity-catalog.png)
+
+![Mobile catalog](entity-catalog-mobile.png)
+
+Screenshots come from local combined validation of the six generator PRs. Combined checks: 38 .NET integration tests, 8 Roslyn tests, 189 UI/module tests and desktop/mobile browser flows. No production APIs were called.
