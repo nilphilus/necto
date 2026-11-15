@@ -33,10 +33,12 @@ async function parseResponse(text, signal) {
 }
 
 export const DEFAULT_RESPONSE_LIMIT = 32 * 1024 * 1024
-export async function readBoundedText(response, { signal, onProgress, responseLimitBytes = DEFAULT_RESPONSE_LIMIT } = {}) {
+async function readBoundedBody(response, { signal, onProgress, responseLimitBytes = DEFAULT_RESPONSE_LIMIT } = {}, binary = false) {
   const limit = Math.max(1, Math.min(512 * 1024 * 1024, Number(responseLimitBytes) || DEFAULT_RESPONSE_LIMIT))
-  if (!response.body) return { text: '', bytes: 0 }
-  const reader = response.body.getReader(), decoder = new TextDecoder(), parts = []
+  signal?.throwIfAborted()
+  const binaryResult = (parts, bytes) => ({ binary: new Blob(parts, { type: response.headers.get('content-type') ?? '' }), bytes })
+  if (!response.body) return binary ? binaryResult([], 0) : { text: '', bytes: 0 }
+  const reader = response.body.getReader(), decoder = binary ? null : new TextDecoder(), parts = []
   let bytes = 0, updated = 0
   const declared = Number(response.headers.get('content-length'))
   const total = Number.isFinite(declared) && declared > 0 ? declared : undefined
@@ -52,14 +54,14 @@ export async function readBoundedText(response, { signal, onProgress, responseLi
       bytes += chunk.value.byteLength
       if (bytes > limit) {
         await reader.cancel('Response budget exceeded')
-        throw Object.assign(new Error(`Response exceeded the ${Math.round(limit / 1024 / 1024)} MiB preview budget. Reception stopped; no partial JSON is shown. Change the budget in Tools → Configure request → Response budget before explicitly sending again.`), { code: 'RESPONSE_LIMIT_EXCEEDED' })
+        throw Object.assign(new Error(`Response exceeded the ${Math.round(limit / 1024 / 1024)} MiB preview budget. Reception stopped; no partial response is retained. Change the budget in Tools → Configure request → Response budget before explicitly sending again.`), { code: 'RESPONSE_LIMIT_EXCEEDED' })
       }
-      parts.push(decoder.decode(chunk.value, { stream: true }))
+      parts.push(binary ? chunk.value.slice() : decoder.decode(chunk.value, { stream: true }))
       if (performance.now() - updated > 100) { updated = performance.now(); onProgress?.({ bytes, total, limit }) }
     }
-    parts.push(decoder.decode())
+    if (decoder) parts.push(decoder.decode())
     onProgress?.({ bytes, total, limit, phase: 'parsing' })
-    return { text: parts.join(''), bytes }
+    return binary ? binaryResult(parts, bytes) : { text: parts.join(''), bytes }
   } catch (error) {
     onProgress?.({ bytes, total, limit })
     throw error
@@ -68,6 +70,9 @@ export async function readBoundedText(response, { signal, onProgress, responseLi
     reader.releaseLock()
   }
 }
+
+export const readBoundedText = (response, options) => readBoundedBody(response, options)
+export const readBoundedBinary = (response, options) => readBoundedBody(response, options, true)
 
 const textual = (type) =>
   !type ||
@@ -205,14 +210,15 @@ export async function sendRequest(request, { onProgress, responseLimitBytes } = 
   if (/event-stream|(?:x-)?ndjson|jsonl/i.test(contentType) && response.body)
     return readStream(response, metadata, signal, onProgress)
   if (!textual(contentType)) {
-    const binary = await response.blob()
+    const { binary, bytes } = await readBoundedBinary(response, { signal, responseLimitBytes,
+      onProgress: progress => onProgress?.({ ...metadata, receiving: true, incomplete: true, progress, text: '', byteLength: progress.bytes }) })
     signal?.throwIfAborted()
     return {
       ...metadata,
       binary,
       text: '',
       rawText: '',
-      byteLength: binary.size
+      byteLength: bytes
     }
   }
   const { text, bytes } = await readBoundedText(response, { signal, responseLimitBytes,
