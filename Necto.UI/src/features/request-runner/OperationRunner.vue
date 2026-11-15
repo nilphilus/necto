@@ -1,6 +1,6 @@
 <script setup>
 import DescriptionHelp from '../workbench/DescriptionHelp.vue'
-import { computed, nextTick, ref, watch, watchPostEffect } from 'vue'
+import { computed, nextTick, ref, useId, watch, watchPostEffect } from 'vue'
 import { bodyFields, hasBodyExample } from './bodyHelp.js'
 import ImportedInputs from '../workbench/ImportedInputs.vue'
 import { effectiveTarget } from '../workbench/target.js'
@@ -39,6 +39,7 @@ const responseStale = computed(() => {
 
 const previewPreferences = computed(() => props.session.previewPreferences ??= { tables: {} })
 const parameters = computed(() => supportedParameters(props.operation))
+const parameterIdPrefix = useId()
 const content = computed(() => jsonContent(props.operation, props.session.mediaType))
 const bodyPresetResult = computed(() => applyBodyPresets(props.operation, props.session.body, props.values, props.session.mediaType))
 const effectiveBody = computed(() => bodyPresetResult.value.body)
@@ -50,6 +51,7 @@ const displayedBody = computed({
 const relatedPinned = ref(false)
 const pinnedToolsHost = ref(null)
 const form = ref(null)
+const requestFooter = ref(null)
 const settingsTools = ref(null), settingsError = ref(''), invalidSetting = ref(null)
 watch(() => props.session, () => { settingsError.value = ''; invalidSetting.value = null })
 function handleInvalid(event) {
@@ -116,7 +118,7 @@ watchPostEffect(onCleanup => {
     // On a long form, size the editor for when the user scrolls it into view.
     const available = bottom - Math.max(top, editorTop)
     const space = available >= 96 ? available : bottom - top
-    editor.style.setProperty('--body-height-limit', `${Math.max(0, space - 16)}px`)
+    editor.style.setProperty('--body-height-limit', `${Math.max(0, space - requestFooter.value.offsetHeight - 16)}px`)
   }
 
   limitBodyHeight()
@@ -168,15 +170,7 @@ function parameterHint(parameter) {
         <div class="request-actions">
           <slot name="request-actions" />
           <RequestTools ref="settingsTools" @edit-request="editRequest" :operation="operation" :session="session" :values="values" :configuration="configuration" :prepare="prepare" :history="history" />
-          <button v-if="session.pending && cancel" type="button" @click="cancel(session)">Cancel</button>
           <button v-if="session.result && !requestCompact" type="button" class="secondary focus-response" @click="focusResponse">Focus response</button>
-          <button
-            class="primary"
-            type="submit"
-            :disabled="session.pending"
-            aria-keyshortcuts="Control+Enter Meta+Enter"
-            title="Send request (Ctrl or ⌘ + Enter)"
-          >{{ session.pending ? 'Sending…' : 'Send request' }} <RequestSendIcon v-if="!session.pending" /></button>
         </div>
       </header>
 
@@ -192,29 +186,35 @@ function parameterHint(parameter) {
         <ImportedInputs :session="session" />
         <p v-if="!parameters.length && !operation.requestBody" class="muted empty">Ready to send. This endpoint has no inputs.</p>
 
-        <div v-for="parameter in parameters" :key="fieldKey(parameter)" class="field">
-          <label class="field-label">
-            <span>
+        <div v-for="(parameter, index) in parameters" :key="fieldKey(parameter)" class="field">
+          <div class="parameter-heading">
+            <label class="field-label" :for="`${parameterIdPrefix}-${index}`">
               <code>{{ parameter.name }}</code>
               <small>{{ parameter.in }}<template v-if="parameter.required || parameter.in === 'path'"> · required</template></small>
+            </label>
+            <span v-if="values.has(contextKey(parameter))" class="muted preset-origin" :id="`${parameterIdPrefix}-${index}-preset`">
+              Set by preset
+              <button v-if="presetSource(values, contextKey(parameter))" type="button" class="preset-link"
+                :title="presetSource(values, contextKey(parameter))"
+                @click="emit('edit-preset', presetSource(values, contextKey(parameter)))">{{ presetSource(values, contextKey(parameter)) }}</button>
             </span>
-            <input
-              v-if="values.has(contextKey(parameter))"
-              :value="values.get(contextKey(parameter))"
-              readonly
-              spellcheck="false"
-            >
-            <slot v-else name="parameter-input" :parameter="parameter" :hint="parameterHint(parameter)">
-              <input v-model="session.fields[fieldKey(parameter)]" :required="parameter.required || parameter.in === 'path'"
-                :placeholder="parameterHint(parameter)" spellcheck="false">
+            <DescriptionHelp :label="'About parameter ' + parameter.name" :description="parameter.description" />
+          </div>
+          <input
+            v-if="values.has(contextKey(parameter))"
+            :id="`${parameterIdPrefix}-${index}`"
+            :aria-describedby="`${parameterIdPrefix}-${index}-preset`"
+            :value="values.get(contextKey(parameter))"
+            readonly
+            spellcheck="false"
+          >
+          <template v-else>
+            <slot name="parameter-input" :parameter="parameter" :hint="parameterHint(parameter)" :id="`${parameterIdPrefix}-${index}`">
+              <input :id="`${parameterIdPrefix}-${index}`" v-model="session.fields[fieldKey(parameter)]"
+                :required="parameter.required || parameter.in === 'path'" :placeholder="parameterHint(parameter)" spellcheck="false">
             </slot>
-          </label>
-          <DescriptionHelp :label="'About parameter ' + parameter.name" :description="parameter.description" />
-          <p v-if="values.has(contextKey(parameter))" class="muted preset-origin">Set by preset
-            <button v-if="presetSource(values, contextKey(parameter))" type="button" class="preset-link" @click="emit('edit-preset', presetSource(values, contextKey(parameter)))">{{ presetSource(values, contextKey(parameter)) }}</button>
-            <span v-else>active request preset</span>.
-          </p>
-          <slot v-else name="choices" :location="parameter.in" :parameter-name="parameter.name" />
+            <slot name="choices" :location="parameter.in" :parameter-name="parameter.name" />
+          </template>
         </div>
 
         <BodyEditor v-if="operation.requestBody" :operation="operation" :session="session">
@@ -243,6 +243,16 @@ function parameterHint(parameter) {
         </BodyEditor>
         <p v-if="session.error" class="error" role="alert">{{ session.error }}</p>
       </div>
+      <footer ref="requestFooter" class="request-actions request-footer">
+        <button
+          class="primary"
+          type="submit"
+          :disabled="session.pending"
+          aria-keyshortcuts="Control+Enter Meta+Enter"
+          title="Send request (Ctrl or ⌘ + Enter)"
+        >{{ session.pending ? 'Sending…' : 'Send request' }} <RequestSendIcon v-if="!session.pending" /></button>
+        <button v-if="session.pending && cancel" type="button" @click="cancel(session)">Cancel</button>
+      </footer>
     </form>
 
     <section ref="responsePane" class="response-pane" aria-label="Response" :aria-busy="session.pending">
@@ -287,8 +297,10 @@ function parameterHint(parameter) {
 </template>
 
 <style scoped>
-.field { position:relative; }
-.field > .description-help { position:absolute; top:0; right:0; }
+.parameter-heading { display: flex; align-items: center; gap: .35rem; margin-bottom: .35rem; }
+.parameter-heading .field-label { display: block; flex: 1; min-width: 0; font-size: .88rem; font-weight: 650; overflow-wrap: anywhere; }
+.preset-origin { display: flex; align-items: center; gap: .2rem; min-width: 0; max-width: 60%; font-size: .75rem; white-space: nowrap; }
+.preset-origin .preset-link { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: inherit; padding-block: 0; }
 
 .settings-error { margin:.5rem .85rem; font-size:.8rem; }
 .runner {
@@ -322,6 +334,7 @@ function parameterHint(parameter) {
 .active-host {display:inline-block;max-width:18rem;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;font-weight:400;color:var(--muted);font-size:.7rem}
 .pane-header h3 { margin: 0; font-size: .88rem; }
 .request-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.request-footer { padding: 0 .85rem .85rem; }
 .request-actions button, .request-actions :slotted(button) { font-size: .84rem; }
 .pane-header button span { margin-left: .25rem; }
 .pane-body { padding: .85rem; }
@@ -338,7 +351,7 @@ function parameterHint(parameter) {
 .field-label { display: grid; gap: .35rem; }
 .field-label span { font-weight: 650; font-size: .88rem; }
 .field-label small { margin-left: .4rem; color: var(--muted); font-weight: 400; }
-.field-label input, .field-label textarea { width: 100%; }
+.field > input, .field-label textarea { width: 100%; }
 .field-label textarea {
   field-sizing: content;
   min-height: min(4.5rem, var(--body-height-limit, 70dvh));
