@@ -1,3 +1,4 @@
+import { bodyPolicy } from '../workbench/sensitiveSchema.js'
 import { schemaTemplate, formatTemplate, TemplateLimitError, TEMPLATE_CHARACTER_LIMIT, TEMPLATE_NOTICE } from './schemaTemplate.js'
 import { bodyContent, buildNonJsonBody, isJson } from '../workbench/body.js'
 import { jsonBodyIssue } from './bodyHelp.js'
@@ -287,7 +288,7 @@ export function buildRequest(operation, configuration, draft, values = new Map()
     if (typeof key === 'string' && key.startsWith('header:') && !declared.has(key)) headers.set(key.slice(7), value)
   }
   if (options.body instanceof FormData) headers.delete('Content-Type')
-  return { url, options }
+  return { url, options, bodyPolicy: bodyPolicy(operation, draft) }
 }
 
 export { sendRequest } from '../workbench/response.js'

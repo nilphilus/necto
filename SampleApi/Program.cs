@@ -11,6 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi(options => options.AddNectoGeneratedDocumentation());
 
 builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedLinks());
+builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedSensitiveFields());
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -77,6 +78,8 @@ app.MapGet("/invoices/{invoiceId:int}/xml-document", Results<Ok<InvoiceXmlPayloa
     .WithTags("Invoices")
     .WithSummary("Invoice with an embedded XML document")
     .WithDescription("Open XML preview beside document. The surrounding JSON object remains selectable for related requests.");
+
+app.MapPost("/invoices/sensitive", ([FromBody] SensitiveInvoice invoice) => TypedResults.Ok(invoice)).WithName("SensitiveInvoice").WithTags("Invoices");
 
 var summaries = new[]
 {
@@ -226,3 +229,6 @@ record CustomerSearch(CustomerId SelectedCustomer);
 public partial class Program;
 
 record InvoiceXmlPayload([property: EndpointValue("invoiceId")] int Id, string Reference, string Document);
+
+record SensitiveInvoice(string Reference, [property: NectoSensitive, System.Text.Json.Serialization.JsonPropertyName("approval-code")] string ApprovalCode, SensitiveContact Contact);
+record SensitiveContact(string Name, [property: NectoSensitive] string Note);

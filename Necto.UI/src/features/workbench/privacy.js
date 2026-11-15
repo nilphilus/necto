@@ -1,3 +1,4 @@
+import { redactSchema, sensitiveFields, hasSensitivePolicy } from './sensitiveSchema.js'
 import { redactedRequest } from '../authentication/authentication.js'
 import { describeBody } from './body.js'
 export const sensitiveName = (name) =>
@@ -58,13 +59,14 @@ export function safeRequest(request, includeCredentials = false) {
     } catch {
       /* Unstructured text is intentionally not interpreted. */
     }
-    if (valid) body = JSON.stringify(redactDocument(parsed))
+    if (valid) body = JSON.stringify(redactDocument(redactSchema(parsed, request.bodyPolicy?.schema, request.bodyPolicy?.resolve, 'omit')))
+    else if (hasSensitivePolicy(request.bodyPolicy)) body = '[redacted: unstructured payload]'
   }
   if (body instanceof FormData || body instanceof URLSearchParams) {
     const result =
       body instanceof FormData ? new FormData() : new URLSearchParams()
     for (const [name, value] of body)
-      result.append(name, sensitiveName(name) ? '[redacted]' : value)
+      result.append(name, sensitiveName(name) || sensitiveFields(request.bodyPolicy?.schema, request.bodyPolicy?.resolve).has(name) ? '[redacted]' : value)
     body = result
   }
   return { ...copy, options: { ...copy.options, headers, body } }

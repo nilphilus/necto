@@ -182,7 +182,8 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
             {
                 if (property.IsStatic || property.IsIndexer || property.GetMethod?.DeclaredAccessibility != Accessibility.Public
                     || !seen.Add(property.Name)
-                    || Attribute(property, "System.Text.Json.Serialization.JsonExtensionDataAttribute") is not null)
+                    || Attribute(property, "System.Text.Json.Serialization.JsonExtensionDataAttribute") is not null
+                    || Attribute(property, "Necto.NectoSensitiveAttribute") is not null)
                     continue;
 
                 var ignore = Attribute(property, "System.Text.Json.Serialization.JsonIgnoreAttribute");

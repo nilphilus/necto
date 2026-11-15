@@ -1,3 +1,5 @@
+import { readOperations } from '../api-catalog/catalog.js'
+import { retainDraft } from './sensitiveSchema.js'
 import { exportWorkspace } from './workspace.js';
 export function createCiBundle(
   scenario,
@@ -7,6 +9,11 @@ export function createCiBundle(
 ) {
   if (scenario.steps.some((step) => step.apiId !== 'local'))
     throw new Error('The current CI runner supports one local API per run.');
+  const operations = new Map(readOperations(document).map(operation => [operation.key,operation]));
+  scenario = { ...scenario, steps: scenario.steps.map(step => {
+    const operation = operations.get(step.operationKey);
+    return operation ? { ...step, ...retainDraft(operation, step) } : step;
+  }) };
   const storage = {
     length: 1,
     key: () => 'necto:scenarios:ci',

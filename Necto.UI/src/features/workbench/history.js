@@ -1,3 +1,4 @@
+import { redactResponse } from './sensitiveSchema.js'
 import { historySnapshot } from './historySnapshot.js'
 import { shallowReactive } from 'vue'
 import { safeRequest, traceBody, redactValue } from './privacy.js'
@@ -28,7 +29,7 @@ export function useRequestHistory() {
     let snapshot = retained && request ? historySnapshot(request, draft) : undefined
     if (snapshot && size + JSON.stringify(snapshot).length > MAX_PAYLOAD) { retained = false; snapshot = undefined }
     const payload = retained
-      ? redactValue(result?.json ?? result?.text)
+      ? redactValue(redactResponse(operation, result))
       : undefined
     const requestMetadata = safe
       ? {
