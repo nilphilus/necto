@@ -94,7 +94,7 @@ export function authorizeRequest(request, operation, api, now = Date.now()) {
     const browserSession = [[api?.accessScheme, api?.access], ...Object.entries(api?.credentials ?? {}).map(([name, credential]) => [schemes[name], credential])]
       .some(([scheme, credential]) => credential?.enabled && credential.origins.includes(new URL(request.url).origin) &&
         (scheme?.type === 'browserSession' || scheme?.type === 'apiKey' && scheme?.in === 'cookie'))
-    return { ...request, options: { ...request.options, credentials: browserSession ? 'include' : 'same-origin', ...(browserSession ? { redirect: 'error' } : {}) } }
+    return { ...request, options: { ...request.options, credentials: browserSession ? 'include' : 'same-origin', redirect: 'error' } }
   }
   throw new Error(errors[0] ?? 'Authorize this API before sending the request.')
 }

@@ -190,7 +190,8 @@ async function readStream(response, metadata, signal, onProgress) {
 export async function sendRequest(request, { onProgress, responseLimitBytes } = {}) {
   const reportProgress = onProgress
   onProgress = update => { if (!request.options.signal?.aborted) reportProgress?.(update) }
-  const response = await fetch(request.url, request.options)
+  // Manual headers and presets can contain credentials too. Never forward them through redirects.
+  const response = await fetch(request.url, { ...request.options, redirect: 'error' })
   const contentType = response.headers.get('content-type') ?? ''
   const metadata = {
     ok: response.ok,
