@@ -1,3 +1,4 @@
+import { retainDraft } from '../workbench/sensitiveSchema.js'
 import { executionOptions } from '../workbench/executionOptions.js'
 import { validateSelectionRule, selectionRulePath } from '../workbench/selectionRule.js'
 import { payloadSnapshot, validatePayloadSnapshot, describeBody } from '../workbench/body.js'
@@ -35,7 +36,8 @@ export function snapshotScenario(chain, name, id = globalThis.crypto?.randomUUID
     const context = valuesFor(operation)
     const fields = Object.fromEntries(Object.entries(session.fields).filter(([key, value]) => typeof value === 'string' &&
       !context.has(key.startsWith('header:') ? key.toLowerCase() : key)))
-    let body = session.body ?? ''
+    const retained = retainDraft(operation, session)
+    let body = retained.body ?? ''
     const bindings = (session.bindings ?? []).filter(binding => binding.sourceStep < index &&
       currentValue(session, binding.location, binding.name) === binding.appliedValue)
       .map(({ sourceStep, path, location, name, selector }) => ({ sourceStep, path: [...path], location, name, ...(selector ? { selector: JSON.parse(JSON.stringify(selector)) } : {}) }))
@@ -49,7 +51,7 @@ export function snapshotScenario(chain, name, id = globalThis.crypto?.randomUUID
       }
     }
     return { operationKey: operation.key, apiId: operation.apiId ?? 'local', name: operation.name,
-      method: operation.method, path: operation.path, fields, body, bindings, ...payloadSnapshot(session), assertions: (session.assertions ?? []).map(check => ({ ...check })), ...executionOptions(session), serverIndex: session.serverIndex, serverValues: { ...session.serverValues } }
+      method: operation.method, path: operation.path, fields, body, bindings, ...payloadSnapshot(retained), assertions: (session.assertions ?? []).map(check => ({ ...check })), ...executionOptions(session), serverIndex: session.serverIndex, serverValues: { ...session.serverValues } }
   })
   return { version: 1, id, name, steps }
 }

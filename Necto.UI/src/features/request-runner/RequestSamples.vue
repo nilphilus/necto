@@ -1,4 +1,5 @@
 <script setup>
+import { retainDraft, hasSensitiveBody } from '../workbench/sensitiveSchema.js'
 import DescriptionHelp from '../workbench/DescriptionHelp.vue'
 import { requestExamples, applyRequestExample, draftSnapshot, restoreExampleDraft, exampleDrafts } from '../workbench/openapiExamples.js'
 import { executionOptions } from '../workbench/executionOptions.js'
@@ -25,6 +26,7 @@ const selectedFields = ref([])
 const makeDefault = ref(false)
 const storeDialog = ref(null)
 const storeOpen = ref(false)
+const sensitiveBody = computed(() => hasSensitiveBody(props.operation, props.session))
 const error = ref('')
 const searchInput = ref(null)
 const query = ref('')
@@ -135,17 +137,17 @@ function storeSample() {
     error.value = 'Enter a request name.'
     return
   }
-  let policy
-  try { policy = executionOptions(props.session) } catch(cause) { error.value = cause.message; return }
+  let policy, retained
+  try { policy = executionOptions(props.session); retained = retainDraft(props.operation, props.session) } catch(cause) { error.value = cause.message; return }
   const sample = {
     ...policy,
     name: sampleName,
-    ...payloadSnapshot(props.session),
+    ...payloadSnapshot(retained),
     assertions: props.session.assertions ?? [],
     fields: Object.fromEntries(fields.value.filter(field => selectedFields.value.includes(field.key))
       .map(field => [field.key, field.value])),
   }
-  if (props.operation.requestBody) sample.body = props.session.body
+  if (props.operation.requestBody) sample.body = retained.body
   if (persist(current => {
     if (current.samples.some(entry => entry.name === sampleName && entry.name !== editing.value)) {
       throw new Error('A sample with that name already exists.')
@@ -240,6 +242,7 @@ function toggleDefault(sampleName) {
     <dialog ref="storeDialog" class="endpoint-dialog" aria-labelledby="store-sample-title" @close="storeOpen = false">
       <h3 id="store-sample-title">{{ renameOnly ? 'Rename saved request' : editing ? 'Update saved request' : 'Save request' }}</h3>
       <form @submit.prevent="storeSample">
+        <p v-if="sensitiveBody">Marked sensitive fields are excluded from saved payloads. Re-enter them before replay.</p>
         <label class="dialog-field">Request name <input v-model="name" required autofocus maxlength="120"></label>
         <fieldset v-if="fields.length && !renameOnly">
           <legend>Fields to store</legend>

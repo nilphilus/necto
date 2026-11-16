@@ -14,6 +14,7 @@ builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", op
 builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedWrappers());
 builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedConstraints());
 builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedAccessHints());
+builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedSensitiveFields());
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -85,6 +86,7 @@ app.MapGet("/invoices/wrapped", () => new PagedResult<Invoice>(invoices, 500)).W
 app.MapPost("/invoices/constrained", ([FromBody] ConstrainedInvoice invoice) => TypedResults.Ok(invoice)).WithName("ConstrainedInvoice").WithTags("Invoices");
 app.MapGet("/invoices/related-model", () => new RelatedInvoice(42, new CustomerId(17))).WithName("RelatedInvoice").WithTags("Invoices");
 app.MapGet("/invoices/access-hints", AccessHintHandlers.Read).WithName("InvoiceAccessHints").AllowAnonymous().WithTags("Invoices");
+app.MapPost("/invoices/sensitive", ([FromBody] SensitiveInvoice invoice) => TypedResults.Ok(invoice)).WithName("SensitiveInvoice").WithTags("Invoices");
 
 var summaries = new[]
 {
@@ -243,3 +245,5 @@ static class AccessHintHandlers
     [Microsoft.AspNetCore.Authorization.Authorize(Policy = "Invoices.Read", Roles = "Reader,Admin")]
     public static object Read() => new { id = 42 };
 }
+record SensitiveInvoice(string Reference, [property: NectoSensitive, System.Text.Json.Serialization.JsonPropertyName("approval-code")] string ApprovalCode, SensitiveContact Contact);
+record SensitiveContact(string Name, [property: NectoSensitive] string Note);

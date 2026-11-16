@@ -7,12 +7,13 @@ const props = defineProps({
   resolve: Function,
   depth: { type: Number, default: 0 },
   name: { type: String, default: 'Body' },
-  required: Boolean
+  required: Boolean,
+  sensitive: Boolean
 })
 const value = computed(() => props.resolve(props.schema) ?? {})
 const open = ref(props.depth < 1), page = ref(1)
 const children = computed(() => [
-  ...Object.entries(value.value.properties ?? {}).map(([name, schema]) => ({ key: 'property:' + name, name, schema, required: value.value.required?.includes(name) })),
+  ...Object.entries(value.value.properties ?? {}).map(([name, schema]) => ({ key: 'property:' + name, name, schema, required: value.value.required?.includes(name), sensitive: Array.isArray(value.value['x-necto-sensitive-properties']) && value.value['x-necto-sensitive-properties'].includes(name) })),
   ...(value.value.items ? [{ key:'items', name:'Array item', schema:value.value.items }] : []),
   ...['allOf','oneOf','anyOf'].flatMap(kind => (value.value[kind] ?? []).map((schema, index) => ({key:kind+index,name:`${kind} ${index+1}`,schema})))
 ])
@@ -27,7 +28,7 @@ watch(() => props.schema, () => { page.value = 1; open.value = props.depth < 1 }
       {{
         (Array.isArray(value.type) ? value.type.join(' | ') : value.type) || (value.oneOf ? 'oneOf' : value.anyOf ? 'anyOf' : 'object')
       }}
-      <span v-if="required"> · required</span
+      <span v-if="sensitive"> · sensitive: excluded from default retention</span><span v-if="required"> · required</span
       ><span v-if="value.format"> · {{ value.format }}</span
       ><span v-if="value.readOnly"> · read only</span
       ><span v-if="value.writeOnly"> · write only</span>
@@ -42,7 +43,7 @@ watch(() => props.schema, () => { page.value = 1; open.value = props.depth < 1 }
           <span>Fields {{ (page - 1) * 25 + 1 }}–{{ Math.min(page * 25, children.length) }} / {{ children.length }}</span>
           <button type="button" :disabled="page === pages" @click="page++">Next fields</button>
         </div>
-        <SchemaTree v-for="child in visible" :key="child.key" :schema="child.schema" :resolve="resolve" :depth="depth + 1" :name="child.name" :required="child.required" />
+        <SchemaTree v-for="child in visible" :key="child.key" :schema="child.schema" :resolve="resolve" :depth="depth + 1" :name="child.name" :required="child.required" :sensitive="child.sensitive" />
       </template>
       <p v-else>Model depth limit reached. Use Raw OpenAPI fragment to inspect deeper references.</p>
     </template>

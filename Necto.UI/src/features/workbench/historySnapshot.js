@@ -1,3 +1,4 @@
+import { retainPayload } from './sensitiveSchema.js'
 import { executionOptions } from './executionOptions.js';
 import { safeRequest, sensitiveName } from './privacy.js';
 import { payloadSnapshot } from './body.js';
@@ -14,6 +15,7 @@ function withoutSecrets(value, depth = 0) {
   return value;
 }
 export function historySnapshot(request, draft) {
+  draft = retainPayload(draft, request.bodyPolicy);
   const safe = safeRequest(request),
     body = safe.options.body;
   const wire =

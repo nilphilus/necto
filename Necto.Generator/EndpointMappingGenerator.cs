@@ -189,7 +189,8 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
             {
                 if (property.IsStatic || property.IsIndexer || property.GetMethod?.DeclaredAccessibility != Accessibility.Public
                     || !seen.Add(property.Name)
-                    || Attribute(property, "System.Text.Json.Serialization.JsonExtensionDataAttribute") is not null)
+                    || Attribute(property, "System.Text.Json.Serialization.JsonExtensionDataAttribute") is not null
+                    || Attribute(property, "Necto.NectoSensitiveAttribute") is not null)
                     continue;
 
                 var ignore = Attribute(property, "System.Text.Json.Serialization.JsonIgnoreAttribute");
@@ -273,9 +274,9 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
             return null;
         if (source.Key is not null || target.Key is not null)
             return string.Equals(source.Key ?? source.ConventionName, target.Key ?? target.ConventionName,
-                StringComparison.OrdinalIgnoreCase) ? "attribute" : null;
+                StringComparison.OrdinalIgnoreCase) && !ContainsSensitiveValue(source.Type) ? "attribute" : null;
         if (IsTypedId(source.Type))
-            return "type";
+            return ContainsSensitiveValue(source.Type) ? null : "type";
         return IsScalar(source.Type)
             && (SameName(source.ConventionName, target.ConventionName)
                 || SameName(source.ConventionName, target.WireName)
@@ -283,6 +284,29 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
                 || SameName(source.QualifiedName, target.WireName)
                 || (!SameName(source.WireName, "Id") && SameName(source.WireName, target.WireName)))
             ? "name" : null;
+    }
+
+    private static bool ContainsSensitiveValue(ITypeSymbol root)
+    {
+        var pending=new Stack<ITypeSymbol>();pending.Push(root);
+        var seen=new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        while(pending.Count>0)
+        {
+            var type=NonNullable(pending.Pop());if(IsScalar(type)||!seen.Add(type))continue;
+            if(seen.Count>512)return true;
+            if(type is IArrayTypeSymbol array){pending.Push(array.ElementType);continue;}
+            if(EnumerableItem(type) is { } item){pending.Push(item);continue;}
+            for(var current=type as INamedTypeSymbol;current is not null;current=current.BaseType)
+            foreach(var property in current.GetMembers().OfType<IPropertySymbol>())
+            {
+                if(property.IsStatic||property.IsIndexer||property.GetMethod?.DeclaredAccessibility!=Accessibility.Public)continue;
+                var ignore=Attribute(property,"System.Text.Json.Serialization.JsonIgnoreAttribute");
+                if(ignore is not null && !ignore.NamedArguments.Any(pair=>pair.Key=="Condition"&&pair.Value.Value is int value&&value!=1))continue;
+                if(Attribute(property,"Necto.NectoSensitiveAttribute") is not null)return true;
+                pending.Push(property.Type);
+            }
+        }
+        return false;
     }
 
     private static bool SameName(string? source, string? target) =>
