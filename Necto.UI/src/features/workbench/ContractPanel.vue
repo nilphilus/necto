@@ -1,4 +1,5 @@
 <script setup>
+import { accessHints } from './accessHints.js'
 import MarkdownText from './MarkdownText.vue'
 import { computed, ref, watch } from 'vue';
 import ContractMedia from './ContractMedia.vue';
@@ -31,6 +32,7 @@ const type = (schema) => {
 </script>
 <template>
   <div class="contract-panel">
+    <details v-if="accessHints(operation.accessHint)"><summary>Access requirements</summary><p>{{accessHints(operation.accessHint).title}}</p><ul><li v-for="(rule,index) in accessHints(operation.accessHint).rules" :key="index">{{rule}}</li></ul><p v-if="accessHints(operation.accessHint).runtimePolicy">Additional runtime policy applies.</p><small>{{accessHints(operation.accessHint).note}}</small></details>
     <details v-if="operation.requestBody" open>
       <summary>
         Request body
