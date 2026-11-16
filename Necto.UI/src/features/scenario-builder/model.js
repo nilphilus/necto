@@ -2,31 +2,16 @@ import { payloadSnapshot, validatePayloadSnapshot, bodyContent, isJson } from '.
 import { executionOptions } from '../workbench/executionOptions.js'
 import { validateAssertions } from '../workbench/assertions.js'
 import { validateGenerator } from './generation.js'
+import { validateWaiting } from './waiting.js'
+import { pointerParts } from './pointers.js'
+export { pointerParts, readPointer } from './pointers.js'
 
 export const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
-export const newBlueprint = () => ({ format: 'necto-scenario-builder', version: 1, id: newId(), name: 'Untitled scenario', concurrency: 4, steps: [] })
+export const newBlueprint = () => ({ format: 'necto-scenario-builder', version: 2, id: newId(), name: 'Untitled scenario', concurrency: 4, steps: [] })
 export function newStep(operation, session) {
   return { id: newId(), label: operation.name, operationKey: operation.key, apiId: operation.apiId ?? 'local', method: operation.method, path: operation.path,
     dependsOn: [], inputs: [], request: { fields: { ...session.fields }, body: session.body ?? '', ...payloadSnapshot(session), ...executionOptions(session),
       assertions: [], serverIndex: session.serverIndex, serverValues: { ...session.serverValues } } }
-}
-const forbidden = new Set(['__proto__', 'prototype', 'constructor'])
-export function pointerParts(pointer) {
-  if (typeof pointer !== 'string' || pointer.length > 2048 || pointer !== '' && !pointer.startsWith('/')) throw new Error('Use a JSON Pointer such as /items/0/id. Leave empty for the whole value.')
-  const parts = pointer === '' ? [] : pointer.slice(1).split('/').map(part => {
-    if (/~(?:[^01]|$)/.test(part)) throw new Error('Escape ~ as ~0 and / as ~1 in JSON Pointers.')
-    return part.replaceAll('~1', '/').replaceAll('~0', '~')
-  })
-  if (parts.length > 32 || parts.some(part => forbidden.has(part))) throw new Error('This JSON Pointer is not supported.')
-  return parts
-}
-export function readPointer(value, pointer) {
-  for (const part of pointerParts(pointer)) {
-    if (value === null || typeof value !== 'object' || !Object.hasOwn(value, part)) throw new Error(`Response has no value at ${pointer || '(root)'}.`)
-    value = value[part]
-  }
-  if (value === undefined) throw new Error('Response has no JSON value.')
-  return value
 }
 function assignPointer(value, parts, replacement) {
   if (!parts.length) return replacement
@@ -71,7 +56,7 @@ export function layers(blueprint) {
   return result
 }
 export function validateBlueprint(blueprint) {
-  if (blueprint?.format !== 'necto-scenario-builder' || blueprint.version !== 1 || typeof blueprint.id !== 'string' || !blueprint.id ||
+  if (blueprint?.format !== 'necto-scenario-builder' || ![1, 2].includes(blueprint.version) || typeof blueprint.id !== 'string' || !blueprint.id ||
     typeof blueprint.name !== 'string' || !blueprint.name.trim() || blueprint.name.length > 200 || !Array.isArray(blueprint.steps) || blueprint.steps.length > 100 ||
     !Number.isInteger(blueprint.concurrency) || blueprint.concurrency < 1 || blueprint.concurrency > 8) throw new Error('Invalid Scenario Builder definition (maximum 100 steps; parallelism 1–8).')
   const ids = new Set()
@@ -82,6 +67,8 @@ export function validateBlueprint(blueprint) {
       typeof step.request.body !== 'string' || !step.request.fields || Array.isArray(step.request.fields) || typeof step.request.fields !== 'object' ||
       Object.values(step.request.fields).some(value => typeof value !== 'string')) throw new Error('Invalid scenario step or request.')
     ids.add(step.id)
+    if (blueprint.version === 1 && (step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('Delay and response waiting require Scenario Builder version 2.')
+    validateWaiting(step)
     validatePayloadSnapshot(step.request); executionOptions(step.request); validateAssertions(step.request.assertions ?? [])
     if (step.request.binaryFile && !(step.request.binaryFile instanceof Blob) || step.request.formFields?.some(row => row.files && (!Array.isArray(row.files) || row.files.some(file => !(file instanceof Blob))))) throw new Error('Attach files in the browser; imported file data is not executable.')
     const targets = []

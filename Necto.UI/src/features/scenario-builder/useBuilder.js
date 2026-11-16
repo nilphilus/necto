@@ -5,12 +5,13 @@ import { payloadSnapshot } from '../workbench/body.js'
 import { executionOptions } from '../workbench/executionOptions.js'
 import { newBlueprint, validateBlueprint, parseHuman } from './model.js'
 import { prepareBlueprint, executeBlueprint } from './runner.js'
+import { waitOptions } from './waiting.js'
 
 const clone = value => JSON.parse(JSON.stringify(value))
 export function savedBlueprint(draft) {
-  const saved = clone({ format: draft.format, version: draft.version, id: draft.id, name: draft.name.trim(), concurrency: draft.concurrency,
+  const saved = clone({ format: draft.format, version: 2, id: draft.id, name: draft.name.trim(), concurrency: draft.concurrency,
     steps: draft.steps.map(step => ({ id: step.id, label: step.label.trim(), operationKey: step.operationKey, apiId: step.apiId, method: step.method, path: step.path,
-      dependsOn: [...step.dependsOn], inputs: step.inputs.map(input => ({ location: input.location,
+      ...waitOptions(step), dependsOn: [...step.dependsOn], inputs: step.inputs.map(input => ({ location: input.location,
         ...(input.location === 'body' ? { pointer: input.pointer } : { name: input.name }), source: input.source,
         ...(input.source === 'response' ? { stepId: input.stepId, responsePointer: input.responsePointer } : input.source === 'human' ? { prompt: input.prompt, valueType: input.valueType } : { generator: input.generator, ...(input.generator === 'regex' ? { pattern: input.pattern } : {}) }) })),
       request: { fields: { ...step.request.fields }, body: step.request.body, ...payloadSnapshot(step.request), ...executionOptions(step.request),
@@ -59,7 +60,7 @@ export function useBuilder(configuration) {
     persist([...saved.value.filter(item => item.id !== blueprint.id), blueprint])
     notice.value = 'Saved in this browser. Run inputs and responses are not included.'
   }
-  function open(blueprint) { if (pending.value) return; clearRun(); draft.value = clone(blueprint); notice.value = ''; error.value = '' }
+  function open(blueprint) { if (pending.value) return; clearRun(); draft.value = { ...clone(blueprint), version: 2 }; notice.value = ''; error.value = '' }
   function fresh() { open(newBlueprint()) }
   function remove() { if (pending.value) return; persist(saved.value.filter(item => item.id !== draft.value.id)); fresh() }
   function ask(step, inputs, signal) {
