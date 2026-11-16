@@ -1,0 +1,117 @@
+import { applyBodyPresets, buildRequest, contextKey } from '../request-runner/request.js'
+import { effectiveTarget } from '../workbench/target.js'
+import { describeBody } from '../workbench/body.js'
+import { applyInput, dependencies, readPointer, validateBlueprint } from './model.js'
+import { generateValue } from './generation.js'
+
+export function prepareBlueprint(blueprint, { operations, configuration, createSession, valuesFor }) {
+  validateBlueprint(blueprint)
+  if (!blueprint.steps.length) throw new Error('Add at least one request.')
+  const byKey = new Map(operations.map(operation => [operation.key, operation]))
+  return blueprint.steps.map(definition => {
+    const operation = byKey.get(definition.operationKey)
+    if (!operation || (operation.apiId ?? 'local') !== definition.apiId || operation.method !== definition.method || operation.path !== definition.path)
+      throw new Error(`${definition.label}: endpoint unavailable. Check API visibility and connections.`)
+    const request = { ...definition.request, fields: { ...definition.request.fields }, formFields: definition.request.formFields?.map(row => ({ ...row, files: [...(row.files ?? [])] })) }, session = createSession(operation)
+    Object.assign(session, request)
+    const context = valuesFor(operation), presetBody = applyBodyPresets(operation, session.body, context, session.mediaType)
+    if (presetBody.notice) throw new Error(`${definition.label}: ${presetBody.notice}`)
+    session.body = presetBody.body
+    // Materialize body presets first. Explicit dynamic inputs win over presets.
+    const values = new Map([...context].filter(([key]) => typeof key === 'string'))
+    for (const input of definition.inputs) if (input.location !== 'body') values.delete(contextKey({ in: input.location, name: input.name }))
+    for (const input of definition.inputs) {
+      if (input.location === 'body' && !operation.requestBody || input.location !== 'body' &&
+        !operation.parameters.some(parameter => parameter.in === input.location && parameter.name === input.name)) throw new Error(`${definition.label}: input target is no longer present in the API.`)
+    }
+    const step = { id: definition.id, label: definition.label, operation, session, values,
+      inputs: JSON.parse(JSON.stringify(definition.inputs)), dependencies: dependencies(definition), status: 'waiting', error: '' }
+    // Check every static request before sending anything. Dynamic values are checked again at dispatch.
+    const draft = { ...session, fields: { ...session.fields } }
+    try {
+      for (const input of step.inputs) {
+        const parameter = operation.parameters.find(parameter => parameter.in === input.location && parameter.name === input.name)
+        const schema = operation.resolve(parameter?.schema)
+        const value = schema?.type === 'array' ? [] : schema?.type === 'object' ? {} : schema?.type === 'integer' || schema?.type === 'number' ? 1 : schema?.type === 'boolean' ? true : 'run-value'
+        applyInput(draft, operation, input, value)
+      }
+      buildRequest(operation, configuration, draft, values)
+    } catch (cause) { throw new Error(`${definition.label}: ${cause.message}`) }
+    step.target = effectiveTarget(operation, configuration, draft, values)
+    return step
+  })
+}
+
+// DAG scheduler: ready nodes start immediately; a join waits for every dependency.
+// Stop on the first failure, abort in-flight work and never retry mutations automatically.
+export async function executeBlueprint(plan, { concurrency = 4, execute, signal, ask, generate = generateValue }) {
+  const controller = new AbortController(), combined = AbortSignal.any([signal, controller.signal])
+  const byId = new Map(plan.map(step => [step.id, step])), running = new Map()
+  let failure, activeRequests = 0
+  const waiting = []
+  function release() { activeRequests--; waiting.shift()?.grant() }
+  function acquire() {
+    combined.throwIfAborted()
+    if (activeRequests < concurrency) { activeRequests++; return release }
+    return new Promise((resolve, reject) => {
+      const entry = { grant() { combined.removeEventListener('abort', aborted); activeRequests++; resolve(release) } }
+      const aborted = () => { const index = waiting.indexOf(entry); if (index >= 0) waiting.splice(index, 1); reject(combined.reason) }
+      combined.addEventListener('abort', aborted, { once: true }); waiting.push(entry)
+    })
+  }
+  const run = async step => {
+    step.status = 'preparing'
+    let releaseSlot
+    try {
+      combined.throwIfAborted()
+      for (const input of step.inputs.filter(input => input.source !== 'human')) {
+        const value = input.source === 'generate' ? await generate(input) : readPointer(byId.get(input.stepId)?.response?.json, input.responsePointer)
+        combined.throwIfAborted()
+        applyInput(step.session, step.operation, input, value)
+      }
+      const questions = step.inputs.filter(input => input.source === 'human')
+      if (questions.length) {
+        if (!ask) throw new Error('This step needs human input. Enable human-in-the-loop mode.')
+        step.status = 'needs-input'
+        const answers = await ask(step, questions, combined)
+        combined.throwIfAborted()
+        if (!Array.isArray(answers) || answers.length !== questions.length) throw new Error('Missing human input.')
+        questions.forEach((input, index) => applyInput(step.session, step.operation, input, answers[index]))
+      }
+      combined.throwIfAborted()
+      step.status = 'queued'
+      const permit = acquire()
+      releaseSlot = typeof permit === 'function' ? permit : await permit
+      combined.throwIfAborted()
+      step.status = 'running'
+      const response = await execute(step.operation, step.session, step.values, combined, ({ url, options }) => {
+        step.request = { url: url.href, headers: Object.fromEntries(options.headers), body: describeBody(options.body) }
+      })
+      combined.throwIfAborted()
+      step.response = response; step.httpStatus = response?.status; step.elapsed = response?.elapsed
+      if (!response || !response.ok && !response.assertions?.some(check => check.kind === 'status' && check.passed)) throw new Error(response ? `HTTP ${response.status} ${response.statusText ?? ''}` : step.session.error || 'No response received.')
+      if (response.assertions?.some(check => !check.passed)) throw new Error('Response checks failed.')
+      step.status = 'completed'
+    } catch (cause) {
+      step.status = combined.aborted ? 'cancelled' : 'failed'
+      step.error = combined.aborted ? 'Canceled.' : cause.message
+      if (!combined.aborted && !failure) { failure = { step, cause }; controller.abort(cause) }
+    } finally { releaseSlot?.() }
+  }
+  while (true) {
+    if (!combined.aborted) {
+      const ready = plan.filter(step => step.status === 'waiting' && step.dependencies.every(id => byId.get(id)?.status === 'completed'))
+      for (const step of ready) {
+        const task = run(step).finally(() => running.delete(step.id))
+        running.set(step.id, task)
+      }
+    }
+    if (!running.size) break
+    await Promise.race(running.values())
+  }
+  for (const step of plan) if (step.status === 'waiting') step.status = 'skipped'
+  if (failure) return { status: 'failed', error: `${failure.step.label}: ${failure.cause.message}` }
+  if (signal.aborted) return { status: 'cancelled', error: 'Scenario stopped.' }
+  if (plan.some(step => step.status !== 'completed')) return { status: 'failed', error: 'Some dependencies could not complete.' }
+  return { status: 'completed', error: '' }
+}

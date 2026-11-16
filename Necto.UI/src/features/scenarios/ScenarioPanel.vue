@@ -8,7 +8,7 @@ import ScenarioTrace from './ScenarioTrace.vue'
 const props = defineProps({ scenarios: Array, state: Object, pending: Boolean, busy: Boolean, error: String,
   presetNames: Array, activePresetNames: Array, runs: Map, apiUrl: String, document: Object, mappings: Array, configuration: Object, deleted: Object })
 
-const emit = defineEmits(['open', 'run', 'remove', 'stop', 'inspect', 'undo-remove'])
+const emit = defineEmits(['open', 'run', 'remove', 'stop', 'inspect', 'undo-remove', 'builder'])
 const runId = ref('')
 const selectedPresets = ref([])
 const list = ref(null), undoButton = ref(null), title = ref(null)
@@ -38,7 +38,7 @@ function runScenario(scenario) {
 </script>
 <template>
   <section class="scenario-panel work-area" aria-labelledby="scenarios-title">
-    <h2 id="scenarios-title" ref="title" tabindex="-1">Scenarios</h2>
+    <div class="scenarios-heading"><h2 id="scenarios-title" ref="title" tabindex="-1">Scenarios</h2><button type="button" class="secondary" :disabled="busy" @click="emit('builder')">Scenario Builder →</button></div><p class="builder-intro muted">Save a quick request chain from the API view, or use Builder for parallel branches, manual connections and run-time inputs.</p>
     <div v-if="deleted" class="deletion-feedback" role="status">Deleted “{{ deleted.name }}”.
       <button ref="undoButton" type="button" class="secondary" :disabled="pending" @click="undoDeletion">Undo delete</button>
     </div>
@@ -98,7 +98,7 @@ function runScenario(scenario) {
 </template>
 <style scoped>
 .deletion-feedback { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-bottom: .75rem; font-size: .85rem; }
-.scenario-panel { flex: 1; min-height: 0; }
+.scenarios-heading { display:flex; align-items:baseline; justify-content:space-between; gap:.6rem; flex-wrap:wrap; }.scenario-panel .builder-intro { margin-bottom:.8rem; }.scenario-panel { flex: 1; min-height: 0; }
 .scenario-panel h2 { margin: 0 0 1rem; }
 .scenario-panel p { margin: 0; font-size: .8rem; }
 .run-form { margin-top: .75rem; }

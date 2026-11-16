@@ -8,6 +8,7 @@
     "test": "node --test src/features/*/*.test.js"
   },
   "dependencies": {
+    "@faker-js/faker": "^10.6.0",
     "dompurify": "^3.4.17",
     "marked": "^18.2.0",
     "saxes": "^6.0.0",

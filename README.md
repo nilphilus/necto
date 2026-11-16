@@ -92,6 +92,8 @@ or stop a running scenario. Scenarios are stored in your browser; current reques
 presets and external API connections apply when replaying. See the
 [scenario guide](Necto.UI/README.md#saved-scenarios).
 
+For parallel workflows, use **Scenarios → Scenario Builder**: name steps, connect any endpoints, combine response values, generate data with Faker, and pause selected requests for human input. [Scenario Builder guide](docs/scenario-builder/README.md).
+
 ## Authentication
 
 Use **Authorize** to access protected APIs and protected OpenAPI documents. The
