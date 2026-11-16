@@ -6,7 +6,7 @@ import { prepareBlueprint, executeBlueprint } from './runner.js'
 import { patternTokens, generateValue } from './generation.js'
 import { useBuilder, savedBlueprint } from './useBuilder.js'
 import { readOperations } from '../api-catalog/catalog.js'
-import { initialPayload, resolveRequestValues } from '../request-runner/request.js'
+import { initialPayload, resolveRequestValues, buildRequest } from '../request-runner/request.js'
 import { exportWorkspace, inspectWorkspace } from '../workbench/workspace.js'
 import { notifyWorkspaceImport } from '../workbench/workspaceUpdates.js'
 const operation = id => ({ key: id, apiId: 'local', name: id, method: 'GET', path: '/' + id, parameters: [], tags: ['Test'], servers: [], resolve: value => value })
@@ -91,12 +91,12 @@ test('preflight checks every request and API identity before sending; manual res
   blueprint.steps[1].inputs=[];assert.throws(()=>prepareBlueprint(blueprint,context(operations)),/id is required/)
   blueprint.steps[1].apiId='different';assert.throws(()=>prepareBlueprint(blueprint,context(operations)),/unavailable/)
 })
-test('dynamic body values win over body presets while static body presets are materialized',()=>{
+test('presets override dynamic body inputs while preserving unrelated fields',()=>{
   const operation=readOperations({paths:{'/body':{post:{requestBody:{content:{'application/json':{schema:{type:'object',properties:{id:{type:'integer'},name:{type:'string'}}}}}},responses:{}}}}})[0]
   const blueprint=draft('body');blueprint.steps=[{...newStep(operation,{fields:{},body:'{"id":0,"name":"old"}'}),id:'body',inputs:[{location:'body',pointer:'/id',source:'generate',generator:'integer'}]}]
   const ctx=context([operation]);ctx.valuesFor=()=>resolveRequestValues(operation,new Map([['id',{value:'77'}],['name',{value:'preset-name'}]]))
-  const [step]=prepareBlueprint(blueprint,ctx);applyInput(step.session,operation,step.inputs[0],123)
-  assert.deepEqual(JSON.parse(step.session.body),{id:123,name:'preset-name'});assert.equal([...step.values.keys()].some(key=>typeof key==='symbol'),false)
+  const [step]=prepareBlueprint(blueprint,ctx);assert.equal(step.inputs.length,0)
+  assert.deepEqual(JSON.parse(buildRequest(operation,ctx.configuration,step.session,step.values).options.body),{id:77,name:'preset-name'})
 })
 function storage(t){const entries=new Map();const store={get length(){return entries.size},key:index=>[...entries.keys()][index],getItem:key=>entries.get(key)??null,setItem:(key,value)=>entries.set(key,value),removeItem:key=>entries.delete(key)};return store}
 test('saved definitions round-trip through workspace import/export; malformed builder imports are rejected',t=>{

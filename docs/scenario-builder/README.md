@@ -26,7 +26,7 @@ At a join, all source requests must finish before the target starts. Incoming de
 
 Cycles, self-links, missing endpoints and conflicting input targets are rejected. Dragging an existing connection opens its settings instead of creating a duplicate. Escape cancels an unfinished drag. Use zoom or scroll the map to reach another request; the connection list is an alternative on small screens. During a run, connections can be inspected but not edited.
 
-Static request preparation is checked for every step before sending. Each run uses fresh responses; missing bound values fail the target rather than reusing old IDs. Explicit dynamic inputs take precedence over presets. Existing authentication, serialization, request limits and response preview are reused.
+Static request preparation is checked for every step before sending. Each run uses fresh responses; missing bound values fail the target rather than reusing old IDs. Selected run presets take precedence over matching static and dynamic inputs. Existing authentication, serialization, request limits and response preview are reused.
 
 For example:
 
@@ -37,6 +37,21 @@ Check stock ────┘                  └── Approve dispatch [human i
 ```
 
 Each run uses fresh responses. Missing response values fail the receiving step instead of falling back to old IDs. Existing request authentication, serialization, timeouts, response budgets and response preview are reused.
+
+## Run with presets
+
+Choose **Review & run → Presets for this run**. Active API presets are initially selected; you can select a different set or clear them for this run. The displayed order matters: the **last selected preset wins** when fields overlap. This does not change the global active presets or the saved scenario.
+
+Presets override matching path/query/header parameters and JSON body properties, including nested objects and array items, using the normal preset name-matching rules. Values keep their schema/JSON types. Unmatched fields retain their static, response, generated, human or shared-variable source.
+
+- A fully covered dynamic input is skipped: no unnecessary question, generation or response-field lookup.
+- Partial JSON object/whole-body bindings still resolve their other data; presets are reapplied to matching fields in the final outgoing body.
+- Graph dependencies and connection timing remain unchanged. Presets override request fields, not the shared variable definition itself.
+- External APIs still honor their existing shared-presets opt-in.
+
+Run review lists matching field paths without exposing their values. You can select a preset to fill a required field even if the initial review reports it missing. **No presets** uses the scenario's own inputs. Retry attempts use the same selected values, and the execution bar records the chosen preset names.
+
+![Choose and order presets for a scenario run](images/preset-run-review.png)
 
 ## Response fields
 
@@ -126,6 +141,7 @@ node Necto.UI/tests/scenario-builder.e2e.cjs
 node Necto.UI/tests/scenario-waiting.e2e.cjs
 node Necto.UI/tests/scenario-connections.e2e.cjs
 node Necto.UI/tests/scenario-variables.e2e.cjs
+node Necto.UI/tests/scenario-presets.e2e.cjs
 ```
 
 The browser test needs Playwright and Chromium; it honors `PLAYWRIGHT_MODULE`, `PLAYWRIGHT_BROWSERS_PATH` and `NECTO_BUILDER_SCREENSHOTS`. It builds a five-step workflow through the UI and verifies actual parallel HTTP requests, a join of two JSON responses, Faker generation, fan-out, human pause/resume/cancel, saved-definition reload and mobile layout.
@@ -135,3 +151,5 @@ The waiting browser test exercises an asynchronous job: start once, delay, poll 
 The connection browser test verifies real mouse drags, an anchored popup, response bindings, cancellation of edits, invalid/cyclic/duplicate links, zoom, keyboard and touch alternatives, v3 persistence, and polling the target without repeating the source. Screenshots use `NECTO_CONNECTION_SCREENSHOTS`.
 
 The variables browser test authors all four sources, verifies shared generated/human values across actual concurrent HTTP requests, response-derived dependencies, JSON types, deletion guards, cancellation and fresh runs, v4 persistence without run values, and mobile layout. Screenshots use `NECTO_VARIABLE_SCREENSHOTS`.
+
+The presets browser test verifies ordered run selection, missing required inputs repaired in review, static/dynamic/shared/nested overrides, skipping covered prompts, preserving uncovered prompts, unchanged saved definitions/global activation and mobile review. Screenshots use `NECTO_PRESET_SCREENSHOTS`.
