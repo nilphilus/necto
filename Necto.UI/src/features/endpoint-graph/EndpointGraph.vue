@@ -1,4 +1,6 @@
 <script setup>
+import GraphMinimap from '../GraphMinimap.vue'
+import { useGraphNavigation, MIN_ZOOM, MAX_ZOOM } from '../graph-navigation.js'
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import { useGraphViewport } from '../graph-viewport.js'
 import { routeConnection } from '../graph-layout.js'
@@ -45,6 +47,8 @@ const edgeIds = computed(() => new Set(edges.value.map(edge => edge.id)))
 const width = computed(() => Math.max(650, ...positions.value.map(node => node.x + endpointSize.width + 90)))
 const height = computed(() => Math.max(400, ...positions.value.map(node => node.y + 145)))
 const { autoFit, fit, center } = useGraphViewport(canvas, width, height, zoom)
+const {view,sync,zoomAt,wheel,navigate}=useGraphNavigation(canvas,width,height,zoom,autoFit)
+const miniEdges=computed(()=>edges.value.map(edge=>({...edge,from:positioned.value.get(edge.from),to:positioned.value.get(edge.to)})).filter(edge=>edge.from&&edge.to))
 watch(() => props.initialOperationKey, key => { if (byId.value.has(key)) selectedId.value = key }, { immediate: true })
 watch(selected, value => {
   if (!value) {
@@ -96,17 +100,18 @@ async function inspect(id) {
       <button type="button" class="secondary" @click="fit">Fit to view</button>
       <button type="button" class="secondary" :disabled="!selected" @click="center(positioned.get(selectedId), endpointSize)">Center selection</button>
       <div class="zoom" role="group" aria-label="Endpoint graph zoom">
-        <button type="button" class="secondary" :disabled="zoom <= .5" aria-label="Zoom out" @click="autoFit = false; zoom = Math.max(.5, zoom - .25)">−</button>
-        <button type="button" class="secondary" aria-label="Reset zoom" @click="autoFit = false; zoom = 1">{{ Math.round(zoom * 100) }}%</button>
-        <button type="button" class="secondary" :disabled="zoom >= 2" aria-label="Zoom in" @click="autoFit = false; zoom = Math.min(2, zoom + .25)">+</button>
+        <button type="button" class="secondary" :disabled="zoom <= MIN_ZOOM" aria-label="Zoom out" @click="zoomAt(Math.max(MIN_ZOOM,zoom/1.35))">−</button>
+        <button type="button" class="secondary" aria-label="Reset zoom" @click="zoomAt(1)">{{ Math.round(zoom * 100) }}%</button>
+        <button type="button" class="secondary" :disabled="zoom >= MAX_ZOOM" aria-label="Zoom in" @click="zoomAt(Math.min(MAX_ZOOM,zoom*1.35))">+</button>
       </div>
     </div>
-    <p class="legend">Response → Request · Arrows show Necto value mappings, independently of shared entity schemas.</p>
+    <p class="legend">Scroll to zoom · Use the overview to navigate. Response → Request · Arrows show Necto value mappings, independently of shared entity schemas.</p>
     <p v-if="mappingError" class="muted" role="status">{{ mappingError }} Endpoints are shown without unavailable connections.</p>
     <p v-else-if="!graph.edges.length" class="muted" role="status">No valid endpoint mappings are available. Endpoints remain visible; shared schemas alone do not create arrows.</p>
     <p v-if="visibleNodes.length > 100" class="muted" role="status">Showing 100 of {{ visibleNodes.length }} endpoints. {{ focused ? 'All direct connections are listed in the details.' : 'Refine the search to see others.' }}</p>
     <div class="graph-workspace">
-      <div ref="canvas" class="graph-canvas" tabindex="0" aria-label="Scrollable endpoint graph">
+      <div class="graph-stage">
+      <div ref="canvas" @scroll="sync" @wheel="positions.length && wheel($event)" class="graph-canvas" tabindex="0" aria-label="Scrollable endpoint graph">
         <svg v-if="positions.length" :width="width * zoom" :height="height * zoom" :viewBox="`0 0 ${width} ${height}`" role="group" aria-label="Endpoint relationships">
           <defs><marker :id="markerId" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#759b8a" /></marker></defs>
           <path v-for="edge in edges" :key="edge.id" :d="curve(edge)" fill="none" stroke="#759b8a" :stroke-width="selectedId && connected(edge) ? 3 : 1.5" :opacity="connected(edge) ? .95 : .15" :marker-end="`url(#${markerId})`">
@@ -122,6 +127,8 @@ async function inspect(id) {
           </foreignObject>
         </svg>
         <p v-else class="muted empty">{{ operations.length ? 'No endpoints match your filters.' : 'No endpoints available.' }}</p>
+      </div>
+      <GraphMinimap v-if="positions.length" label="Endpoint graph minimap" :width="width" :height="height" :nodes="positions" :edges="miniEdges" :view="view" :node-size="endpointSize" :selected-id="selectedId" @navigate="navigate" />
       </div>
       <aside class="endpoint-details" aria-label="Selected endpoint details">
         <template v-if="selected">
@@ -165,6 +172,7 @@ h2 { margin: 0; font-size: 1.75rem; letter-spacing: -.035em; } header p { margin
 .graph-controls button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .zoom { display: flex; gap: .25rem; margin-left: auto; }.legend { color: var(--muted); font-size: .8rem; }
 .graph-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem); border: 1px solid var(--line); border-radius: .75rem; overflow: hidden; background: var(--surface); }
+.graph-stage { position:relative; min-width:0; overflow:hidden; }
 .graph-canvas { min-width: 0; height: 65vh; min-height: 26rem; overflow: auto; background-color: #f6f9f7; background-image: radial-gradient(#d4ded8 1px, transparent 1px); background-size: 18px 18px; }
 svg { display: block; }.endpoint-node { width: 100%; height: 110px; display: flex; flex-direction: column; justify-content: center; align-items: start; gap: .4rem; padding: .8rem; border: 1px solid #a5bdae; border-radius: .65rem; background: var(--surface); box-shadow: 0 3px 9px #1c4b3210; text-align: left; }
 .endpoint-node:hover { background: var(--accent-soft); border-color: var(--accent); }.endpoint-node.active { border: 2px solid var(--accent); background: var(--accent-soft); }

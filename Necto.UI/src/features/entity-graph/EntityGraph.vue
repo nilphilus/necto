@@ -1,6 +1,6 @@
 <script setup>
-import GraphMinimap from './GraphMinimap.vue'
-import { useEntityNavigation, MIN_ZOOM, MAX_ZOOM } from './navigation.js'
+import GraphMinimap from '../GraphMinimap.vue'
+import { useGraphNavigation, MIN_ZOOM, MAX_ZOOM } from '../graph-navigation.js'
 import IdentifierCatalog from './IdentifierCatalog.vue'
 import { computed, nextTick, ref, watch, useId } from 'vue'
 import { useGraphViewport } from '../graph-viewport.js'
@@ -43,7 +43,7 @@ const names = computed(() => new Map(graph.value.nodes.map(node => [node.id, nod
 const width = computed(() => Math.max(620, ...positions.value.map(node => node.x + 305)))
 const height = computed(() => Math.max(380, ...positions.value.map(node => node.y + 125)))
 const { autoFit, fit, center } = useGraphViewport(canvas, width, height, zoom)
-const { view, sync, zoomAt, wheel, navigate } = useEntityNavigation(canvas, width, height, zoom, autoFit)
+const { view, sync, zoomAt, wheel, navigate } = useGraphNavigation(canvas, width, height, zoom, autoFit)
 const miniEdges = computed(() => connections.value.map(edge => ({ ...edge, from:byId.value.get(edge.from), to:byId.value.get(edge.to) })).filter(edge=>edge.from&&edge.to))
 watch(() => props.initialOperationKey, key => { selectedId.value = graph.value.nodes.find(node => node.endpoints.some(entry => entry.operation.key === key))?.id ?? '' }, { immediate: true })
 watch(selected, value => { if (!value) focused.value = false })
