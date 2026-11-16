@@ -12,6 +12,7 @@ builder.Services.AddOpenApi(options => options.AddNectoGeneratedDocumentation())
 
 builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedLinks());
 builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedWrappers());
+builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedConstraints());
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -80,6 +81,7 @@ app.MapGet("/invoices/{invoiceId:int}/xml-document", Results<Ok<InvoiceXmlPayloa
     .WithDescription("Open XML preview beside document. The surrounding JSON object remains selectable for related requests.");
 
 app.MapGet("/invoices/wrapped", () => new PagedResult<Invoice>(invoices, 500)).WithName("WrappedInvoices").WithTags("Invoices");
+app.MapPost("/invoices/constrained", ([FromBody] ConstrainedInvoice invoice) => TypedResults.Ok(invoice)).WithName("ConstrainedInvoice").WithTags("Invoices");
 
 var summaries = new[]
 {
@@ -231,3 +233,4 @@ public partial class Program;
 record InvoiceXmlPayload([property: EndpointValue("invoiceId")] int Id, string Reference, string Document);
 
 record PagedResult<T>([property: System.Text.Json.Serialization.JsonPropertyName("items")] T[] Items, int TotalCount);
+record ConstrainedInvoice([property: System.ComponentModel.DataAnnotations.Required, System.ComponentModel.DataAnnotations.StringLength(32, MinimumLength = 3)] string Reference, [property: System.ComponentModel.DataAnnotations.Range(1, 10000)] int Quantity);

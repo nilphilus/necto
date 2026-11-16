@@ -1,4 +1,5 @@
 <script setup>
+import { constraintLabels } from './constraints.js'
 import MarkdownText from './MarkdownText.vue'
 import { computed, ref, watch } from 'vue'
 const props = defineProps({
@@ -32,6 +33,7 @@ watch(() => props.schema, () => { page.value = 1; open.value = props.depth < 1 }
       ><span v-if="value.writeOnly"> · write only</span>
     </summary>
     <template v-if="open">
+      <p v-if="constraintLabels(value).length">{{ constraintLabels(value).join(' · ') }}</p>
       <MarkdownText v-if="value.description" :text="value.description" />
       <p v-if="value.enum">Allowed: <code>{{ JSON.stringify(value.enum.slice(0, 25)) }}</code><small v-if="value.enum.length > 25"> · first 25 of {{ value.enum.length }} values; see Raw for all values.</small></p>
       <template v-if="depth < 12">
