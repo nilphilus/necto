@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue'
+import { removeStepDraft, restoreStepDraft } from './stepUndo.js'
 import SentRequest from './SentRequest.vue'
 import ScenarioMap from './ScenarioMap.vue'
 import StepInputs from './StepInputs.vue'
@@ -20,7 +21,7 @@ const emit = defineEmits(['back', 'pending'])
 const configurationRef = computed(() => props.configuration)
 const store = useBuilder(configurationRef)
 const { draft, saved, dirty, error, notice, execution, pending, questions } = store
-const pickingStepId = ref('')
+const pickingStepId = ref(''), removedStep = ref(null)
 const selectedId = ref(''), tab = ref('configure'), search = ref(''), addDialog = ref(null), runDialog = ref(null), fileInput = ref(null)
 const selectedPresets = ref([])
 const review = ref([]), allowHuman = ref(true), runProblem = ref(''), picker = ref(''), quick = ref('')
@@ -36,8 +37,8 @@ const validation = computed(() => { try { validateBlueprint(draft.value); return
 const dynamicTargets = computed(() => new Set(selected.value?.inputs.filter(input => input.location !== 'body').map(input => input.location + ':' + input.name)))
 const definitionChanged = () => { if (execution.status !== 'idle' && !pending.value) execution.stale = true }
 watch(draft, definitionChanged, { deep: true })
-watch(() => draft.value.id, () => { edgeDialog.value?.close(); edgeEdit.value = null; picker.value = saved.value.some(item => item.id === draft.value.id) ? draft.value.id : ''; selectedId.value = draft.value.steps[0]?.id ?? ''; tab.value = 'configure' })
-watch(pending, value => emit('pending', value), { immediate: true })
+watch(() => draft.value.id, () => { removedStep.value = null; edgeDialog.value?.close(); edgeEdit.value = null; picker.value = saved.value.some(item => item.id === draft.value.id) ? draft.value.id : ''; selectedId.value = draft.value.steps[0]?.id ?? ''; tab.value = 'configure' })
+watch(pending, value => { if(value) removedStep.value=null; emit('pending', value) }, { immediate: true })
 onScopeDispose(() => emit('pending', false))
 if (props.authentication) onScopeDispose(props.authentication.onChange(ids => store.invalidate(ids)))
 watch(() => props.operations.map(operation => operation.key), available => {
@@ -79,10 +80,14 @@ function removeStep() {
   const used = draft.value.variables.filter(variable => variable.source === 'response' && variable.stepId === id)
   if (used.length) { error.value = 'Change or remove response variables first: ' + used.map(variable => variable.name).join(', '); return }
   if (draft.value.steps.some(step => dependencies(step, draft.value).includes(id)) && !window.confirm('Remove this step and all connections that use its response?')) return
-  draft.value.connections = draft.value.connections.filter(edge => edge.from !== id && edge.to !== id)
-  draft.value.steps = draft.value.steps.filter(step => step.id !== id)
-  for (const step of draft.value.steps) { step.dependsOn = step.dependsOn.filter(dependency => dependency !== id); step.inputs = step.inputs.filter(input => input.source !== 'response' || input.stepId !== id) }
+  const removed = removeStepDraft(draft.value,id)
+  draft.value = removed.next; removedStep.value = removed.snapshot
   selectedId.value = draft.value.steps[0]?.id ?? ''
+}
+function undoRemoveStep() {
+ if(pending.value||!removedStep.value)return
+ attempt(()=>{const id=removedStep.value.step.id;draft.value=restoreStepDraft(draft.value,removedStep.value);removedStep.value=null;selectedId.value=id;tab.value='configure'})
+
 }
 function candidateConnection(edge, inputs) {
   const pair = connectionKey(edge.from, edge.to)
@@ -214,6 +219,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       </div></details>
     </div>
     <p v-if="error || validation" class="builder-message error" role="alert">{{ error || validation }}</p>
+    <p v-if="removedStep" class="builder-message muted" role="status">Step removed: {{removedStep.step.label}}. <button type="button" class="secondary" :disabled="pending" @click="undoRemoveStep">Undo remove step</button><button type="button" class="secondary" aria-label="Dismiss step undo" @click="removedStep=null">×</button></p>
     <p v-if="notice" class="builder-message muted" role="status">{{ notice }}</p>
     <div v-if="execution.status !== 'idle'" class="builder-run-status" role="status"><strong>{{ execution.stale ? 'Previous run · ' : '' }}{{ execution.status }}</strong><span v-if="execution.presetNames?.length">Presets: {{ execution.presetNames.join(' → ') }}</span><span>{{ execution.steps.filter(step => step.status === 'completed').length }} / {{ execution.steps.length }} completed</span><span v-if="questions.size">{{ questions.size }} awaiting your input</span><span class="error">{{ execution.error }}</span></div>
     <section v-if="questions.size" class="human-queue" aria-label="Human input required">
