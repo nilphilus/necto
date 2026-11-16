@@ -12,6 +12,7 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         RegisterDiagnostics(context);
+        RegisterContractDiagnostics(context);
         var endpoints = context.SyntaxProvider.CreateSyntaxProvider(
             static (node, _) => node is InvocationExpressionSyntax
             {
