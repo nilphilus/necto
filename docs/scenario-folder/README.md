@@ -62,3 +62,7 @@ PLAYWRIGHT_MODULE=/path/to/playwright node Necto.UI/tests/scenario-folder.e2e.cj
 ```
 
 Set `NECTO_FOLDER_SCREENSHOTS` to save a preview.
+
+## Author with your agent
+
+Install the [Necto scenario authoring skill](../../skills/README.md) in your API repository to create these files from project code, OpenAPI and Necto mappings, without executing requests.

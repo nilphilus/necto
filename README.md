@@ -180,3 +180,7 @@ three match rules.
 ## API workbench
 
 Send forms and files, inspect HTTP responses, copy request code, choose API servers and verify scenarios without giving up response space. [Workbench guide and CI runner](docs/api-workbench/README.md).
+
+### Create scenarios with your agent
+
+Install the [Necto scenario authoring skill](skills/README.md) in your API project. Your agent can use source code, OpenAPI and Necto mappings to prepare importable Scenario Builder files, including parallel steps and response bindings, without executing the API.
