@@ -3,6 +3,7 @@ import { effectiveTarget } from '../workbench/target.js'
 import { describeBody } from '../workbench/body.js'
 import { applyInput, dependencies, readPointer, validateBlueprint } from './model.js'
 import { generateValue } from './generation.js'
+import { abortableDelay, waitMatches, waitOptions } from './waiting.js'
 
 export function prepareBlueprint(blueprint, { operations, configuration, createSession, valuesFor }) {
   validateBlueprint(blueprint)
@@ -25,7 +26,7 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
         !operation.parameters.some(parameter => parameter.in === input.location && parameter.name === input.name)) throw new Error(`${definition.label}: input target is no longer present in the API.`)
     }
     const step = { id: definition.id, label: definition.label, operation, session, values,
-      inputs: JSON.parse(JSON.stringify(definition.inputs)), dependencies: dependencies(definition), status: 'waiting', error: '' }
+      ...waitOptions(definition), inputs: JSON.parse(JSON.stringify(definition.inputs)), dependencies: dependencies(definition), status: 'waiting', error: '' }
     // Check every static request before sending anything. Dynamic values are checked again at dispatch.
     const draft = { ...session, fields: { ...session.fields } }
     try {
@@ -43,8 +44,8 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
 }
 
 // DAG scheduler: ready nodes start immediately; a join waits for every dependency.
-// Stop on the first failure, abort in-flight work and never retry mutations automatically.
-export async function executeBlueprint(plan, { concurrency = 4, execute, signal, ask, generate = generateValue }) {
+// Only explicit response-wait policies repeat requests. Errors stop the run.
+export async function executeBlueprint(plan, { concurrency = 4, execute, signal, ask, generate = generateValue, sleep = abortableDelay }) {
   const controller = new AbortController(), combined = AbortSignal.any([signal, controller.signal])
   const byId = new Map(plan.map(step => [step.id, step])), running = new Map()
   let failure, activeRequests = 0
@@ -64,6 +65,11 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
     let releaseSlot
     try {
       combined.throwIfAborted()
+      if (step.delayMs) {
+        step.status = 'delaying'; step.nextAttemptAt = Date.now() + step.delayMs
+        await sleep(step.delayMs, combined); combined.throwIfAborted(); step.nextAttemptAt = undefined
+        step.status = 'preparing'
+      }
       for (const input of step.inputs.filter(input => input.source !== 'human')) {
         const value = input.source === 'generate' ? await generate(input) : readPointer(byId.get(input.stepId)?.response?.json, input.responsePointer)
         combined.throwIfAborted()
@@ -79,24 +85,40 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
         questions.forEach((input, index) => applyInput(step.session, step.operation, input, answers[index]))
       }
       combined.throwIfAborted()
-      step.status = 'queued'
-      const permit = acquire()
-      releaseSlot = typeof permit === 'function' ? permit : await permit
-      combined.throwIfAborted()
-      step.status = 'running'
-      const response = await execute(step.operation, step.session, step.values, combined, ({ url, options }) => {
-        step.request = { url: url.href, headers: Object.fromEntries(options.headers), body: describeBody(options.body) }
-      })
-      combined.throwIfAborted()
-      step.response = response; step.httpStatus = response?.status; step.elapsed = response?.elapsed
-      if (!response || !response.ok && !response.assertions?.some(check => check.kind === 'status' && check.passed)) throw new Error(response ? `HTTP ${response.status} ${response.statusText ?? ''}` : step.session.error || 'No response received.')
-      if (response.assertions?.some(check => !check.passed)) throw new Error('Response checks failed.')
+      step.attempts = []
+      const maximum = 1 + (step.waitFor?.retryCount ?? 0)
+      for (let attempt = 1; attempt <= maximum; attempt++) {
+        step.attempt = attempt; step.maxAttempts = maximum; step.status = 'queued'
+        const permit = acquire()
+        releaseSlot = typeof permit === 'function' ? permit : await permit
+        combined.throwIfAborted(); step.status = 'running'
+        let response
+        try {
+          response = await execute(step.operation, step.session, step.values, combined, ({ url, options }) => {
+            step.request = { url: url.href, headers: Object.fromEntries(options.headers), body: describeBody(options.body) }
+          })
+        } finally { releaseSlot(); releaseSlot = undefined }
+        combined.throwIfAborted()
+        step.response = response; step.httpStatus = response?.status; step.elapsed = response?.elapsed
+        const record = { attempt, status: response?.status, elapsed: response?.elapsed, matched: false }
+        step.attempts.push(record)
+        if (!response || !response.ok && !response.assertions?.some(check => check.kind === 'status' && check.passed)) throw new Error(response ? `HTTP ${response.status} ${response.statusText ?? ''}` : step.session.error || 'No response received.')
+        const matched = !step.waitFor || waitMatches(response, step.waitFor)
+        record.matched = matched
+        if (matched) {
+          if (response.assertions?.some(check => !check.passed)) throw new Error('Response checks failed.')
+          break
+        }
+        if (attempt === maximum) throw new Error(`Response condition at ${step.waitFor.pointer || '(root)'} was not met after ${maximum} attempt${maximum === 1 ? '' : 's'}.`)
+        step.status = 'retry-wait'; step.nextAttemptAt = Date.now() + step.waitFor.intervalMs
+        await sleep(step.waitFor.intervalMs, combined); combined.throwIfAborted(); step.nextAttemptAt = undefined
+      }
       step.status = 'completed'
     } catch (cause) {
       step.status = combined.aborted ? 'cancelled' : 'failed'
       step.error = combined.aborted ? 'Canceled.' : cause.message
       if (!combined.aborted && !failure) { failure = { step, cause }; controller.abort(cause) }
-    } finally { releaseSlot?.() }
+    } finally { step.nextAttemptAt = undefined; releaseSlot?.() }
   }
   while (true) {
     if (!combined.aborted) {

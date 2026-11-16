@@ -17,7 +17,7 @@ Open **Scenarios → Scenario Builder**. The existing **Save Scenario** remains 
 2. Edit **Request · static inputs** for fixed parameters and the request body. Current presets and API server settings also apply when you review/run.
 3. Add a **Dynamic input** and choose its target: path/query/header parameter, a JSON body field, or the whole body.
 4. Choose **Earlier response**, **Generate data** or **Ask at run time**.
-5. Use **Wait for** to add an ordering dependency without copying a value. A response input adds its own dependency automatically.
+5. Use **Run after** to add an ordering dependency without copying a value. A response input adds its own dependency automatically.
 6. **Save**, then **Review & run** to inspect API targets and choose parallelism/human-in-the-loop mode before sending.
 
 Independent steps start together. A step waits for *all* its dependencies. Solid arrows carry response data; dashed arrows only impose ordering. Cycles, missing endpoints and overlapping input targets prevent a run. Static request preparation is checked for every step before any request is sent; response values are resolved only after their source succeeds. Dynamic inputs take precedence over matching presets.
@@ -48,6 +48,26 @@ Several steps may ask questions independently. Waiting for an answer does not oc
 
 ![One branch waits for a human while its sibling has finished](images/scenario-builder-human.png)
 
+## Delay and response-value waiting
+
+In a step's **Timing & response waiting** panel:
+
+- **Delay:** wait once after dependencies finish and before preparing inputs or asking a human, then send the first request. Configure 0–600000 ms.
+- **Wait for response value:** choose a JSON Pointer, expected value and type, retry count and interval. For example, poll `/jobs/{id}` until `/state` equals the text `Completed`, then let dependent requests use that matching response.
+- **Retry count** excludes the initial request: 5 retries allow at most 6 calls. A count of 0 checks the first response without repeating. Retry counts are limited to 100; intervals to 100–600000 ms. The interval starts after an unsuccessful condition check; queued requests can wait longer when concurrency is full.
+
+Missing fields keep waiting. Values use exact typed equality: number `1` is different from text `1`; JSON object key order does not matter. JSON `null` is distinct from a missing field. Normal response checks must pass on the final matching response. A non-JSON response, network error or unsuccessful HTTP response stops execution immediately (unless an existing explicit status assertion accepts that HTTP status).
+
+Inputs, generated values and human answers are prepared once and reused across polling attempts. The initial delay is not repeated. Timers do not occupy HTTP concurrency slots, and **Stop run** cancels them. Only the final matching response releases downstream steps. Exhaustion fails the step, skips its dependents and retains the last response plus a compact attempt history for inspection.
+
+Use a read endpoint to poll asynchronous work. If you enable waiting on POST/PUT/PATCH/DELETE, it repeats that request and can repeat server changes. The run review shows the HTTP method, maximum call count and interval before sending. There is no automatic retry policy for ordinary requests.
+
+Newly saved/exported definitions use format version 2, which older Builder versions reject rather than ignoring timing settings. Existing version 1 definitions still open and upgrade when saved. The tab must remain open; browser timer throttling can lengthen waits.
+
+![Delay and response wait configuration](images/wait-controls.png)
+
+See [production workflow recommendations](production-workflows.md) for useful next steps beyond fixed delays and equality polling.
+
 ## Generated data
 
 Choose a **Generator tag**: UUID, names, email, username, company, city, country code, integer (0–1000), boolean, current ISO timestamp, or a bounded pattern. Faker's English locale is downloaded with the UI and loaded on demand when a generator is used, with no external generation service. Values are generated anew for each run; use response bindings to pass one generated value onward through an API response.
@@ -64,7 +84,7 @@ Supported: literals, character ranges/classes, `\d`, `\w`, `\s` (a space), `?`, 
 - **More → Copy quick scenario** copies a saved linear chain without modifying it. Fixed response paths are supported; filtered array selectors require configuring a response pointer manually.
 - Limits: 100 steps, 1–8 simultaneous HTTP requests, 100 saved definitions and 2 MB of saved definitions per workspace; individual imports/exports are limited to 2 MB.
 
-A failure stops scheduling new steps and aborts in-flight requests where possible. Completed writes cannot be rolled back, and requests are never retried automatically. Execution happens in the browser, so the tab must remain open. This version does not add a background scheduler, loops, conditional branches or a CLI format; the existing quick-scenario CI runner is unchanged.
+A failure stops scheduling new steps and aborts in-flight requests where possible. Completed writes cannot be rolled back, and requests are repeated only when a step explicitly enables response-value waiting. HTTP and network errors are not retried by that setting. Execution happens in the browser, so the tab must remain open. This version does not add a background scheduler, loops, conditional branches or a CLI format; the existing quick-scenario CI runner is unchanged.
 
 ## Validation
 
@@ -74,6 +94,9 @@ From the repository root:
 node --test Necto.UI/src/features/*/*.test.js
 npm run build --prefix Necto.UI
 node Necto.UI/tests/scenario-builder.e2e.cjs
+node Necto.UI/tests/scenario-waiting.e2e.cjs
 ```
 
 The browser test needs Playwright and Chromium; it honors `PLAYWRIGHT_MODULE`, `PLAYWRIGHT_BROWSERS_PATH` and `NECTO_BUILDER_SCREENSHOTS`. It builds a five-step workflow through the UI and verifies actual parallel HTTP requests, a join of two JSON responses, Faker generation, fan-out, human pause/resume/cancel, saved-definition reload and mobile layout.
+
+The waiting browser test exercises an asynchronous job: start once, delay, poll until ready, then fetch the resulting report. It also verifies attempt limits, spacing, independent progress with parallelism one, persistence, exhaustion, cancellation and mobile layout. Screenshots use `NECTO_WAIT_SCREENSHOTS`.
