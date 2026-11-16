@@ -1,6 +1,7 @@
 <script setup>
+import { expansionPlan } from './expansion.js'
 import { tablePreferenceKey } from '../workbench/previewPreferences.js'
-import { computed, nextTick, ref, markRaw, useId, watch } from 'vue'
+import { computed, nextTick, ref, markRaw, useId, watch, reactive } from 'vue'
 import { responseFilename } from '../workbench/response.js'
 import CollectionTable from '../workbench/CollectionTable.vue'
 import { tableColumns } from '../workbench/collectionTable.js'
@@ -54,12 +55,18 @@ const preview = ref(null)
 const schedulePreviewHeight = usePreviewHeight()
 watch([raw, table, textPage, focusPath], () => nextTick(schedulePreviewHeight))
 let navigationId = 0
+const expandChildren = ref(null), previewPages = reactive(new Map())
+watch(expandChildren,()=>nextTick(schedulePreviewHeight))
+watch(focusPath,()=>previewPages.clear())
+const expansion = computed(()=>expandChildren.value===null?null:{expanded:expandChildren.value,...(expandChildren.value?expansionPlan(previewValue.value,focusPath.value,previewPages):{paths:new Set(),limited:false})})
+const childrenAvailable = computed(()=>previewValue.value!==null&&typeof previewValue.value==='object')
+function previewPage({path,page}){previewPages.set(JSON.stringify(path),page)}
 const previewValue = computed(() => valueAtPath(props.result.json, focusPath.value))
 const text = computed(() => props.result.stream?.view?.selectedIndex !== undefined ? JSON.stringify(props.result.json, null, 2) : props.result.rawText ?? props.result.text ?? '')
 const xmlAvailable = computed(() => text.value.length > 0 && !props.result.incomplete && !props.result.binary && !props.result.stream && props.result.json === undefined && isXmlResponse(props.result.contentType, text.value))
 const range = computed(() => pageRange(text.value.length, textPage.value, TEXT_PAGE_SIZE))
 const visibleText = computed(() => text.value.slice(range.value.start, range.value.end))
-watch(() => props.result, (result, previous) => { if (result.stream?.view && result.stream.view === previous?.stream?.view) return; textPage.value = 1; raw.value = false; table.value = Boolean(props.presentation?.view === 'table' && props.presentation.viewKey === tablePreferenceKey(props.operation, [], result.json)); tableReturn.value = null; navigation.value = null; focusPath.value = []; navigationId++ }, { immediate: true })
+watch(() => props.result, (result, previous) => { if (result.stream?.view && result.stream.view === previous?.stream?.view) return; expandChildren.value=null; previewPages.clear(); textPage.value = 1; raw.value = false; table.value = Boolean(props.presentation?.view === 'table' && props.presentation.viewKey === tablePreferenceKey(props.operation, [], result.json)); tableReturn.value = null; navigation.value = null; focusPath.value = []; navigationId++ }, { immediate: true })
 
 async function reveal(match, scroll = true) {
   const id = ++navigationId
@@ -76,11 +83,12 @@ async function reveal(match, scroll = true) {
 }
 function selectPath(path) { props.result.selectedPath = path; if (props.result.stream?.view) props.result.stream.view.selectedPath = path }
 function inspectEvent(event) {
+  expandChildren.value=null;previewPages.clear()
   props.result.stream.view.selectedIndex = event.index
   props.result.json = event.data && typeof event.data === 'object' ? markRaw(event.data) : event.data
   selectPath(undefined); raw.value = false; table.value = false; focusPath.value = []; textPage.value = 1; navigation.value = null
 }
-function backToStream() { props.result.stream.view.selectedIndex = undefined; props.result.json = undefined; selectPath(undefined); raw.value = false; table.value = false; focusPath.value = []; textPage.value = 1 }
+function backToStream() { expandChildren.value=null;previewPages.clear(); props.result.stream.view.selectedIndex = undefined; props.result.json = undefined; selectPath(undefined); raw.value = false; table.value = false; focusPath.value = []; textPage.value = 1 }
 function showTable() {
   if (tableReturn.value) fullResponse(); else { table.value = true; raw.value = false }
   if (props.presentation) { props.presentation.view = 'table'; props.presentation.viewKey = tablePreferenceKey(props.operation, focusPath.value, previewValue.value) }
@@ -120,6 +128,7 @@ function download() {
         <button v-if="tableAvailable" type="button" :aria-pressed="table && !raw" @click="showTable">Table</button>
         <button v-if="result.json !== undefined" ref="finderButton" type="button" :aria-expanded="searchOpen" :aria-controls="searchId" title="Find in response (Ctrl or ⌘ + F while the preview is focused)" @click="toggleSearch()">Find</button>
       </template>
+      <button v-if="childrenAvailable&&!raw&&!table" type="button" :aria-pressed="expandChildren===true" title="Expand descendants on visible pages; pagination and preview limits remain active" @click="expandChildren=expandChildren!==true">{{expandChildren?'Collapse children':'Expand children'}}</button>
       <details class="response-details" @keydown.esc.stop.prevent="$event.currentTarget.open = false; $event.currentTarget.querySelector('summary').focus()">
         <summary>Details</summary>
         <div class="response-details-content">
@@ -141,7 +150,8 @@ function download() {
     <div v-if="focusPath.length && !raw" class="preview-toolbar"><code>Focused object: {{ pathLabel(focusPath) }}</code><button type="button" @click="fullResponse">{{ tableReturn ? 'Back to table' : 'Back to full response' }}</button></div>
     <CollectionTable v-if="tableAvailable" v-show="table && !raw" :value="tableValue" :presentation="presentation" :path="tablePath" :operation="operation" :status="result.status" :content-type="result.contentType" :selectors="selectors" :selected="result.selectedPath" @select="selectPath($event)" @inspect="inspectRow" />
     <div v-if="result.json !== undefined" v-show="!raw && !table" ref="preview" class="json-preview" tabindex="0" aria-label="JSON response preview">
-      <JsonNode :key="JSON.stringify(focusPath)" :value="previewValue" :path="focusPath" :root="true" :navigation="navigation" :selectors="selectors" :selected="result.selectedPath" @select="selectPath($event)" />
+      <p v-if="expansion?.expanded&&expansion.limited" class="expansion-note" role="status">Some branches remain collapsed to keep the preview responsive. Expand them individually or use Find.</p>
+      <JsonNode :expansion="expansion" @page="previewPage" :key="JSON.stringify(focusPath)" :value="previewValue" :path="focusPath" :root="true" :navigation="navigation" :selectors="selectors" :selected="result.selectedPath" @select="selectPath($event)" />
 
     </div>
     <div v-if="result.stream?.view?.selectedIndex !== undefined" class="preview-toolbar"><strong>Event {{ result.stream.view.selectedIndex + 1 }}</strong><button type="button" @click="backToStream">Back to stream</button></div>
@@ -160,6 +170,8 @@ function download() {
 </template>
 
 <style scoped>
+.expansion-note { font:.72rem/1.4 system-ui,sans-serif; color:#c2ded3; white-space:normal; max-width:40rem; margin:0 0 .6rem; }
+
 .mobile-response-context { display:none; position:relative; min-width:0; }
 .mobile-response-context summary { cursor:pointer; max-width:11rem; }
 .mobile-response-context summary strong, .mobile-response-context small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

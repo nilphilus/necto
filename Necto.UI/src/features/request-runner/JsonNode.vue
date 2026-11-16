@@ -6,8 +6,8 @@ import { isPrefix } from '../payload-search/search.js'
 import PreviewPager from './PreviewPager.vue'
 import XmlPreview from './XmlPreview.vue'
 import { looksLikeXml } from './xmlDetection.js'
-const props = defineProps({ value: {}, path: { type: Array, required: true }, selectors: Array, selected: Array, navigation: Object, root: Boolean })
-defineEmits(['select'])
+const props = defineProps({ value: {}, path: { type: Array, required: true }, selectors: Array, selected: Array, navigation: Object, root: Boolean, expansion: Object })
+const emit=defineEmits(['select','page'])
 const xmlOpen = ref(false)
 const xmlAvailable = computed(() => looksLikeXml(props.value))
 watch(() => props.value, () => { xmlOpen.value = false })
@@ -26,6 +26,10 @@ const kind = computed(() => props.value === null ? 'null' : typeof props.value)
 const scalar = computed(() => JSON.stringify(typeof props.value === 'string'
   ? props.value.slice(range.value.start, range.value.end) : props.value))
 watch(() => props.value, () => { page.value = 1; expanded.value = props.root || props.path.length < 2 })
+function changePage(value){page.value=value;emit('page',{path:props.path,page:value})}
+watch(()=>props.expansion, plan=>{
+ if(plan)expanded.value=props.root||Boolean(plan.expanded&&plan.paths.has(JSON.stringify(props.path)))
+},{immediate:true})
 const target = computed(() => props.navigation && props.navigation.path.length === props.path.length && isPrefix(props.path, props.navigation.path))
 const parts = computed(() => {
   if (!target.value || !props.navigation.length || props.navigation.kind === 'key') return null
@@ -45,13 +49,13 @@ watch([() => props.navigation, () => props.value], () => {
   const navigation = props.navigation
   if (!navigation) return
   if (target.value) xmlOpen.value = false
-  if (!isPrefix(props.path, navigation.path)) { expanded.value = props.root || props.path.length < 2; return }
+  if (!isPrefix(props.path, navigation.path)) { expanded.value = props.expansion ? props.root || Boolean(props.expansion.expanded && props.expansion.paths.has(JSON.stringify(props.path))) : props.root || props.path.length < 2; return }
   if (container.value) {
     expanded.value = true
     const child = navigation.path[props.path.length]
     if (child !== undefined) {
       const index = array.value ? child : keys.value.indexOf(child)
-      if (index >= 0) page.value = Math.floor(index / PREVIEW_PAGE_SIZE) + 1
+      if (index >= 0) changePage(Math.floor(index / PREVIEW_PAGE_SIZE) + 1)
     }
   } else if (typeof props.value === 'string' && target.value && navigation.kind !== 'key') {
     page.value = Math.floor(navigation.offset / STRING_PAGE_SIZE) + 1
@@ -74,11 +78,11 @@ watch([() => props.navigation, () => props.value], () => {
       :aria-label="(expanded ? 'Collapse' : 'Expand') + ' ' + JSON.stringify(path)" @click="expanded = !expanded">{{ expanded ? '−' : '+' }}</button>
     <span>{{ array ? '[' : '{' }}</span>
     <template v-if="expanded">
-      <PreviewPager :range="range" :label="array ? 'Items' : 'Properties'" @change="page = $event" />
+      <PreviewPager :range="range" :label="array ? 'Items' : 'Properties'" @change="changePage" />
       <span v-for="([key, child], index) in entries" :key="key" class="json-entry">
         <span v-if="!array" class="token-key" :class="{ 'search-key': keyTarget(key) }" :data-search-key="keyTarget(key) ? 'true' : undefined">{{ JSON.stringify(key) }}<span class="punctuation">: </span></span>
         <span v-else class="item-index">{{ key }}: </span>
-        <JsonNode :value="child" :path="[...path, key]" :selectors="selectors" :selected="selected" :navigation="navigation" @select="$emit('select', $event)" />{{ range.start + index < count - 1 ? ',' : '' }}
+        <JsonNode :value="child" :path="[...path, key]" :selectors="selectors" :selected="selected" :navigation="navigation" :expansion="expansion" @page="emit('page',$event)" @select="$emit('select', $event)" />{{ range.start + index < count - 1 ? ',' : '' }}
       </span>
     </template>
     <span v-else class="item-index"> … {{ count.toLocaleString() }} {{ array ? 'items' : 'properties' }} </span>
