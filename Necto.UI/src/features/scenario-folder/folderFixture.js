@@ -1,5 +1,5 @@
 export function memoryFolder(name='team-repo') {
- const files=new Map(),directories=new Map()
+ const files=new Map(),directories=new Map(),identities=new Map()
  const root={kind:'directory',name,permission:'granted',permissionRequests:0,
   async queryPermission(){return this.permission},
   async requestPermission(){this.permissionRequests++;return this.permission},
@@ -13,9 +13,10 @@ export function memoryFolder(name='team-repo') {
   async getFileHandle(name,{create=false}={}){
    if(!files.has(name)){
     if(!create)throw new DOMException('Missing file','NotFoundError')
-    files.set(name,'')
+    files.set(name,'');identities.set(name,Symbol(name))
    }
-   return {kind:'file',name,
+   if(!identities.has(name))identities.set(name,Symbol(name))
+   return {kind:'file',name,identity:identities.get(name),async isSameEntry(other){return this.identity===other.identity},
     async getFile(){return new Blob([files.get(name)])},
     async createWritable(){
      root.onWrite?.(name);let next

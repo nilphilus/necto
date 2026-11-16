@@ -19,7 +19,7 @@ Import updates saved browser definitions. It keeps any currently unsaved draft a
 - One versioned `*.necto.json` file per definition; quick chains and Builder files are distinguished by `kind`.
 - Stable filenames combine a readable name with a hash of the definition ID. Renaming a scenario keeps its existing file; duplicate IDs in a folder are reported.
 - File revisions are associated with the definition actually opened for editing. Reloading the listing or importing a newer saved copy does **not** authorize an older unsaved draft to overwrite it.
-- A changed file must be reloaded and imported before saving its edited version. Existing files are checked again after opening the write stream; supported browsers request an exclusive stream.
+- A changed file must be reloaded and imported before saving its edited version. Existing file identity and content are checked after opening the write stream and again after staging the write, before closing it; supported browsers request an exclusive stream.
 - This is optimistic conflict detection, not an atomic transaction with external Git processes. Avoid checking out or editing the same file while saving it in Necto.
 - There is no background sync or automatic file deletion. Only the dedicated `necto-scenarios` subfolder is scanned: at most 100 managed files, 2 MiB per file and 20 MiB per scan. Unrelated files are not imported.
 
@@ -38,9 +38,11 @@ The abbreviated `scenario` above must be a complete valid definition in a real f
 
 ## Retained data
 
-Only definition fields are written. Responses, execution state, human answers, Authorize credentials, browser folder handles and uploaded file contents are excluded. Recognized sensitive names and `x-necto-sensitive-properties` metadata are applied to structured static data. A static variable used for a sensitive input becomes a human input in the shared copy. All referenced endpoints must be visible in the catalog before exporting, so their retention metadata is available.
+Only definition fields are written. Responses, execution state, human answers, Authorize credentials, browser folder handles and uploaded file contents are excluded. Recognized sensitive names, custom OpenAPI API-key header/query names and `x-necto-sensitive-properties` metadata are applied to structured static data. URL credentials and recognized OAuth fragment tokens are removed. Sensitive literal comparisons in response checks, object selectors and wait conditions block sharing rather than silently changing the condition. A static variable used for a sensitive input becomes a human input in the shared copy. All referenced endpoints must be visible in the catalog before exporting, so their retention metadata is available.
 
 Static payloads, free text, selector values and business data may still be sensitive: review the files before committing them. Removed values may need a local preset, authorization, human input or a reattached file before the scenario can run. Sharing does not modify the original browser draft's private inputs.
+
+Imports are limited to 25,000 JSON values and 64 nesting levels, including embedded JSON payloads. Parse errors do not echo file contents. See the [security review](security-review.md) for findings, verification and limitations.
 
 ## Browser support
 
