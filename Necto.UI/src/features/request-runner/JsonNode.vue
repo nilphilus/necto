@@ -6,8 +6,8 @@ import { isPrefix } from '../payload-search/search.js'
 import PreviewPager from './PreviewPager.vue'
 import XmlPreview from './XmlPreview.vue'
 import { looksLikeXml } from './xmlDetection.js'
-const props = defineProps({ value: {}, path: { type: Array, required: true }, selectors: Array, selected: Array, navigation: Object, root: Boolean })
-defineEmits(['select'])
+const props = defineProps({ value: {}, path: { type: Array, required: true }, selectors: Array, selected: Array, navigation: Object, root: Boolean, expansion: Object })
+const emit=defineEmits(['select','page','toggle-children'])
 const xmlOpen = ref(false)
 const xmlAvailable = computed(() => looksLikeXml(props.value))
 watch(() => props.value, () => { xmlOpen.value = false })
@@ -26,6 +26,19 @@ const kind = computed(() => props.value === null ? 'null' : typeof props.value)
 const scalar = computed(() => JSON.stringify(typeof props.value === 'string'
   ? props.value.slice(range.value.start, range.value.end) : props.value))
 watch(() => props.value, () => { page.value = 1; expanded.value = props.root || props.path.length < 2 })
+function changePage(value){page.value=value;emit('page',{path:props.path,page:value})}
+const expansionKey=computed(()=>JSON.stringify(props.path))
+const activeExpansion=computed(()=>props.expansion?.commands.findLast(command=>isPrefix(command.path,props.path)))
+const childrenExpanded=computed(()=>Boolean(activeExpansion.value?.expanded&&activeExpansion.value.paths.has(expansionKey.value)))
+const forcedExpansion=computed(()=>{
+ const command=activeExpansion.value
+ return command?{expanded:props.root||command.path.length===props.path.length||childrenExpanded.value,revision:command.revision}:null
+})
+watch(()=>forcedExpansion.value?forcedExpansion.value.revision+':'+forcedExpansion.value.expanded:null,()=>{
+ if(forcedExpansion.value)expanded.value=forcedExpansion.value.expanded
+},{immediate:true})
+function toggleChildren(){expanded.value=true;emit('toggle-children',{path:props.path,expanded:!childrenExpanded.value})}
+const expansionLimited=computed(()=>activeExpansion.value?.expanded&&activeExpansion.value.limited&&activeExpansion.value.path.length===props.path.length)
 const target = computed(() => props.navigation && props.navigation.path.length === props.path.length && isPrefix(props.path, props.navigation.path))
 const parts = computed(() => {
   if (!target.value || !props.navigation.length || props.navigation.kind === 'key') return null
@@ -45,13 +58,13 @@ watch([() => props.navigation, () => props.value], () => {
   const navigation = props.navigation
   if (!navigation) return
   if (target.value) xmlOpen.value = false
-  if (!isPrefix(props.path, navigation.path)) { expanded.value = props.root || props.path.length < 2; return }
+  if (!isPrefix(props.path, navigation.path)) { expanded.value = forcedExpansion.value?.expanded ?? (props.root || props.path.length < 2); return }
   if (container.value) {
     expanded.value = true
     const child = navigation.path[props.path.length]
     if (child !== undefined) {
       const index = array.value ? child : keys.value.indexOf(child)
-      if (index >= 0) page.value = Math.floor(index / PREVIEW_PAGE_SIZE) + 1
+      if (index >= 0) changePage(Math.floor(index / PREVIEW_PAGE_SIZE) + 1)
     }
   } else if (typeof props.value === 'string' && target.value && navigation.kind !== 'key') {
     page.value = Math.floor(navigation.offset / STRING_PAGE_SIZE) + 1
@@ -72,13 +85,15 @@ watch([() => props.navigation, () => props.value], () => {
       :aria-label="'Select object at ' + JSON.stringify(path)" @click="$emit('select', path)">{{ active ? 'Selected' : 'Select' }}</button>
     <button v-if="count" type="button" class="object-selector" :aria-expanded="expanded"
       :aria-label="(expanded ? 'Collapse' : 'Expand') + ' ' + JSON.stringify(path)" @click="expanded = !expanded">{{ expanded ? '−' : '+' }}</button>
+    <button v-if="expansion&&count" type="button" class="object-selector children-toggle" :aria-pressed="childrenExpanded" :aria-label="(childrenExpanded?'Collapse':'Expand')+' children at '+expansionKey" :title="(childrenExpanded?'Collapse':'Expand')+' children in this '+(array?'list':'object')+'. Visible pages only; preview limits remain active.'" @click="toggleChildren"><svg class="children-icon" :class="{'is-expanded':childrenExpanded}" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m4 3 4 4 4-4 M4 9l4 4 4-4" /></svg></button>
     <span>{{ array ? '[' : '{' }}</span>
     <template v-if="expanded">
-      <PreviewPager :range="range" :label="array ? 'Items' : 'Properties'" @change="page = $event" />
+      <span v-if="expansionLimited" class="expansion-note" role="status">Some branches remain collapsed to keep the preview responsive. Expand them individually or use Find.</span>
+      <PreviewPager :range="range" :label="array ? 'Items' : 'Properties'" @change="changePage" />
       <span v-for="([key, child], index) in entries" :key="key" class="json-entry">
         <span v-if="!array" class="token-key" :class="{ 'search-key': keyTarget(key) }" :data-search-key="keyTarget(key) ? 'true' : undefined">{{ JSON.stringify(key) }}<span class="punctuation">: </span></span>
         <span v-else class="item-index">{{ key }}: </span>
-        <JsonNode :value="child" :path="[...path, key]" :selectors="selectors" :selected="selected" :navigation="navigation" @select="$emit('select', $event)" />{{ range.start + index < count - 1 ? ',' : '' }}
+        <JsonNode :value="child" :path="[...path, key]" :selectors="selectors" :selected="selected" :navigation="navigation" :expansion="expansion" @page="emit('page',$event)" @toggle-children="emit('toggle-children',$event)" @select="$emit('select', $event)" />{{ range.start + index < count - 1 ? ',' : '' }}
       </span>
     </template>
     <span v-else class="item-index"> … {{ count.toLocaleString() }} {{ array ? 'items' : 'properties' }} </span>
@@ -87,6 +102,9 @@ watch([() => props.navigation, () => props.value], () => {
 </template>
 
 <style scoped>
+.children-icon { display:inline-block; vertical-align:middle; }.children-icon.is-expanded { transform:rotate(180deg); }
+.children-toggle[aria-pressed="true"] { background:#355d49; border-color:#bcf2dc; }.children-toggle:focus-visible { outline:2px solid #bcf2dc; outline-offset:2px; }.expansion-note { display:block; font:.72rem/1.4 system-ui,sans-serif; color:#c2ded3; white-space:normal; max-width:40rem; margin:.3rem 0; }
+
 mark { background: #ffe29a; color: #33280d; border-radius: .15rem; }
 .search-hit { outline: 1px solid #d4b777; border-radius: .15rem; }
 .search-key { background: #5a4922; color: #ffe29a; }
