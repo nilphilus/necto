@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue'
+import ResponseChecksEditor from '../workbench/ResponseChecksEditor.vue'
 import ScenarioMap from './ScenarioMap.vue'
 import StepInputs from './StepInputs.vue'
 import SharedVariables from './SharedVariables.vue'
@@ -235,6 +236,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
             <StepInputs v-if="operation?.parameters.some(parameter => ['path','query','header'].includes(parameter.in))" :parameters-only="true" :step="selected" :operation="operation" :steps="draft.steps" :variables="draft.variables" :operations="operations" :results="execution.steps" :disabled="pending" />
             <details class="static-request" open><summary>Request · static inputs</summary><fieldset :disabled="pending || !operation"><template v-if="operation"><label v-for="parameter in operation.parameters.filter(parameter => ['path', 'query', 'header'].includes(parameter.in))" :key="parameter.in + ':' + parameter.name">{{ parameter.in }} · {{ parameter.name }}<span v-if="dynamicTargets.has(parameter.in + ':' + parameter.name)" class="input-tag">Filled at run time</span><input v-model="selected.request.fields[parameter.in + ':' + parameter.name]" :disabled="dynamicTargets.has(parameter.in + ':' + parameter.name)" :placeholder="parameter.required || parameter.in === 'path' ? 'Required' : 'Optional'"></label></template></fieldset></details>
             <ScenarioBodyEditor v-if="operation?.requestBody" :key="selected.id" :step="selected" :operation="operation" :steps="draft.steps" :operations="operations" :variables="draft.variables" :results="execution.steps" :disabled="pending" />
+            <details class="step-checks"><summary>Response checks ({{selected.request.assertions?.length??0}})</summary><ResponseChecksEditor :session="selected.request" :disabled="pending" /></details>
             <details class="request-limits"><summary>Request limits</summary><fieldset :disabled="pending"><label>Timeout (ms)<input v-model.number="selected.request.timeout" type="number" min="1" max="600000"></label><label>Response budget (MiB)<input v-model.number="selected.request.responseLimitMiB" type="number" min="1" max="512"></label></fieldset></details>
             <button type="button" class="secondary error remove-step" :disabled="pending" @click="removeStep">Remove step</button>
           </div>
