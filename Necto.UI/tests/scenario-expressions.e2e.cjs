@@ -1,0 +1,27 @@
+const {run}=require('./qa-fixture.cjs')
+run(async({p,assert,builder,add,save,saved,execute,review,calls,shot})=>{
+ await builder();await add('Find customer');await add('Create invoice')
+ const body=p.getByRole('region',{name:'Request body schema',exact:true})
+ await body.getByRole('combobox',{name:'Source for customerId',exact:true}).selectOption('expression')
+ const editor=body.locator('[data-body-path="/customerId"] .expression-editor')
+ await editor.getByRole('textbox',{name:'Expression code',exact:true}).fill('switch(customer.status){case "ready":return customer.id;default:return 0;}')
+ await editor.getByRole('button',{name:'Add expression input',exact:true}).click()
+ await editor.getByRole('textbox',{name:'Expression input name',exact:true}).fill('customer')
+ await editor.getByRole('combobox',{name:'Expression source step',exact:true}).selectOption({label:'Find customer'})
+ await save();const definition=await saved();assert.equal(definition.version,6);assert.equal(definition.steps[1].inputs[0].source,'expression');assert.equal(calls.length,0)
+ await shot();await execute(2);assert.equal(calls[0].path,'/customer');assert.equal(calls[1].body.customerId,42)
+ // Reopen the saved definition after reload: expression source and code survive.
+ await p.reload();await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:definition.name})
+ await p.locator('.map-node').filter({hasText:'Create invoice'}).click()
+ const code=p.getByRole('textbox',{name:'Expression code',exact:true});await code.waitFor()
+ assert.match(await code.inputValue(),/switch/)
+ // Forbidden syntax is rejected in preflight; no endpoint is executed.
+ await code.fill('return fetch("/customer");')
+ const before=calls.length;assert.equal(await p.getByRole('button',{name:'Review & run',exact:true}).isDisabled(),true);assert.equal(calls.length,before)
+ // Runtime failure with valid syntax stops the consumer before POST.
+ await code.fill('return customer.missing;')
+ const runReview=await review();await runReview.getByRole('button',{name:'Run scenario',exact:true}).click()
+ await p.locator('.builder-run-status').filter({hasText:'Expression failed'}).waitFor();assert.equal(calls.length,before+1);assert.equal(calls.at(-1).path,'/customer')
+ assert.equal(await p.evaluate(()=>Object.prototype.polluted),undefined)
+ console.log('PASS: expression UI, persisted v6, typed response binding, preflight isolation and runtime consumer blocking')
+})

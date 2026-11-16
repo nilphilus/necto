@@ -7,9 +7,10 @@ import { execFileSync } from 'node:child_process'
 const root = fileURLToPath(new URL('../', import.meta.url))
 await build({ configFile: false, logLevel: 'warn', build: {
   outDir: resolve(root, 'skills/necto-scenarios/scripts/lib'), emptyOutDir: true,
-  minify: false, lib: { entry: resolve(root, 'Necto.UI/src/features/scenario-builder/model.js'), formats: ['es'], fileName: () => 'blueprint.mjs' },
+  minify: false, lib: { entry: resolve(root, 'tools/scenario-skill-entry.mjs'), formats: ['es'], fileName: () => 'blueprint.mjs' },
   rollupOptions: { external: ['@faker-js/faker'] }
 }})
+await copyFile(resolve(root,'Necto.UI/node_modules/acorn/LICENSE'), resolve(root,'skills/necto-scenarios/scripts/lib/ACORN-LICENSE.txt'))
 await copyFile(resolve(root,'LICENSE.txt'), resolve(root,'skills/necto-scenarios/LICENSE'))
 if (process.argv[2]) {
  const output=resolve(process.argv[2])

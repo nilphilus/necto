@@ -184,3 +184,5 @@ Send forms and files, inspect HTTP responses, copy request code, choose API serv
 ### Create scenarios with your agent
 
 Install the [Necto scenario authoring skill](skills/README.md) in your API project. Your agent can use source code, OpenAPI and Necto mappings to prepare importable Scenario Builder files, including parallel steps and response bindings, without executing the API.
+
+Scenario Builder also supports [isolated expressions](docs/scenario-expressions/README.md) to calculate field values from selected earlier responses or shared variables, using a bounded JavaScript subset without host access.

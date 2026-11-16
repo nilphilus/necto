@@ -2,7 +2,7 @@
 import { nextTick, ref } from 'vue'
 import { newId, validateBlueprint } from './model.js'
 import { generators } from './generation.js'
-import { variableSnapshot } from './variables.js'
+import { variableSnapshot, inputSources } from './variables.js'
 import { pointerHints } from './pointerHints.js'
 const props = defineProps({ blueprint: Object, operations: Array, results: Array, disabled: Boolean })
 const emit = defineEmits(['save'])
@@ -19,7 +19,7 @@ function defaults(variable) {
 }
 function typeChanged(variable) { variable.value = ({ text: '', number: '0', boolean: 'true', json: 'null' })[variable.valueType] }
 function remove(variable) {
-  const used = props.blueprint.steps.filter(step => step.inputs.some(input => input.source === 'variable' && input.variableId === variable.id))
+  const used = props.blueprint.steps.filter(step => step.inputs.flatMap(inputSources).some(input => input.source === 'variable' && input.variableId === variable.id))
   if (used.length) { error.value = `${variable.name} is used by ${used.map(step => step.label).join(', ')}. Remove or change those input bindings first.`; return }
   variables.value = variables.value.filter(item => item.id !== variable.id); error.value = ''
 }
@@ -46,7 +46,7 @@ function save() {
           <template v-if="variable.source === 'generate'"><label>Generator<select v-model="variable.generator" aria-label="Variable generator"><option v-for="[id,label] in generators" :key="id" :value="id">{{ label }}</option></select></label><label v-if="variable.generator === 'regex'">Pattern<input v-model="variable.pattern" aria-label="Variable pattern" placeholder="INV-[A-Z]{3}-\d{4}"></label></template>
           <label v-if="variable.source === 'human'">Question<input v-model="variable.prompt" aria-label="Variable question"><small>Asked once, only if used. Answers are not saved with the definition.</small></label>
           <template v-if="variable.source === 'response'"><label>Source step<select v-model="variable.stepId" aria-label="Variable source step"><option value="" disabled>Choose a step</option><option v-for="step in blueprint.steps" :key="step.id" :value="step.id">{{ step.label }}</option></select></label><label>Response JSON Pointer<input v-model="variable.responsePointer" aria-label="Variable response pointer" :list="'variable-path-' + variable.id" placeholder="/id"><small>Captured from the final successful response, after polling finishes.</small></label><datalist :id="'variable-path-' + variable.id"><option v-for="path in hints(variable)" :key="path" :value="path" /></datalist></template>
-          <small class="uses">Used by {{ blueprint.steps.filter(step => step.inputs.some(input => input.source === 'variable' && input.variableId === variable.id)).length }} request(s)</small>
+          <small class="uses">Used by {{ blueprint.steps.filter(step => step.inputs.flatMap(inputSources).some(input => input.source === 'variable' && input.variableId === variable.id)).length }} request(s)</small>
         </fieldset>
         <p v-if="!variables.length" class="muted">For example: generate customerEmail once, then use it in two independent requests.</p><button type="button" class="secondary" :disabled="disabled || variables.length >= 100" @click="add">Add variable</button>
         <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="disabled" class="muted">Run in progress. Definitions are read only.</p>

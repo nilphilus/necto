@@ -61,7 +61,7 @@ test('canceling a shared prompt cancels all waiting consumers without sending a 
 })
 test('v4 saves definitions and stable references only; v3 loads, names can change without rebinding',()=>{
  const data=blueprint('a');data.variables=[{id:'stable',name:'email',source:'generate',generator:'email',resolvedValue:'runtime-secret'}];data.steps[0].inputs=[bind('stable')];data.variables[0].name='renamedEmail'
- const saved=savedBlueprint(data);assert.equal(saved.version,5);assert.equal(saved.variables[0].name,'renamedEmail');assert.equal(saved.steps[0].inputs[0].variableId,'stable');assert.ok(!JSON.stringify(saved).includes('runtime-secret'))
+ const saved=savedBlueprint(data);assert.equal(saved.version,6);assert.equal(saved.variables[0].name,'renamedEmail');assert.equal(saved.steps[0].inputs[0].variableId,'stable');assert.ok(!JSON.stringify(saved).includes('runtime-secret'))
  const legacy=blueprint('legacy');legacy.version=3;delete legacy.variables;validateBlueprint(legacy);assert.deepEqual(savedBlueprint(legacy).variables,[])
  legacy.variables=data.variables;assert.throws(()=>validateBlueprint(legacy),/version 4/)
 })

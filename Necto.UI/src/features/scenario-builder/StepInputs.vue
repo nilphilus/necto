@@ -1,4 +1,5 @@
 <script setup>
+import ExpressionEditor from './ExpressionEditor.vue'
 import { computed, useId } from 'vue'
 import { pointerHints } from './pointerHints.js'
 import { generators } from './generation.js'
@@ -10,6 +11,7 @@ function hints(input) {
 }
 const targets = computed(() => (props.bodyOnly ? [] : props.operation?.parameters ?? []).filter(parameter => ['path', 'query', 'header'].includes(parameter.in)))
 function sourceChanged(input) {
+  if (input.source === 'expression') { input.expression ??= 'return null;'; input.bindings ??= [] }
   if (input.source === 'variable') input.variableId ||= props.variables[0]?.id ?? ''
   if (input.source === 'response') { input.stepId ??= ''; input.responsePointer ??= '' }
   if (input.source === 'human') { input.prompt ??= 'Enter ' + (input.name || 'a value'); input.valueType ??= 'text' }
@@ -34,8 +36,9 @@ function setTarget(input, value) {
       <div class="input-row"><label>Target<select aria-label="Target" :value="input.location === 'body' ? 'body' : targets.findIndex(target => target.in === input.location && target.name === input.name)" @change="setTarget(input, $event.target.value)"><option v-for="(target, i) in targets" :key="i" :value="i">{{ target.in }} · {{ target.name }}</option><option v-if="!parametersOnly && operation?.requestBody" value="body">Body</option></select></label>
         <button type="button" class="remove-input secondary" :aria-label="'Remove input ' + (index + 1)" @click="step.inputs.splice(index, 1)">×</button></div>
       <label v-if="input.location === 'body'">Target JSON Pointer<input aria-label="Target JSON Pointer" v-model="input.pointer" placeholder="/customer/id · empty = whole body"><small>For text/XML, leave empty to replace the whole body.</small></label>
-      <label v-if="!fixedSource">Value source<select aria-label="Value source" v-model="input.source" @change="sourceChanged(input)"><option value="response">Earlier response</option><option value="variable">Shared variable</option><option value="preset">Run preset</option><option value="generate">Generate data</option><option value="human">Ask at run time</option></select></label>
-      <label v-if="input.source === 'variable'">Shared variable<select v-model="input.variableId" aria-label="Shared variable"><option value="" disabled>Choose a variable</option><option v-for="variable in variables" :key="variable.id" :value="variable.id">{{ variable.name }}</option></select><small>One value per scenario run, shared with all consumers.</small></label>
+      <label v-if="!fixedSource">Value source<select aria-label="Value source" v-model="input.source" @change="sourceChanged(input)"><option value="response">Earlier response</option><option value="variable">Shared variable</option><option value="preset">Run preset</option><option value="generate">Generate data</option><option value="expression">Expression</option><option value="human">Ask at run time</option></select></label>
+      <ExpressionEditor v-if="input.source === 'expression'" :input="input" :step="step" :steps="steps" :variables="variables" :disabled="disabled" />
+      <label v-else-if="input.source === 'variable'">Shared variable<select v-model="input.variableId" aria-label="Shared variable"><option value="" disabled>Choose a variable</option><option v-for="variable in variables" :key="variable.id" :value="variable.id">{{ variable.name }}</option></select><small>One value per scenario run, shared with all consumers.</small></label>
       <template v-else-if="input.source === 'response'">
         <label v-if="!fixedSource">Source step<select aria-label="Source step" v-model="input.stepId"><option value="" disabled>Choose a step</option><option v-for="other in steps.filter(other => other.id !== step.id)" :key="other.id" :value="other.id">{{ other.label }}</option></select></label>
         <label>Response JSON Pointer<input aria-label="Response JSON Pointer" :list="prefix + '-pointer-' + index" v-model="input.responsePointer" placeholder="/items/0/id · empty = entire JSON"><small>Choose a suggested path or enter your own. No inferred mapping required.</small></label><datalist :id="prefix + '-pointer-' + index"><option v-for="path in hints(input)" :key="path" :value="path" /></datalist>

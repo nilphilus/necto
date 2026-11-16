@@ -4,7 +4,7 @@
   "kind": "builder",
   "scenario": {
     "format": "necto-scenario-builder",
-    "version": 5,
+    "version": 6,
     "id": "example-invoice-inspection",
     "name": "Inspect an invoice alongside service weather",
     "concurrency": 2,

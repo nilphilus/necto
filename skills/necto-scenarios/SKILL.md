@@ -1,11 +1,11 @@
 ---
 name: necto-scenarios
-description: Create or update importable Necto Scenario Builder files from a user's workflow using project code, OpenAPI and Necto relationship mappings. Use for parallel API steps, response bindings, human inputs, generated data, presets, delay and polling. Prepare files without executing the API.
+description: Create or update importable Necto Scenario Builder files from a user's workflow using project code, OpenAPI and Necto relationship mappings. Use for parallel API steps, response bindings, human inputs, generated data, presets, isolated JavaScript expressions, delay and polling. Prepare files without executing the API.
 ---
 
 # Necto scenario authoring
 
-Turn the user's workflow into a reviewed `necto-scenarios/*.necto.json` file. Use Scenario Builder version 5 inside the shared-file wrapper. Read [the format reference](references/format.md) and [the example](examples/invoice-inspection.necto.json) before authoring.
+Turn the user's workflow into a reviewed `necto-scenarios/*.necto.json` file. Use Scenario Builder version 6 inside the shared-file wrapper. Read [the format reference](references/format.md) and [the example](examples/invoice-inspection.necto.json) before authoring.
 
 ## Discover the actual contract
 
@@ -24,6 +24,10 @@ Turn the user's workflow into a reviewed `necto-scenarios/*.necto.json` file. Us
 - Use shared variables for reused values. Use human inputs for values only a person knows, presets for environment-specific named values and supported generators for synthetic data. Never generate foreign keys that must already exist.
 - Timing belongs to **connections**, not steps. Poll only a safe read endpoint; retries resend the target request and must not repeat a create/payment/delete operation. Choose bounded intervals, retries and timeouts.
 - Add checks that express the user's acceptance criteria. Do not invent statuses or business expectations. Add cleanup only when requested and its scope is safe.
+
+## Isolated expressions
+
+Use `source: "expression"` only for transformations that direct response/variable bindings cannot express. Read [expression syntax and security](references/expressions.md). Declare every response slice or variable explicitly in `bindings`; those declarations determine graph dependencies. Use the smallest response pointer that suffices. The interpreter is a bounded JavaScript subset: `const`, `if`, `switch`, `return`, basic operators and JSON construction. No calls, functions, loops, imports, mutation or browser/global access. Never bypass restrictions using eval, templates, host functions or generated scripts. Missing/non-JSON output and limit failures stop the consumer before its request. Code is retained verbatim: never put secrets or sensitive expected literals in it. Explain branches and test representative inputs locally with the packaged interpreter.
 
 ## Write and validate
 

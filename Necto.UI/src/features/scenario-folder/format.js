@@ -1,3 +1,4 @@
+import { inputSources } from '../scenario-builder/variables.js'
 import { savedBlueprint } from '../scenario-builder/useBuilder.js'
 import { validateScenario } from '../scenarios/scenario.js'
 import { payloadSnapshot } from '../workbench/body.js'
@@ -112,7 +113,10 @@ export function sharedDefinition(kind,source,operations) {
   const operation=operations.find(operation=>operation.key===step.operationKey&&(operation.apiId??'local')===step.apiId)
   if(!operation||operation.method!==step.method||operation.path!==step.path)throw new Error(`${step.label??step.name}: load the endpoint's API before saving to the folder.`)
   const request=kind==='builder'?step.request:step
-  for(const input of step.inputs??[])if(input.source==='variable'&&sensitiveTarget(operation,input,request))secretVariables.add(input.variableId)
+  for(const input of step.inputs??[])if(sensitiveTarget(operation,input,request)) {
+   if(input.source==='expression')throw new Error('Replace expressions targeting sensitive fields before sharing. Expression code is saved as written.')
+   for(const source of inputSources(input))if(source.source==='variable')secretVariables.add(source.variableId)
+  }
   const retained=retainDraft(operation,request)
   request.fields=clean(Object.fromEntries(Object.entries(request.fields).filter(([key])=>{const colon=key.indexOf(':');return !sensitiveTransport(operation,key.slice(0,colon),key.slice(colon+1))})))
   request.body=retained.body??''

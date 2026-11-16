@@ -23,7 +23,7 @@ export function validateText(text) {
  bounded(file)
  if(file?.format!=='necto-shared-scenario'||file.version!==1||file.kind!=='builder')throw new Error('Expected a version-1 shared Builder file.')
  const b=file.scenario
- if(b?.version!==5)throw new Error('This skill authors Builder version 5.')
+ if(b?.version!==6)throw new Error('This skill authors Builder version 6.')
  // Match the additional shared-file identity bound before model validation.
  if(typeof b.id!=='string'||b.id.length>2000)throw new Error('Invalid shared scenario ID.')
  for(const step of b.steps??[]){
@@ -44,7 +44,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   console.log(`Valid shared Builder scenario (${b.steps.length} steps). Contract and secret review still required.`)
  }catch{
   // Validation messages may contain repository-controlled labels/values.
-  console.error('Validation failed. Check the shared wrapper, version-5 graph, fields and documented limits. Payload contents are not printed.')
+  console.error('Validation failed. Check the shared wrapper, version-6 graph, fields and documented limits. Payload contents are not printed.')
   process.exitCode=1
  }
 }

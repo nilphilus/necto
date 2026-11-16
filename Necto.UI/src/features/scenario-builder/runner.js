@@ -1,3 +1,4 @@
+import { evaluateExpression } from './expression.js'
 import { applyBodyPresets, buildRequest, contextKey } from '../request-runner/request.js'
 import { effectiveTarget } from '../workbench/target.js'
 import { sentRequest } from './sentRequest.js'
@@ -124,7 +125,23 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
       }
       for (const input of step.inputs.filter(input => input.source !== 'human')) {
         if (input.source === 'variable' && variableDefinitions.get(input.variableId)?.source === 'human') step.status = 'needs-input'
-        const value = input.source === 'variable' ? await resolveVariable(input.variableId) : input.source === 'generate' ? await generate(input) : readPointer(byId.get(input.stepId)?.response?.json, input.responsePointer)
+        let value
+        if (input.source === 'expression') {
+          const values=Object.create(null)
+          for (const binding of input.bindings) {
+            combined.throwIfAborted()
+            if(binding.source === 'variable') {
+              if(variableDefinitions.get(binding.variableId)?.source === 'human') step.status='needs-input'
+              values[binding.name]=await resolveVariable(binding.variableId)
+            } else {
+              const producer=byId.get(binding.stepId)
+              if(producer?.status!=='completed') throw new Error('Expression source step is not completed.')
+              values[binding.name]=readPointer(producer.response?.json,binding.responsePointer)
+            }
+          }
+          combined.throwIfAborted()
+          value=evaluateExpression(input.expression,values)
+        } else value = input.source === 'variable' ? await resolveVariable(input.variableId) : input.source === 'generate' ? await generate(input) : readPointer(byId.get(input.stepId)?.response?.json, input.responsePointer)
         combined.throwIfAborted()
         applyInput(step.session, step.operation, input, value)
       }
