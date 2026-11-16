@@ -1,10 +1,12 @@
 <script setup>
-import { computed, watch } from 'vue'
+import { computed, useId, watch } from 'vue'
+import ExpandedBodyEditor from './ExpandedBodyEditor.vue'
 import { bodyContent, formFields, isJson } from './body.js'
 import { schemaIssues } from './schema.js'
 import { initialPayload } from '../request-runner/request.js'
 import { schemaTemplate, formatTemplate, TemplateLimitError, TEMPLATE_NOTICE } from '../request-runner/schemaTemplate.js'
 const props = defineProps({ operation: Object, session: Object })
+const bodyId = useId()
 const media = computed(() => bodyContent(props.operation, props.session))
 const forms = computed(() =>
   ['multipart/form-data', 'application/x-www-form-urlencoded'].includes(
@@ -158,10 +160,13 @@ watch(
       >
       <input type="file" @change="session.binaryFile = $event.target.files[0]"
     /></label>
-    <label v-else-if="!isJson(media[0])"
-      >Request body
-      <textarea v-model="session.body" rows="4" spellcheck="false" />
-    </label>
+    <template v-else-if="!isJson(media[0])">
+      <div class="body-heading">
+        <label :for="bodyId">Request body</label>
+        <ExpandedBodyEditor :session="session" />
+      </div>
+      <textarea :id="bodyId" v-model="session.body" rows="4" spellcheck="false" />
+    </template>
     <template v-else
       ><label v-if="variants.length"
         >Schema variant<select
@@ -195,6 +200,13 @@ watch(
 .body-editor {
   display: grid;
   gap: 0.5rem;
+}
+.body-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.35rem;
 }
 label {
   display: grid;
