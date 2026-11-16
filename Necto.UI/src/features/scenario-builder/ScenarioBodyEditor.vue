@@ -16,8 +16,8 @@ provide(BODY_VALUE,computed(()=>parsed.value.value))
 </script>
 <template>
  <section class="scenario-body-editor" aria-label="Request body schema">
-  <header><h4>Request body</h4><div v-if="json" role="group" aria-label="Body editing mode"><button type="button" class="secondary" :aria-pressed="mode==='fields'" @click="mode='fields'">Fields</button><button type="button" class="secondary" :aria-pressed="mode==='raw'" @click="mode='raw'">Raw JSON</button><button type="button" class="secondary" @click="expand">Expand body editor</button></div></header>
-  <Teleport :disabled="!expanded" :to="dialogHost??'body'"><div class="body-editor-content"><p class="body-guidance" v-if="json">Choose a value source per field. Run presets override matching values. Expand objects and add array items as needed.</p>
+  <header><h4>Request body</h4><div v-if="json" role="group" aria-label="Body editing mode"><button type="button" class="secondary" :aria-pressed="mode==='fields'" @click="mode='fields'">JSON builder</button><button type="button" class="secondary" :aria-pressed="mode==='raw'" @click="mode='raw'">Raw JSON</button><button type="button" class="secondary" @click="expand">Expand body editor</button></div></header>
+  <Teleport :disabled="!expanded" :to="dialogHost??'body'"><div class="body-editor-content"><p class="body-guidance" v-if="json">Edit values inside the JSON structure. Choose a source beside each value; run presets override matching fields.</p>
   <div v-if="json&&mode==='fields'">
    <p v-if="parseError" class="error" role="alert">{{parseError}}</p>
    <BodySchemaField v-else :key="step.id+media[0]" :step="step" :operation="operation" :raw="media[1].schema??{}" name="Body" :required="!!operation.requestBody.required" :steps="steps" :operations="operations" :variables="variables" :results="results" :disabled="disabled" @raw="mode='raw'" />
@@ -27,7 +27,7 @@ provide(BODY_VALUE,computed(()=>parsed.value.value))
    <details v-if="json" class="advanced-body-bindings"><summary>Advanced body bindings</summary><StepInputs :step="step" :operation="operation" :steps="steps" :operations="operations" :variables="variables" :body-only="true" :disabled="disabled" /></details>
   </div>
  </div></Teleport>
-  <dialog ref="dialog" class="body-editor-dialog" aria-labelledby="expanded-body-title" @close="expanded=false"><div class="dialog-shell"><header><h3 id="expanded-body-title">Configure request body</h3><div><button type="button" class="secondary" :aria-pressed="mode==='fields'" @click="mode='fields'">Fields</button><button type="button" class="secondary" :aria-pressed="mode==='raw'" @click="mode='raw'">Raw JSON</button><button type="button" class="secondary" aria-label="Close body editor" @click="dialog.close()">Done</button></div></header><div ref="dialogHost" class="dialog-host" /></div></dialog>
+  <dialog ref="dialog" class="body-editor-dialog" aria-labelledby="expanded-body-title" @close="expanded=false"><div class="dialog-shell"><header><h3 id="expanded-body-title">Configure request body</h3><div><button type="button" class="secondary" :aria-pressed="mode==='fields'" @click="mode='fields'">JSON builder</button><button type="button" class="secondary" :aria-pressed="mode==='raw'" @click="mode='raw'">Raw JSON</button><button type="button" class="secondary" aria-label="Close body editor" @click="dialog.close()">Done</button></div></header><div ref="dialogHost" class="dialog-host" /></div></dialog>
  </section>
 </template>
 <style scoped>

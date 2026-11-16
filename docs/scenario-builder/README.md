@@ -40,7 +40,7 @@ Each run uses fresh responses. Missing response values fail the receiving step i
 
 ## Configure request bodies from the schema
 
-JSON requests open in **Request body → Fields**. The tree shows named properties, types/formats, required/read-only flags, nested objects, array items, enums and selected `oneOf`/`anyOf` variants. Referenced schemas and `allOf` properties are resolved into that tree. Optional properties can be included or removed.
+JSON requests open in **Request body → JSON builder**. Editable values sit directly beside quoted JSON keys, with braces, brackets, commas and indentation showing the payload structure. Objects and array items start expanded through four levels; deeper branches can be expanded on demand. The tree shows named properties, types/formats, required/read-only flags, nested objects, array items, enums and selected `oneOf`/`anyOf` variants. Referenced schemas and `allOf` properties are resolved into that tree. Optional properties can be included or removed.
 
 At each field, choose:
 
