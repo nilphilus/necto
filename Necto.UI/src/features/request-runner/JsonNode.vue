@@ -85,7 +85,7 @@ watch([() => props.navigation, () => props.value], () => {
       :aria-label="'Select object at ' + JSON.stringify(path)" @click="$emit('select', path)">{{ active ? 'Selected' : 'Select' }}</button>
     <button v-if="count" type="button" class="object-selector" :aria-expanded="expanded"
       :aria-label="(expanded ? 'Collapse' : 'Expand') + ' ' + JSON.stringify(path)" @click="expanded = !expanded">{{ expanded ? '−' : '+' }}</button>
-    <button v-if="expansion && array && count" type="button" class="object-selector children-toggle" :aria-pressed="childrenExpanded" :aria-label="(childrenExpanded?'Collapse':'Expand')+' children at '+expansionKey" :title="(childrenExpanded?'Collapse':'Expand')+' children in this list. Visible pages only; preview limits remain active.'" @click="toggleChildren"><svg class="children-icon" :class="{'is-expanded':childrenExpanded}" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m4 3 4 4 4-4 M4 9l4 4 4-4" /></svg></button>
+    <button v-if="expansion && array && count" type="button" class="object-selector children-toggle" :aria-pressed="childrenExpanded" :aria-label="(childrenExpanded?'Collapse':'Expand')+' children at '+expansionKey" :title="(childrenExpanded?'Collapse':'Expand')+' children in this list. Visible pages only; preview limits remain active.'" @click="toggleChildren"><svg class="children-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 2v12 M3 4h3 M3 8h3 M3 12h3" /><path :d="childrenExpanded ? 'M11 13V3 M8.5 5.5 11 3l2.5 2.5' : 'M11 3v10 M8.5 10.5 11 13l2.5-2.5'" /></svg></button>
     <span>{{ array ? '[' : '{' }}</span>
     <template v-if="expanded">
       <span v-if="expansionLimited" class="expansion-note" role="status">Some branches remain collapsed to keep the preview responsive. Expand them individually or use Find.</span>
@@ -102,7 +102,7 @@ watch([() => props.navigation, () => props.value], () => {
 </template>
 
 <style scoped>
-.children-icon { display:inline-block; vertical-align:middle; }.children-icon.is-expanded { transform:rotate(180deg); }
+.children-icon { display:inline-block; vertical-align:middle; }
 .children-toggle[aria-pressed="true"] { background:#355d49; border-color:#bcf2dc; }.children-toggle:focus-visible { outline:2px solid #bcf2dc; outline-offset:2px; }.expansion-note { display:block; font:.72rem/1.4 system-ui,sans-serif; color:#c2ded3; white-space:normal; max-width:40rem; margin:.3rem 0; }
 
 mark { background: #ffe29a; color: #33280d; border-radius: .15rem; }
