@@ -48,6 +48,7 @@ export function formFields(operation, mediaType) {
 }
 export function payloadSnapshot(draft) {
   return {
+    ...(draft.bodyVariants ? { bodyVariants: { ...draft.bodyVariants } } : {}),
     mediaType: draft.mediaType,
     extraHeaders: draft.extraHeaders ? { ...draft.extraHeaders } : undefined,
     extraQuery: draft.extraQuery?.map(row => [...row]),
@@ -62,6 +63,7 @@ export function payloadSnapshot(draft) {
   }
 }
 export function validatePayloadSnapshot(snapshot) {
+  if (snapshot.bodyVariants !== undefined && (!snapshot.bodyVariants || Array.isArray(snapshot.bodyVariants) || typeof snapshot.bodyVariants !== 'object' || Object.keys(snapshot.bodyVariants).length > 1000 || Object.entries(snapshot.bodyVariants).some(([key,index]) => (key !== '' && !key.startsWith('/')) || key.length > 2048 || !Number.isInteger(index) || index < 0 || index > 1000))) throw new Error('Invalid body schema variants.')
   if (snapshot.extraHeaders !== undefined && (!snapshot.extraHeaders || Array.isArray(snapshot.extraHeaders) || typeof snapshot.extraHeaders !== 'object' || Object.keys(snapshot.extraHeaders).length > 100 || Object.values(snapshot.extraHeaders).some(value => typeof value !== 'string'))) throw new Error('Invalid imported headers.')
   if (snapshot.extraQuery !== undefined && (!Array.isArray(snapshot.extraQuery) || snapshot.extraQuery.length > 200 || snapshot.extraQuery.some(row => !Array.isArray(row) || row.length !== 2 || row.some(value => typeof value !== 'string')))) throw new Error('Invalid imported query inputs.')
   if (

@@ -42,6 +42,26 @@ Check stock ────┘                  └── Approve dispatch [human i
 
 Each run uses fresh responses. Missing response values fail the receiving step instead of falling back to old IDs. Existing request authentication, serialization, timeouts, response budgets and response preview are reused.
 
+## Configure request bodies from the schema
+
+JSON requests open in **Request body → JSON builder**. Editable values sit directly beside quoted JSON keys, with braces, brackets, commas and indentation showing the payload structure. Objects and array items start expanded through four levels; deeper branches can be expanded on demand. The tree shows named properties, types/formats, required/read-only flags, nested objects, array items, enums and selected `oneOf`/`anyOf` variants. Referenced schemas and `allOf` properties are resolved into that tree. Optional properties can be included or removed.
+
+At each field, choose:
+
+- **Static value** — type a value, choose an enum/boolean, or edit an opaque JSON object.
+- **Previous response** — choose a source request and response path; suggestions include the OpenAPI schema and available previous results.
+- **Shared variable** — select an existing run variable.
+- **Run preset** — explicitly require a matching selected preset. Run review reports missing matches and lets you choose the preset before sending.
+- **Generate data / Ask at run time** — configure Faker/patterns or a typed human question at that field.
+
+Use **Expand body editor** for a wider workspace. Closing it keeps your draft edits. Objects can receive one source for the entire object or separate sources for their children; replacing a configured subtree asks before removing its child bindings. Array controls add/remove items and update later binding indexes. Variant selection preserves its UI metadata on save; raw edits/discriminators also help identify the selected branch.
+
+**Raw JSON** remains available, including the existing body editor's media/form/file controls. **Advanced body bindings** provides direct JSON Pointer editing. Non-JSON bodies retain their existing editor. Additional properties and recursive/deep branches can be edited as JSON rather than eagerly expanding an unbounded tree. Large property lists and arrays have explicit “Show more” controls; schema fields are not silently truncated.
+
+Explicit Run preset sources apply to named fields, not the entire body. Presets still override matching fields regardless of the selected source. New definitions use v5 so older clients reject these new source rules; existing v1–v4 definitions still open. There is no scripting or automatic inference of cross-API business meaning.
+
+![Schema fields and their value sources](images/schema-field-sources.png)
+
 ## Run with presets
 
 Choose **Review & run → Presets for this run**. Active API presets are initially selected; you can select a different set or clear them for this run. The displayed order matters: the **last selected preset wins** when fields overlap. This does not change the global active presets or the saved scenario.
@@ -110,7 +130,7 @@ Inputs, generated values and human answers are prepared once and reused across p
 
 Use a read endpoint to poll asynchronous work. If you enable waiting on POST/PUT/PATCH/DELETE, it repeats that request and can repeat server changes. The run review shows the HTTP method, maximum call count and interval before sending. There is no automatic retry policy for ordinary requests.
 
-Newly saved/exported definitions use format version 4, which older Builder versions reject rather than ignoring connection settings. Existing version 1/2/3 definitions still open and upgrade when saved. Old per-step timing is moved to one incoming connection, or a Start connection for a root request; join delays and polling behavior are preserved. The tab must remain open; browser timer throttling can lengthen waits.
+Newly saved/exported definitions use format version 5, which older Builder versions reject rather than ignoring connection settings. Existing version 1/2/3/4 definitions still open and upgrade when saved. Old per-step timing is moved to one incoming connection, or a Start connection for a root request; join delays and polling behavior are preserved. The tab must remain open; browser timer throttling can lengthen waits.
 
 ![Delay, response waiting and bindings in a popup beside the connection](images/connection-popup.png)
 
@@ -146,6 +166,7 @@ node Necto.UI/tests/scenario-waiting.e2e.cjs
 node Necto.UI/tests/scenario-connections.e2e.cjs
 node Necto.UI/tests/scenario-variables.e2e.cjs
 node Necto.UI/tests/scenario-presets.e2e.cjs
+node Necto.UI/tests/scenario-body-schema.e2e.cjs
 ```
 
 The browser test needs Playwright and Chromium; it honors `PLAYWRIGHT_MODULE`, `PLAYWRIGHT_BROWSERS_PATH` and `NECTO_BUILDER_SCREENSHOTS`. It builds a five-step workflow through the UI and verifies actual parallel HTTP requests, a join of two JSON responses, Faker generation, fan-out, human pause/resume/cancel, saved-definition reload and mobile layout.
@@ -158,4 +179,5 @@ The variables browser test authors all four sources, verifies shared generated/h
 
 The presets browser test verifies ordered run selection, missing required inputs repaired in review, static/dynamic/shared/nested overrides, skipping covered prompts, preserving uncovered prompts, unchanged saved definitions/global activation and mobile review. Screenshots use `NECTO_PRESET_SCREENSHOTS`.
 
+The body-schema browser test authors typed/static, response, Faker, variable, preset and human values through the field tree, including refs/allOf, arrays, enums, variants and read-only fields. It verifies the actual sent JSON, saved variant state, expanded editing and mobile layout. Screenshots use `NECTO_SCHEMA_SCREENSHOTS`.
 The add-next browser test checks dropping into empty space, placeholder persistence, blocked execution until configuration, endpoint selection, preserved placement/identity, the next-request shortcut, ordered execution and mobile use. Screenshots use `NECTO_NEXT_SCREENSHOTS`.

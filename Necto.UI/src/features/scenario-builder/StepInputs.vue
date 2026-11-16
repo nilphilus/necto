@@ -2,13 +2,13 @@
 import { computed, useId } from 'vue'
 import { pointerHints } from './pointerHints.js'
 import { generators } from './generation.js'
-const props = defineProps({ step: Object, operation: Object, steps: Array, operations: Array, results: Array, disabled: Boolean, fixedSource: String, variables: { type: Array, default: () => [] } })
+const props = defineProps({ step: Object, operation: Object, steps: Array, operations: Array, results: Array, disabled: Boolean, fixedSource: String, variables: { type: Array, default: () => [] }, parametersOnly: Boolean, bodyOnly: Boolean })
 const prefix = useId()
 function hints(input) {
   const step = props.steps.find(step => step.id === input.stepId)
   return pointerHints(props.operations?.find(operation => operation.key === step?.operationKey), props.results?.find(result => result.id === input.stepId)?.response?.json)
 }
-const targets = computed(() => (props.operation?.parameters ?? []).filter(parameter => ['path', 'query', 'header'].includes(parameter.in)))
+const targets = computed(() => (props.bodyOnly ? [] : props.operation?.parameters ?? []).filter(parameter => ['path', 'query', 'header'].includes(parameter.in)))
 function sourceChanged(input) {
   if (input.source === 'variable') input.variableId ||= props.variables[0]?.id ?? ''
   if (input.source === 'response') { input.stepId ??= ''; input.responsePointer ??= '' }
@@ -27,14 +27,14 @@ function setTarget(input, value) {
 </script>
 <template>
   <section class="step-inputs" aria-label="Dynamic inputs">
-    <header><h4>Dynamic inputs</h4><button type="button" class="secondary" :disabled="disabled || !targets.length && !operation?.requestBody" @click="add">Add input</button></header>
+    <header><h4>Dynamic inputs</h4><button type="button" class="secondary" :disabled="disabled || !targets.length && (parametersOnly || !operation?.requestBody)" @click="add">Add input</button></header>
     <p v-if="!step.inputs.length" class="muted">Static values come from the request below. Add a source to fill a field at run time.</p>
-    <fieldset v-for="(input, index) in step.inputs" :key="index" :disabled="disabled" class="input-card">
+    <template v-for="(input, index) in step.inputs" :key="index"><fieldset v-if="(!parametersOnly || input.location !== 'body') && (!bodyOnly || input.location === 'body')" :disabled="disabled" class="input-card">
       <legend>Input {{ index + 1 }}</legend>
-      <div class="input-row"><label>Target<select aria-label="Target" :value="input.location === 'body' ? 'body' : targets.findIndex(target => target.in === input.location && target.name === input.name)" @change="setTarget(input, $event.target.value)"><option v-for="(target, i) in targets" :key="i" :value="i">{{ target.in }} · {{ target.name }}</option><option v-if="operation?.requestBody" value="body">Body</option></select></label>
+      <div class="input-row"><label>Target<select aria-label="Target" :value="input.location === 'body' ? 'body' : targets.findIndex(target => target.in === input.location && target.name === input.name)" @change="setTarget(input, $event.target.value)"><option v-for="(target, i) in targets" :key="i" :value="i">{{ target.in }} · {{ target.name }}</option><option v-if="!parametersOnly && operation?.requestBody" value="body">Body</option></select></label>
         <button type="button" class="remove-input secondary" :aria-label="'Remove input ' + (index + 1)" @click="step.inputs.splice(index, 1)">×</button></div>
       <label v-if="input.location === 'body'">Target JSON Pointer<input aria-label="Target JSON Pointer" v-model="input.pointer" placeholder="/customer/id · empty = whole body"><small>For text/XML, leave empty to replace the whole body.</small></label>
-      <label v-if="!fixedSource">Value source<select aria-label="Value source" v-model="input.source" @change="sourceChanged(input)"><option value="response">Earlier response</option><option value="variable">Shared variable</option><option value="generate">Generate data</option><option value="human">Ask at run time</option></select></label>
+      <label v-if="!fixedSource">Value source<select aria-label="Value source" v-model="input.source" @change="sourceChanged(input)"><option value="response">Earlier response</option><option value="variable">Shared variable</option><option value="preset">Run preset</option><option value="generate">Generate data</option><option value="human">Ask at run time</option></select></label>
       <label v-if="input.source === 'variable'">Shared variable<select v-model="input.variableId" aria-label="Shared variable"><option value="" disabled>Choose a variable</option><option v-for="variable in variables" :key="variable.id" :value="variable.id">{{ variable.name }}</option></select><small>One value per scenario run, shared with all consumers.</small></label>
       <template v-else-if="input.source === 'response'">
         <label v-if="!fixedSource">Source step<select aria-label="Source step" v-model="input.stepId"><option value="" disabled>Choose a step</option><option v-for="other in steps.filter(other => other.id !== step.id)" :key="other.id" :value="other.id">{{ other.label }}</option></select></label>
@@ -45,12 +45,13 @@ function setTarget(input, value) {
         <label v-if="input.generator === 'regex'">Pattern<input aria-label="Pattern" v-model="input.pattern" placeholder="INV-[A-Z]{3}-\d{4}"><small>Literals, ranges, \d, \w, \s, ?, {n}, {min,max}. No groups or unbounded repetition. Maximum 256 generated characters.</small></label>
         <small>Faker · a new value for every run. Choose a generator that matches the API field type.</small>
       </template>
+      <p v-else-if="input.source === 'preset'" class="muted">Choose a matching preset in Review & run.</p>
       <template v-else>
         <label>Question<input aria-label="Question" v-model="input.prompt" placeholder="Enter the one-time approval code"></label>
         <label>Value type<select aria-label="Value type" v-model="input.valueType"><option value="text">Text</option><option value="number">Number</option><option value="boolean">Boolean</option><option value="json">JSON value</option></select></label>
         <small>The step pauses before sending. Answers stay in this run and are excluded from saved definitions.</small>
       </template>
-    </fieldset>
+    </fieldset></template>
   </section>
 </template>
 <style scoped>

@@ -41,6 +41,7 @@ function variant(index) {
     props.session.body
   )
   props.session.variantIndex = index
+  props.session.bodyVariants = { ...props.session.bodyVariants, '': Number(index) }
   const schema = props.operation.resolve(media.value?.[1]?.schema)
   const selected = variants.value[index]
   let value
@@ -71,6 +72,7 @@ function selectMedia(value) {
     body: props.session.body,
     bodyNotice: props.session.bodyNotice,
     variantIndex: props.session.variantIndex,
+    bodyVariants: { ...props.session.bodyVariants },
     formFields: props.session.formFields,
     binaryFile: props.session.binaryFile
   })
@@ -82,6 +84,7 @@ function selectMedia(value) {
       body: generated.body,
       bodyNotice: generated.notice,
       variantIndex: undefined,
+      bodyVariants: {},
       formFields: formFields(props.operation, value),
       binaryFile: undefined
     }

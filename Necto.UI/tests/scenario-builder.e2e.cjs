@@ -32,7 +32,8 @@ const document={openapi:'3.1.0',info:{title:'Commerce API',version:'1'},paths:{
  const add=async(name,label)=>{await p.getByRole('button',{name:'+ Add request',exact:true}).click();await p.getByRole('searchbox',{name:'Find endpoint',exact:true}).fill(name);await p.locator('.endpoint-options button').filter({hasText:name}).click();await p.getByRole('textbox',{name:'Step name',exact:true}).fill(label)}
  await add('Find customer','Find customer');await add('Check inventory','Check stock');await add('Create order','Create order')
  const addInput=async({target='Body',pointer='',source='Earlier response',step,response='',generator,pattern,prompt,type})=>{
-  await p.getByRole('button',{name:'Add input',exact:true}).click();const card=p.locator('.input-card').last()
+  if(target==='Body'){await p.getByRole('button',{name:'Raw JSON',exact:true}).click();const advanced=p.locator('.advanced-body-bindings');if(await advanced.getAttribute('open')===null)await advanced.locator('summary').click()}
+  await p.getByRole('button',{name:'Add input',exact:true}).last().click();const card=p.locator('.input-card').last()
   await card.getByLabel('Target',{exact:true}).selectOption({label:target});if(target==='Body')await card.getByLabel('Target JSON Pointer',{exact:true}).fill(pointer)
   await card.getByLabel('Value source',{exact:true}).selectOption({label:source})
   if(step){await card.getByLabel('Source step',{exact:true}).selectOption({label:step});await card.getByLabel('Response JSON Pointer',{exact:true}).fill(response)}

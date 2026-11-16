@@ -27,7 +27,7 @@ export function upgradeBlueprint(source) {
     const { delayMs, waitFor, ...rest } = step
     return { ...rest, dependsOn: [], inputs: step.inputs.map(input => ({ ...input })) }
   })
-  return { ...source, version: 4, variables: (source.variables ?? []).map(variable => ({ ...variable })), steps, connections }
+  return { ...source, version: 5, variables: (source.variables ?? []).map(variable => ({ ...variable })), steps, connections }
 }
 export function connectionSummary(edge, steps) {
   return `${steps.find(step => step.id === edge.from)?.label ?? 'Start'} → ${steps.find(step => step.id === edge.to)?.label ?? 'Missing step'}`
