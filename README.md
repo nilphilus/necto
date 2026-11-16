@@ -152,11 +152,18 @@ A primitive match can include `suggestedIdentifierType` with a name for a
 dedicated type. The UI should resolve the operation IDs and fields against its
 active OpenAPI document before offering the suggestions.
 
-The generator currently handles Minimal API registrations with a constant
-`.WithName(...)` in the same fluent chain. It reads JSON properties on response objects and nested objects/arrays
-under the default ASP.NET Core web naming policy, honors `JsonPropertyName`, and
-supports explicit `[FromBody]` models. Recursive response types stop at the first
-repeated type on a branch; traversal is limited to 16 path segments. Custom JSON
+For Minimal APIs, use a constant `.WithName(...)` in the same fluent chain.
+For FastEndpoints, the generator reads the request and response DTOs declared by
+endpoint classes in the project, including through intermediate base classes.
+At runtime, it uses the names of registered FastEndpoints routes as operation
+IDs. Call `app.UseNectoUI()` after `app.UseFastEndpoints()` and point Necto at
+the OpenAPI document for those routes.
+
+Mapping suggestions support nested response objects and arrays, the default web
+JSON naming policy, and `JsonPropertyName`. Minimal APIs support explicit
+`[FromBody]` models. FastEndpoints supports top-level JSON input fields and
+common route, query, and header bindings. Recursive response types stop at the
+first repeated type on a branch, with a limit of 16 path segments. Custom JSON
 converters are opaque to the generator.
 
 For nested response fields, `source.objectPath` describes the containing object:

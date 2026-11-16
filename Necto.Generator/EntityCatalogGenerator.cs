@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis;
 namespace Necto.Generator;
 public sealed partial class EndpointMappingGenerator
 {
-    private static void EmitEntityCatalog(SourceProductionContext context, Endpoint[] endpoints)
+    private static void EmitEntityCatalog(SourceProductionContext context, Endpoint[] endpoints, bool hasFastEndpoints)
     {
         var uses = new List<CatalogUse>();
         foreach (var endpoint in endpoints)
@@ -40,10 +40,11 @@ public sealed partial class EndpointMappingGenerator
                 code.AppendLine($"new({Literal(use.OperationId)}, {Literal(use.Direction)}, {Literal(use.Location)}, new string?[] {{ {string.Join(", ", use.Path.Select(Literal))} }}),");
             code.AppendLine("}),");
         }
-        code.AppendLine("""
+        var catalog = hasFastEndpoints ? "NectoFastEndpointRoutes.ResolveCatalog(endpoints.DataSources, Catalog)" : "Catalog";
+        code.AppendLine($$"""
                 };
                 internal static RouteHandlerBuilder MapNectoEntityCatalog(this IEndpointRouteBuilder endpoints, string pattern = "/necto/entity-catalog") =>
-                    NectoGeneratedMetadata.Register(endpoints, endpoints.MapGet(pattern, () => Results.Json(Catalog, System.Text.Json.JsonSerializerOptions.Web)).ExcludeFromDescription(), "entityCatalogUrl");
+                    NectoGeneratedMetadata.Register(endpoints, endpoints.MapGet(pattern, () => Results.Json({{catalog}}, System.Text.Json.JsonSerializerOptions.Web)).ExcludeFromDescription(), "entityCatalogUrl");
             }
             """);
         context.AddSource("EntityCatalog.g.cs", code.ToString());

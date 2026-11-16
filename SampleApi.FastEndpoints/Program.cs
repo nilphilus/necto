@@ -16,18 +16,21 @@ builder.Services.AddFastEndpoints().OpenApiDocument(options =>
 var app = builder.Build();
 app.UseRouting();
 app.Use((context, next) => context.RequestServices.GetRequiredService<TenantDirectory>().SelectAsync(context, next));
-app.UseFastEndpoints(options => options.Endpoints.Configurator = endpoint => endpoint.Options(builder => builder
-    .WithMetadata(new TenantRequired())
-    .Produces(StatusCodes.Status400BadRequest)
-    .Produces(StatusCodes.Status404NotFound)));
+app.UseFastEndpoints(options =>
+{
+    options.Endpoints.ShortNames = true;
+    options.Endpoints.Configurator = endpoint => endpoint.Options(builder => builder
+        .WithMetadata(new TenantRequired())
+        .Produces(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status404NotFound));
+});
 
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
-    const string mappingsPath = "/necto/endpoint-mappings";
-    app.MapGet(mappingsPath, SampleEndpointMappings.Create).ExcludeFromDescription();
-    app.UseNectoUI(endpointMappingsPath: mappingsPath);
+    app.MapNectoEntityCatalog();
+    app.UseNectoUI();
 }
 
 app.Run();

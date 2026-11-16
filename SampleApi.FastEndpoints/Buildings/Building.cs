@@ -1,4 +1,5 @@
 using FastEndpoints;
+using Necto;
 using SampleApi.FastEndpoints.Customers;
 
 namespace SampleApi.FastEndpoints.Buildings;
@@ -10,7 +11,7 @@ public sealed record Building(int Id, string Name, Customer Owner)
 
 public sealed class ListBuildingsRequest : TenantRequest
 {
-    [QueryParam]
+    [QueryParam, EndpointValue("CustomerId")]
     public int? OwnerCustomerId { get; init; }
 }
 

@@ -12,6 +12,17 @@ public static class NectoOpenApiLinks
         options.AddDocumentTransformer((document, _, _) => { Apply(document, mappings); return Task.CompletedTask; });
         return options;
     }
+    /// <summary>Resolves mappings from the registered endpoints when the document is generated.</summary>
+    public static OpenApiOptions AddNectoResolvedLinks(this OpenApiOptions options,
+        Func<IServiceProvider, IReadOnlyList<EndpointMapping>> resolveMappings)
+    {
+        options.AddDocumentTransformer((document, context, _) =>
+        {
+            Apply(document, resolveMappings(context.ApplicationServices));
+            return Task.CompletedTask;
+        });
+        return options;
+    }
     internal static void Apply(OpenApiDocument document, IReadOnlyList<EndpointMapping> mappings)
     {
         var operations = document.Paths?.Values.SelectMany(path => path.Operations?.Values.Select(operation => (Path: path, Operation: operation)) ?? [])

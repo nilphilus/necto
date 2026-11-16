@@ -10,6 +10,8 @@
     <PackageReference Include="FastEndpoints.OpenApi" Version="8.3.0" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.19.0" />
     <ProjectReference Include="..\Necto\Necto.csproj" />
+    <ProjectReference Include="..\Necto.Generator\Necto.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

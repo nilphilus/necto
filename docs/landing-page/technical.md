@@ -56,7 +56,7 @@ The gallery shows current main. Published NuGet releases may have an earlier UI;
 
 Rules use dedicated CLR identifier types, supported scalar field names with compatible types, or `[EndpointValue("…")]` keys. `Invoice.Id` can supply `invoiceId`; `Invoice.Reference` can match `reference` or `invoiceReference`.
 
-Automatic generation currently supports Minimal API registrations with a constant `.WithName("…")` in the same fluent chain. Nested objects/arrays and JSON property names are supported. Traversal stops at repeated types and has a 16-segment limit. Custom JSON converters are opaque. Other integrations can provide explicit mappings; the FastEndpoints sample does this.
+Automatic generation supports Minimal API registrations with a constant `.WithName("…")` in the same fluent chain and FastEndpoints classes with declared request or response DTOs. Necto reads the registered route names for FastEndpoints at runtime. The generator supports nested response objects and arrays and honors JSON property names. Traversal stops at repeated types and has a 16-segment limit. Custom JSON converters are opaque. Other integrations can provide explicit mappings.
 
 Selection fills matching inputs without adding metadata to business responses. Values stay editable. Related GET/HEAD requests with valid inputs can be sent directly; writes open in the editor. Mappings describe compatible values, not inferred business rules or guaranteed success.
 
