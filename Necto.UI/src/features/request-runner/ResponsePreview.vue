@@ -1,5 +1,6 @@
 <script setup>
 import { expansionPlan } from './expansion.js'
+import { responseCollection } from './responseCollection.js'
 import { tablePreferenceKey } from '../workbench/previewPreferences.js'
 import { computed, nextTick, ref, markRaw, useId, watch, reactive } from 'vue'
 import { responseFilename } from '../workbench/response.js'
@@ -71,7 +72,18 @@ const text = computed(() => props.result.stream?.view?.selectedIndex !== undefin
 const xmlAvailable = computed(() => text.value.length > 0 && !props.result.incomplete && !props.result.binary && !props.result.stream && props.result.json === undefined && isXmlResponse(props.result.contentType, text.value))
 const range = computed(() => pageRange(text.value.length, textPage.value, TEXT_PAGE_SIZE))
 const visibleText = computed(() => text.value.slice(range.value.start, range.value.end))
-watch(() => props.result, (result, previous) => { if (result.stream?.view && result.stream.view === previous?.stream?.view) return; expansionModes.clear(); previewPages.clear(); textPage.value = 1; raw.value = false; table.value = Boolean(props.presentation?.view === 'table' && props.presentation.viewKey === tablePreferenceKey(props.operation, [], result.json)); tableReturn.value = null; navigation.value = null; focusPath.value = []; navigationId++ }, { immediate: true })
+watch(() => props.result, (result, previous) => {
+  if (result.stream?.view && result.stream.view === previous?.stream?.view) return
+  expansionModes.clear()
+  previewPages.clear()
+  textPage.value = 1
+  raw.value = false
+  table.value = Boolean(props.presentation?.view === 'table' && props.presentation.viewKey === tablePreferenceKey(props.operation, [], result.json))
+  tableReturn.value = null
+  navigation.value = null
+  focusPath.value = responseCollection(props.operation, result)?.path ?? []
+  navigationId++
+}, { immediate: true })
 
 async function reveal(match, scroll = true) {
   const id = ++navigationId
@@ -151,7 +163,7 @@ function download() {
     <div v-show="searchOpen" :id="searchId" ref="finderPanel" @keydown.esc.stop.prevent="toggleSearch(false)">
       <PayloadSearch ref="payloadFinder" v-if="result.json !== undefined" :result="result" :selectors="selectors" @reveal="reveal" @select="selectPath($event)" />
     </div>
-    <div v-if="focusPath.length && !raw" class="preview-toolbar"><code>Focused object: {{ pathLabel(focusPath) }}</code><button type="button" @click="fullResponse">{{ tableReturn ? 'Back to table' : 'Back to full response' }}</button></div>
+    <div v-if="focusPath.length && !raw" class="preview-toolbar"><code>Focused object: {{ pathLabel(focusPath) }}</code><span v-if="responseCollection(operation, result)?.total !== null && responseCollection(operation, result)">API total: {{ responseCollection(operation, result).total }}</span><button type="button" @click="fullResponse">{{ tableReturn ? 'Back to table' : 'Back to full response' }}</button></div>
     <CollectionTable v-if="tableAvailable" v-show="table && !raw" :value="tableValue" :presentation="presentation" :path="tablePath" :operation="operation" :status="result.status" :content-type="result.contentType" :selectors="selectors" :selected="result.selectedPath" @select="selectPath($event)" @inspect="inspectRow" />
     <div v-if="result.json !== undefined" v-show="!raw && !table" ref="preview" class="json-preview" tabindex="0" aria-label="JSON response preview">
       <JsonNode :expansion="expansion" @toggle-children="toggleChildren" @page="previewPage" :key="JSON.stringify(focusPath)" :value="previewValue" :path="focusPath" :root="true" :navigation="navigation" :selectors="selectors" :selected="result.selectedPath" @select="selectPath($event)" />
