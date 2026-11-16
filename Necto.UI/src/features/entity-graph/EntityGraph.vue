@@ -93,7 +93,10 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
           </path>
           <foreignObject v-for="node in positions" :key="node.id" :x="node.x" :y="node.y" :width="entitySize.width" :height="entitySize.height + 4">
             <button type="button" class="entity-node" :class="{ active: selectedId === node.id }" :aria-pressed="selectedId === node.id" :aria-label="'Inspect entity ' + node.name" @click="selectEntity(node.id)">
-              <strong :title="node.schemaKey ?? node.name">{{ node.name }}</strong><small>{{ node.endpoints.length }} endpoints</small>
+              <strong>{{ node.name }}</strong>
+              <small v-if="selectedId === node.id && node.schemaKey && node.schemaKey !== node.name"
+                class="node-schema" :title="node.schemaKey">{{ node.schemaKey }}</small>
+              <small v-else>{{ node.endpoints.length }} endpoints</small>
             </button>
           </foreignObject>
         </svg>
@@ -102,7 +105,7 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
       <aside class="entity-details" aria-label="Selected entity details">
         <template v-if="selected">
           <h3 ref="detailsTitle" tabindex="-1" aria-live="polite">{{ selected.name }}</h3>
-          <p v-if="selected.schemaKey && selected.schemaKey !== selected.name" class="muted schema-key">{{ selected.schemaKey }}</p>
+          <p v-if="selected.schemaKey" class="muted schema-key">Schema <code>{{ selected.schemaKey }}</code></p>
           <p v-if="selected.schema.description" class="muted">{{ selected.schema.description }}</p>
           <h4>Connected endpoints ({{ selected.endpoints.length }})</h4>
           <ul class="endpoint-list">
@@ -150,6 +153,7 @@ svg { display: block; }
 .entity-node strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
 .schema-key { overflow-wrap: anywhere; }
 .entity-node small { margin-top: .25rem; color: var(--muted); font-size: .75rem; }
+.node-schema { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .entity-details { min-width: 0; padding: 1rem; border-left: 1px solid var(--line); max-height: 65vh; overflow: auto; }
 h3 { margin: 0 0 .5rem; overflow-wrap: anywhere; }h4 { font-size: .8rem; margin: 1rem 0 .5rem; }
 .entity-details p { font-size: .85rem; }

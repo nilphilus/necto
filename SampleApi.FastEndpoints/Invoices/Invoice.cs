@@ -1,8 +1,9 @@
 namespace SampleApi.FastEndpoints.Invoices;
 
+using Necto;
 using SampleApi.FastEndpoints.Customers;
 
-public sealed record InvoiceSummary(int Id, int BuildingId, int CustomerId, string CustomerName,
+public sealed record InvoiceSummary([property: EndpointValue("InvoiceId")] int Id, int BuildingId, int CustomerId, string CustomerName,
     string BuildingName, string Currency, DateOnly? IssuedOn, decimal Total);
 
 public sealed record Invoice(int Id, int BuildingId, Customer Customer, string BuildingName,

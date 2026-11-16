@@ -25,6 +25,20 @@ public sealed class TenantBillingTests(WebApplicationFactory<TenantRequest> app)
         }
 
         var mappings = (await client.GetFromJsonAsync<JsonArray>("/necto/endpoint-mappings"))!;
+        Assert.Contains(mappings, mapping =>
+            (string?)mapping!["source"]!["operationId"] == "ListInvoices" &&
+            (bool?)mapping["source"]!["eachItem"] == true &&
+            (string?)mapping["source"]!["property"] == "id" &&
+            (string?)mapping["target"]!["operationId"] == "GetInvoice" &&
+            (string?)mapping["target"]!["location"] == "path" &&
+            (string?)mapping["target"]!["name"] == "invoiceId");
+        Assert.Contains(mappings, mapping =>
+            (string?)mapping!["source"]!["operationId"] == "GetInvoice" &&
+            (string?)mapping["source"]!["objectPath"]?[0] == "lines" &&
+            (string?)mapping["source"]!["property"] == "assetId" &&
+            (string?)mapping["target"]!["operationId"] == "CreateInvoiceLine" &&
+            (string?)mapping["target"]!["location"] == "body" &&
+            (string?)mapping["target"]!["name"] == "assetId");
         Assert.NotEmpty(mappings);
         foreach (var mapping in mappings)
         {
@@ -38,6 +52,11 @@ public sealed class TenantBillingTests(WebApplicationFactory<TenantRequest> app)
                 (string?)parameter!["name"] == (string?)target["name"] &&
                 (string?)parameter["in"] == (string?)target["location"]);
         }
+
+        var catalog = (await client.GetFromJsonAsync<JsonArray>("/necto/entity-catalog"))!;
+        Assert.NotEmpty(catalog);
+        Assert.All(catalog.SelectMany(entry => entry!["uses"]!.AsArray()),
+            use => Assert.Contains((string?)use!["operationId"], operations.Keys));
     }
 
     [Fact]

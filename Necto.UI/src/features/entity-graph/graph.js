@@ -4,7 +4,7 @@ import { resolveMappingLinks } from '../related-endpoints/mappings.js'
 const refPrefix = '#/components/schemas/'
 
 function schemaLabel(name) {
-  // Qualified component keys commonly carry a CLR namespace or enclosing type.
+  // Schema titles and keys can both include a CLR namespace or enclosing type.
   const shortName = /^[\w]+(?:[.+][\w]+)+$/.test(name) ? name.split(/[.+]/).at(-1) : name
   const characters = Array.from(shortName)
   // Some generators flatten the namespace into the key without separators.
@@ -31,7 +31,8 @@ function readEntityGraph(spec, operations) {
   function addNode(id, name, schema) {
     const title = typeof schema.title === 'string' ? schema.title.trim() : ''
     const schemaKey = id.startsWith('schema:') ? name : undefined
-    if (!nodes.has(id)) nodes.set(id, { id, name: title || (schemaKey ? schemaLabel(schemaKey) : name),
+    const label = title || schemaKey
+    if (!nodes.has(id)) nodes.set(id, { id, name: label ? schemaLabel(label) : name,
       schemaKey, schema, endpoints: new Map() })
     return id
   }
