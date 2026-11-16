@@ -50,13 +50,14 @@ watch(selected, value => { if (!value) focused.value = false })
 watch(search, () => { focused.value = false; if (!filtered.value.some(node => node.id === selectedId.value)) selectedId.value = '' })
 watch(() => props.spec, () => { selectedId.value = ''; search.value = '' })
 watch([focused, kind, search], () => canvas.value?.scrollTo(0, 0))
-async function selectEntity(id) {
+async function selectEntity(id, reveal = false) {
   selectedId.value = id
   if (focused.value || !byId.value.has(id)) {
     focused.value = true
     canvas.value?.scrollTo(0, 0)
   }
   await nextTick()
+  if (reveal) center(byId.value.get(id), entitySize)
   if (window.matchMedia('(max-width: 800px)').matches) {
     detailsTitle.value?.scrollIntoView({ block: 'start', behavior: 'instant' })
     detailsTitle.value?.focus({ preventScroll: true })
@@ -127,7 +128,7 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
           <h4>Connections ({{ relationships.length }})</h4>
           <ul class="relationship-list">
             <li v-for="edge in relationships" :key="edge.id">
-              <button type="button" @click="selectEntity(edge.from === selectedId ? edge.to : edge.from)">{{ names.get(edge.from) }} → {{ names.get(edge.to) }}</button>
+              <button type="button" @click="selectEntity(edge.from === selectedId ? edge.to : edge.from, true)">{{ names.get(edge.from) }} → {{ names.get(edge.to) }}</button>
               <code>{{ edge.label }}</code><small>{{ edge.kind === 'schema' ? 'Schema reference' : 'Value flow' }}</small>
             </li>
           </ul>
