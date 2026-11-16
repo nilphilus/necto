@@ -1,4 +1,5 @@
 <script setup>
+import { useScenarioFolder } from './features/scenario-folder/useScenarioFolder.js'
 import OperationTasks from './features/api-catalog/OperationTasks.vue'
 import DescriptionHelp from './features/workbench/DescriptionHelp.vue'
 import { scenarioTargets } from './features/workbench/scenarioTargets.js'
@@ -56,7 +57,8 @@ const { scenarios, state: scenarioState, runs: scenarioRuns, pending: scenarioPe
 const scenarioName = ref('')
 const scenarioDialog = ref(null)
 const requestSamples = ref(null)
-const editingScenarioId = ref('')
+const editingScenarioId = ref(''), editingFolderSource = shallowRef(null)
+watch(editingScenarioId,()=>{editingFolderSource.value=null},{flush:'sync'})
 const editingScenario = computed(() => scenarios.value.find(scenario => scenario.id === editingScenarioId.value))
 const scenarioDirty = computed(() => {
   const saved = editingScenario.value
@@ -66,7 +68,8 @@ const scenarioDirty = computed(() => {
 })
 const overwriteScenario = computed(() => scenarios.value.find(scenario =>
   scenario.id === editingScenarioId.value && scenario.name === scenarioName.value.trim()))
-const workspaceLocked = computed(() => scenarioPending.value || builderPending.value)
+const scenarioFolder = useScenarioFolder(configuration,operations,computed(()=>scenarioPending.value||builderPending.value))
+const workspaceLocked = computed(() => scenarioPending.value || builderPending.value || scenarioFolder.pending)
 const scenarioBusy = computed(() => workspaceLocked.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
 const presets = ref(new Map())
 const presetColors = ref(new Map())
@@ -320,6 +323,7 @@ function togglePreset(name, enabled) {
   savePresets()
 }
 
+async function configureScenarioFolder(){settingsTab.value='workspace';if(!settingsOpen.value)await toggleSettings()}
 async function toggleSettings() {
   if (settingsOpen.value) {
     closeSettings()
@@ -469,7 +473,7 @@ function writeRoute(route, { replace = false, preserveUrl = false } = {}) {
   const entry = Math.random().toString(36)
   historyEntries.set(entry, {
     steps: selectedChain.value, index: inspectedScenarioStep.value,
-    scenarioId: editingScenarioId.value, name: scenarioName.value,
+    scenarioId: editingScenarioId.value, name: scenarioName.value, folderSource:editingFolderSource.value,
   })
   const state = { nectoEntry: entry, scenarioStep: route.index }
   if (replace) {
@@ -512,9 +516,10 @@ function navigateView(view) {
   } else writeRoute(view ? { view } : chainRoute())
 }
 
-function enterScenario(steps, id, name, index, replace = false) {
+function enterScenario(steps, id, name, index, replace = false, folderSource) {
   selectedChain.value = steps
   editingScenarioId.value = id
+  editingFolderSource.value = folderSource??null
   scenarioName.value = name
   // Entering at a later step also adds the preceding steps to browser history.
   for (let step = 0; step < index; step++) {
@@ -559,6 +564,7 @@ function resolveRoute() {
     selectedChain.value = steps
     inspectedScenarioStep.value = entry.index
     editingScenarioId.value = entry.scenarioId
+    editingFolderSource.value = entry.folderSource??null
     scenarioName.value = entry.name
     pendingRoute.value = null
     if (!route.view && steps.length) void focusEndpoint()
@@ -581,9 +587,11 @@ function resolveRoute() {
     if (plan) {
       if (history.state?.scenarioStep === route.index) {
         editingScenarioId.value = scenario.id
+        editingFolderSource.value = scenario._sharedSource??null
         scenarioName.value = scenario.name
         void showChain(plan, route, { replace: true, preserveUrl: true })
-      } else enterScenario(plan, scenario.id, scenario.name, route.index, true)
+      } else enterScenario(plan, scenario.id, scenario.name, route.index, true, scenario._sharedSource)
+      editingFolderSource.value = scenario._sharedSource??null
       return
     }
     graphView.value = 'scenarios'
@@ -656,8 +664,9 @@ function builderPresetContext(names) {
 }
 function saveScenario() {
   try {
-    const saved = scenarioStore.save(chain.value, scenarioName.value, overwriteScenario.value?.id, valuesFor)
+    const saved = scenarioStore.save(chain.value, scenarioName.value, overwriteScenario.value?.id, valuesFor, overwriteScenario.value?.id===editingScenarioId.value?editingFolderSource.value:undefined)
     editingScenarioId.value = saved.id
+    editingFolderSource.value = saved._sharedSource??null
     scenarioName.value = saved.name
     writeRoute(activeRoute, { replace: true, preserveUrl: true })
     scenarioDialog.value?.close()
@@ -682,7 +691,7 @@ function previewScenarioTargets(scenario, presetNames) {
 function openScenario(scenario) {
   const steps = scenarioStore.open(scenario, scenarioContext())
   if (!steps) return
-  enterScenario(steps, scenario.id, scenario.name, 0)
+  enterScenario(steps, scenario.id, scenario.name, 0, false, scenario._sharedSource)
 }
 async function replayScenario(scenario, presetNames) {
   if (scenarioBusy.value) return
@@ -700,7 +709,7 @@ function inspectScenario(index, execution) {
     return
   }
   scenarioError.value = ''
-  enterScenario(visible, execution.id, execution.name, index)
+  enterScenario(visible, execution.id, execution.name, index, false, execution._sharedSource)
 }
 function undoRemoveScenario() {
   try { scenarioStore.undoRemove() }
@@ -832,7 +841,7 @@ function removeScenario(id) {
                 </div>
               </div>
             </section>
-            <WorkspaceSettings v-show="settingsTab === 'workspace'" v-model:catalog-width="catalogWidth" :import-document="importDocument" :document-source="documentSource" :restore-document="restoreServerDocument" :operations="operations" />
+            <WorkspaceSettings :folder="scenarioFolder" v-show="settingsTab === 'workspace'" v-model:catalog-width="catalogWidth" :import-document="importDocument" :document-source="documentSource" :restore-document="restoreServerDocument" :operations="operations" />
             <ExternalApiSettings v-show="settingsTab === 'connections'" v-model:show="showExternalApis" :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
               :save="externalApis.saveConnection" :remove="externalApis.removeConnection" :test="externalApis.testConnection" />
           </div>
@@ -844,8 +853,8 @@ function removeScenario(id) {
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <EndpointGraph :inert="settingsOpen" :initial-operation-key="current?.operation.key" v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
-      <ScenarioBuilder v-if="builderVisited" v-show="graphView === 'builder'" :inert="settingsOpen" :configuration="configuration" :operations="operations" :scenarios="scenarios" :context="scenarioContext" :preset-context="builderPresetContext" :preset-names="[...presets.keys()]" :active-preset-names="activePresetNames" :authentication="authentication" :execute="(operation, session, values, signal, onRequest) => run(operation, session, values, { signal, onRequest })" :busy="scenarioBusy" @pending="builderPending = $event" @back="navigateView('scenarios')" />
-      <ScenarioPanel @builder="navigateView('builder')" :api-url="configuration?.openApiUrl" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
+      <ScenarioBuilder :folder="scenarioFolder" @folder-settings="configureScenarioFolder" v-if="builderVisited" v-show="graphView === 'builder'" :inert="settingsOpen" :configuration="configuration" :operations="operations" :scenarios="scenarios" :context="scenarioContext" :preset-context="builderPresetContext" :preset-names="[...presets.keys()]" :active-preset-names="activePresetNames" :authentication="authentication" :execute="(operation, session, values, signal, onRequest) => run(operation, session, values, { signal, onRequest })" :busy="scenarioBusy" @pending="builderPending = $event" @back="navigateView('scenarios')" />
+      <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="navigateView('builder')" :api-url="configuration?.openApiUrl" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
 
         :deleted="scenarioStore.deleted.value" @undo-remove="undoRemoveScenario" :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"

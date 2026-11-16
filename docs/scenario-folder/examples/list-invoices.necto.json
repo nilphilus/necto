@@ -1,0 +1,27 @@
+{
+  "format": "necto-shared-scenario",
+  "version": 1,
+  "kind": "chain",
+  "scenario": {
+    "version": 1,
+    "id": "example-list-invoices",
+    "name": "List invoices",
+    "steps": [
+      {
+        "operationKey": "GET /invoices",
+        "apiId": "local",
+        "name": "Invoices",
+        "method": "GET",
+        "path": "/invoices",
+        "fields": {
+          "query:reference": "INV-42"
+        },
+        "body": "",
+        "bindings": [],
+        "assertions": [],
+        "timeout": 30000,
+        "responseLimitMiB": 32
+      }
+    ]
+  }
+}
