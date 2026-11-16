@@ -91,9 +91,9 @@ test('invalid timing, pointers, retry budgets and expected types are rejected be
   for(const patch of [{retryCount:-1},{retryCount:101},{retryCount:1.5},{intervalMs:0},{intervalMs:600001},{pointer:'/__proto__/id'},{pointer:'state'},{valueType:'number',value:'"1"'},{valueType:'boolean',value:'1'},{valueType:'json',value:'{'},{value:'x'.repeat(16385)}])assert.throws(()=>validateWaiting({waitFor:condition(patch)}))
   assert.throws(()=>expectedValue(condition({valueType:'json',value:'['.repeat(40)+'0'+']'.repeat(40)})),/deeply nested/)
 })
-test('v2 timing migrates to v3 connections without runtime state; existing v1 definitions load, but cannot smuggle ignored wait policies',()=>{
+test('v2 timing migrates to v4 connections without runtime state; existing v1 definitions load, but cannot smuggle ignored wait policies',()=>{
   const blueprint=definition('poll');Object.assign(blueprint.steps[0],{delayMs:1234,waitFor:condition({valueType:'boolean',value:'true'}),attempt:8,nextAttemptAt:999,attempts:[{status:200}],response:{json:{secret:'runtime-only'}}})
-  const saved=savedBlueprint(blueprint),loaded=parseBlueprint(JSON.stringify(saved));assert.equal(loaded.version,3);assert.equal(loaded.connections[0].delayMs,1234);assert.deepEqual(loaded.connections[0].waitFor,blueprint.steps[0].waitFor);assert.ok(!JSON.stringify(saved).includes('runtime-only'));assert.equal(saved.steps[0].attempts,undefined)
+  const saved=savedBlueprint(blueprint),loaded=parseBlueprint(JSON.stringify(saved));assert.equal(loaded.version,4);assert.equal(loaded.connections[0].delayMs,1234);assert.deepEqual(loaded.connections[0].waitFor,blueprint.steps[0].waitFor);assert.ok(!JSON.stringify(saved).includes('runtime-only'));assert.equal(saved.steps[0].attempts,undefined)
   const legacy=definition('a');legacy.version=1;validateBlueprint(legacy);legacy.steps[0].waitFor=condition();assert.throws(()=>validateBlueprint(legacy),/version 2/)
   const operations=[operation('poll')],ctx={operations,configuration:{apiBaseUrl:'https://api.test'},createSession:()=>({fields:{},body:''}),valuesFor:()=>new Map()};const [plan]=prepareBlueprint(loaded,ctx);assert.deepEqual(plan.entryPolicies[0].waitFor,loaded.connections[0].waitFor);assert.equal(plan.entryPolicies[0].delayMs,1234)
 })

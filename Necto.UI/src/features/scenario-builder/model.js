@@ -4,11 +4,12 @@ import { validateAssertions } from '../workbench/assertions.js'
 import { validateGenerator } from './generation.js'
 import { validateWaiting } from './waiting.js'
 import { pointerParts } from './pointers.js'
+import { validateVariables } from './variables.js'
 import { allConnections, connectionKey } from './connections.js'
 export { pointerParts, readPointer } from './pointers.js'
 
 export const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
-export const newBlueprint = () => ({ format: 'necto-scenario-builder', version: 3, connections: [], id: newId(), name: 'Untitled scenario', concurrency: 4, steps: [] })
+export const newBlueprint = () => ({ format: 'necto-scenario-builder', version: 4, connections: [], variables: [], id: newId(), name: 'Untitled scenario', concurrency: 4, steps: [] })
 export function newStep(operation, session) {
   return { id: newId(), label: operation.name, operationKey: operation.key, apiId: operation.apiId ?? 'local', method: operation.method, path: operation.path,
     dependsOn: [], inputs: [], request: { fields: { ...session.fields }, body: session.body ?? '', ...payloadSnapshot(session), ...executionOptions(session),
@@ -57,7 +58,7 @@ export function layers(blueprint) {
   return result
 }
 export function validateBlueprint(blueprint) {
-  if (blueprint?.format !== 'necto-scenario-builder' || ![1, 2, 3].includes(blueprint.version) || typeof blueprint.id !== 'string' || !blueprint.id ||
+  if (blueprint?.format !== 'necto-scenario-builder' || ![1, 2, 3, 4].includes(blueprint.version) || typeof blueprint.id !== 'string' || !blueprint.id ||
     typeof blueprint.name !== 'string' || !blueprint.name.trim() || blueprint.name.length > 200 || !Array.isArray(blueprint.steps) || blueprint.steps.length > 100 ||
     !Number.isInteger(blueprint.concurrency) || blueprint.concurrency < 1 || blueprint.concurrency > 8) throw new Error('Invalid Scenario Builder definition (maximum 100 steps; parallelism 1–8).')
   if (blueprint.version < 3 && blueprint.connections !== undefined && (!Array.isArray(blueprint.connections) || blueprint.connections.length)) throw new Error('Connections require Scenario Builder version 3.')
@@ -70,13 +71,13 @@ export function validateBlueprint(blueprint) {
       Object.values(step.request.fields).some(value => typeof value !== 'string')) throw new Error('Invalid scenario step or request.')
     ids.add(step.id)
     if (blueprint.version === 1 && (step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('Delay and response waiting require Scenario Builder version 2.')
-    if (blueprint.version === 3 && (step.dependsOn.length || step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('In version 3, dependencies and timing belong to connections.')
+    if (blueprint.version >= 3 && (step.dependsOn.length || step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('In version 3+, dependencies and timing belong to connections.')
     validateWaiting(step)
     validatePayloadSnapshot(step.request); executionOptions(step.request); validateAssertions(step.request.assertions ?? [])
     if (step.request.binaryFile && !(step.request.binaryFile instanceof Blob) || step.request.formFields?.some(row => row.files && (!Array.isArray(row.files) || row.files.some(file => !(file instanceof Blob))))) throw new Error('Attach files in the browser; imported file data is not executable.')
     const targets = []
     for (const input of step.inputs) {
-      if (!['path', 'query', 'header', 'body'].includes(input.location) || !['response', 'human', 'generate'].includes(input.source) ||
+      if (!['path', 'query', 'header', 'body'].includes(input.location) || !['response', 'human', 'generate', 'variable'].includes(input.source) ||
         (input.location !== 'body' && (typeof input.name !== 'string' || !input.name || /[\r\n]/.test(input.name)))) throw new Error(`Invalid input in ${step.label}.`)
       const path = input.location === 'body' ? pointerParts(input.pointer) : [input.location === 'header' ? input.name.toLowerCase() : input.name]
       if (targets.some(target => target.location === input.location && (input.location !== 'body' ? target.path[0] === path[0] :
@@ -87,7 +88,7 @@ export function validateBlueprint(blueprint) {
       if (input.source === 'human' && (typeof input.prompt !== 'string' || !input.prompt.trim() || !['text', 'number', 'boolean', 'json'].includes(input.valueType))) throw new Error('Human inputs need a question and value type.')
     }
   }
-  if (blueprint.version === 3) {
+  if (blueprint.version >= 3) {
     if (!Array.isArray(blueprint.connections) || blueprint.connections.length > 1000) throw new Error('Invalid connection collection (maximum 1000).')
     const pairs = new Set()
     for (const edge of blueprint.connections) {
@@ -95,6 +96,7 @@ export function validateBlueprint(blueprint) {
       pairs.add(connectionKey(edge.from, edge.to)); validateWaiting(edge)
     }
   }
+  validateVariables(blueprint)
   for (const step of blueprint.steps) if (dependencies(step, blueprint).some(id => !ids.has(id) || id === step.id)) throw new Error(`Invalid dependency in ${step.label}.`)
   layers(blueprint)
   return blueprint

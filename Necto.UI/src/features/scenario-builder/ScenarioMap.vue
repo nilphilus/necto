@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onScopeDispose, ref, watch } from 'vue'
+import { variableProducer } from './variables.js'
 import { layers } from './model.js'
 import { allConnections, connectionKey, hasTiming } from './connections.js'
 const props = defineProps({ blueprint: Object, selected: String, steps: Array, disabled: Boolean })
@@ -17,7 +18,7 @@ const layout = computed(() => {
     if (!to || edge.from !== null && !from) return []
     const x = from ? from.x + 214 : 108, y = from ? from.y + 46 : height / 2, tx = to.x, ty = to.y + 46
     return [{ ...edge, key: connectionKey(edge.from, edge.to), fromLabel: from?.step.label ?? 'Start', toLabel: to.step.label,
-      data: to.step.inputs.some(input => input.source === 'response' && input.stepId === edge.from),
+      data: to.step.inputs.some(input => variableProducer(input, props.blueprint) === edge.from),
       x: (x + tx) / 2, y: (y + ty) / 2, d: curve(x, y, tx, ty) }]
   })
   return { width, height, nodes, edges }
