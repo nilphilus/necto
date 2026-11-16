@@ -4,14 +4,24 @@ import { variableProducer } from './variables.js'
 import { layers } from './model.js'
 import { allConnections, connectionKey, hasTiming } from './connections.js'
 const props = defineProps({ blueprint: Object, selected: String, steps: Array, disabled: Boolean })
-const emit = defineEmits(['select', 'connect', 'configure'])
+const emit = defineEmits(['select', 'connect', 'configure', 'create-next'])
 const zoom = ref(1), canvas = ref(null), drag = ref(null), fromChoice = ref(''), toChoice = ref('')
 const states = computed(() => new Map((props.steps ?? []).map(step => [step.id, step])))
 const layout = computed(() => {
   let columns
   try { columns = layers(props.blueprint) } catch { columns = [props.blueprint.steps] }
-  const rows = Math.max(1, ...columns.map(column => column.length)), height = Math.max(300, rows * 132 + 80), width = Math.max(600, (columns.length - 1) * 280 + 416)
-  const nodes = columns.flatMap((column, x) => column.map((step, y) => ({ step, x: 170 + x * 280, y: (height - column.length * 132) / 2 + y * 132 })))
+  const rows = Math.max(1, ...columns.map(column => column.length)), baseHeight = Math.max(300, rows * 132 + 80), baseWidth = Math.max(600, (columns.length - 1) * 280 + 416)
+  const nodes = columns.flatMap((column, x) => column.map((step, y) => ({ step, x: 170 + x * 280, y: (baseHeight - column.length * 132) / 2 + y * 132 })))
+  const pinned = nodes.filter(node => node.step.position).map(node => ({ ...node.step.position, width:214, height:112 }))
+  const used = [...pinned]
+  for (const node of nodes) {
+    if (node.step.position) Object.assign(node, node.step.position)
+    else {
+      while (used.some(rect => node.x < rect.x + rect.width + 16 && node.x + 230 > rect.x && node.y < rect.y + rect.height + 16 && node.y + 128 > rect.y)) node.y += 132
+      used.push({x:node.x,y:node.y,width:214,height:112})
+    }
+  }
+  const height = Math.max(baseHeight, ...nodes.map(node => node.y + 150)), width = Math.max(baseWidth, ...nodes.map(node => node.x + 250))
   const byId = new Map(nodes.map(node => [node.step.id, node]))
   const edges = allConnections(props.blueprint).flatMap(edge => {
     const from = byId.get(edge.from), to = byId.get(edge.to)
@@ -32,15 +42,23 @@ function begin(event, from, sx, sy) {
   if (event.pointerId !== undefined) event.currentTarget.setPointerCapture(event.pointerId)
 }
 function targetAt(event) { return document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-input-step]')?.dataset.inputStep }
+function blankAt(event) {
+  const hit = document.elementFromPoint(event.clientX, event.clientY)
+  return hit?.closest('.map-scroll') === canvas.value?.closest('.map-scroll') && !hit?.closest('.node-wrap,.edge-settings,.map-start')
+}
 function move(event) {
   if (!drag.value) return
   const bounds = canvas.value.getBoundingClientRect(), x = (event.clientX - bounds.left) / zoom.value, y = (event.clientY - bounds.top) / zoom.value
-  Object.assign(drag.value, { x, y, moved: drag.value.moved || Math.hypot(x - drag.value.sx, y - drag.value.sy) > 6, target: targetAt(event) })
+  Object.assign(drag.value, { x, y, moved: drag.value.moved || Math.hypot(x - drag.value.sx, y - drag.value.sy) > 6, target: targetAt(event), blank: blankAt(event) })
 }
 function finish(event) {
   if (!drag.value || drag.value.pointer === null) return
   const target = targetAt(event), state = drag.value
-  if (state.moved) { drag.value = null; if (target) emit('connect', { from: state.from, to: target }) }
+  if (state.moved) {
+    drag.value = null
+    if (target) emit('connect', { from: state.from, to: target })
+    else if (blankAt(event)) { const bounds = canvas.value.getBoundingClientRect(); emit('create-next', { from: state.from, position: {x:(event.clientX - bounds.left)/zoom.value, y:(event.clientY - bounds.top)/zoom.value - 46} }) }
+  }
   else drag.value.pointer = null
 }
 function chooseTarget(id) {
@@ -61,8 +79,8 @@ watch(() => props.blueprint.steps.map(step => step.id).join('|'), cancel)
 </script>
 <template>
   <section class="scenario-map" aria-label="Scenario map">
-    <header><strong>Scenario map</strong><span>Drag an output ● to another request. ⚙ configures a connection.</span><label>Zoom <select v-model.number="zoom"><option :value=".65">65%</option><option :value=".8">80%</option><option :value="1">100%</option></select></label></header>
-    <p v-if="drag" class="connect-hint" role="status">Choose a destination for {{ blueprint.steps.find(step => step.id === drag.from)?.label ?? 'Start' }}. <button type="button" @click="cancel">Cancel (Esc)</button></p>
+    <header><strong>Scenario map</strong><span>Drag ● to a request or empty space. ⚙ configures a connection.</span><label>Zoom <select v-model.number="zoom"><option :value=".65">65%</option><option :value=".8">80%</option><option :value="1">100%</option></select></label></header>
+    <p v-if="drag" class="connect-hint" role="status">Connect to a request or release on empty space. Source: {{ blueprint.steps.find(step => step.id === drag.from)?.label ?? 'Start' }}. <button type="button" @click="cancel">Cancel (Esc)</button></p>
     <div class="map-scroll" tabindex="0" aria-label="Scroll scenario map">
       <p v-if="!blueprint.steps.length" class="map-empty">Add requests, then drag between their connection handles.<br>Independent requests start in parallel.</p>
       <div v-else :style="{ width: layout.width * zoom + 'px', height: layout.height * zoom + 'px' }">
@@ -72,12 +90,13 @@ watch(() => props.blueprint.steps.map(step => step.id).join('|'), cancel)
             <path v-for="edge in layout.edges" :key="edge.key" :d="edge.d" class="edge" :class="{ data: edge.data, timed: hasTiming(edge) }" marker-end="url(#builder-arrow)" />
             <path v-if="ghost" :d="ghost" class="edge ghost" />
           </svg>
+          <div v-if="drag?.blank" class="new-request-hint" :style="{left:drag.x + 'px',top:Math.max(20,drag.y - 46) + 'px'}">+ New request<br><small>Release to choose an endpoint</small></div>
           <div class="map-start" :style="{ top: layout.height / 2 - 24 + 'px' }"><strong>Start</strong><button type="button" class="port output" :disabled="disabled" aria-label="Connect from Start" @pointerdown="begin($event, null, 108, layout.height / 2)" @click="event => event.detail === 0 && begin(event, null, 108, layout.height / 2)">●</button></div>
           <div v-for="node in layout.nodes" :key="node.step.id" class="node-wrap" :data-input-step="node.step.id" :style="{ left: node.x + 'px', top: node.y + 'px' }">
             <button type="button" class="port input" :disabled="disabled" :aria-label="'Connect to ' + node.step.label" @click.stop="chooseTarget(node.step.id)">●</button>
             <button type="button" class="map-node" :data-step-id="node.step.id" :data-status="states.get(node.step.id)?.status" :class="{ 'drop-target': drag?.target === node.step.id }" :aria-pressed="selected === node.step.id" @click="select(node.step.id)">
-              <span class="node-top"><span class="method" :data-method="node.step.method">{{ node.step.method }}</span><span class="node-state">{{ states.get(node.step.id)?.status ?? 'Request' }}</span></span>
-              <strong>{{ node.step.label }}</strong><code>{{ node.step.path }}</code><span v-if="node.step.inputs.length" class="node-inputs">{{ node.step.inputs.length }} dynamic inputs<span v-if="node.step.inputs.some(input => input.source === 'human')"> · Human input</span></span>
+              <span class="node-top"><span class="method" :data-method="node.step.method">{{ node.step.method || '?' }}</span><span class="node-state">{{ states.get(node.step.id)?.status ?? 'Request' }}</span></span>
+              <strong>{{ node.step.label }}</strong><code>{{ node.step.path || 'Choose endpoint…' }}</code><span v-if="node.step.inputs.length" class="node-inputs">{{ node.step.inputs.length }} dynamic inputs<span v-if="node.step.inputs.some(input => input.source === 'human')"> · Human input</span></span>
             </button>
             <button type="button" class="port output" :disabled="disabled" :aria-label="'Connect from ' + node.step.label" @pointerdown="begin($event, node.step.id, node.x + 214, node.y + 46)" @click="event => event.detail === 0 && begin(event, node.step.id, node.x + 214, node.y + 46)">●</button>
           </div>
@@ -86,7 +105,7 @@ watch(() => props.blueprint.steps.map(step => step.id).join('|'), cancel)
       </div>
     </div>
     <details class="map-connections"><summary>Connections ({{ layout.edges.length }}) · Add without dragging</summary>
-      <form @submit.prevent="connectByForm"><label>From<select v-model="fromChoice" :disabled="disabled" aria-label="Connection from"><option value="">Start</option><option v-for="step in blueprint.steps" :key="step.id" :value="step.id">{{ step.label }}</option></select></label><label>To<select v-model="toChoice" :disabled="disabled" aria-label="Connection to"><option value="" disabled>Choose request</option><option v-for="step in blueprint.steps" :key="step.id" :value="step.id">{{ step.label }}</option></select></label><button type="submit" class="secondary" :disabled="disabled || !toChoice">Connect</button></form>
+      <form @submit.prevent="connectByForm"><label>From<select v-model="fromChoice" :disabled="disabled" aria-label="Connection from"><option value="">Start</option><option v-for="step in blueprint.steps" :key="step.id" :value="step.id">{{ step.label }}</option></select></label><label>To<select v-model="toChoice" :disabled="disabled" aria-label="Connection to"><option value="" disabled>Choose request</option><option v-for="step in blueprint.steps" :key="step.id" :value="step.id">{{ step.label }}</option></select></label><button type="submit" class="secondary" :disabled="disabled || !toChoice">Connect</button><button type="button" class="secondary" :disabled="disabled || blueprint.steps.length >= 100" @click="cancel(); emit('create-next', {from:fromChoice || null})">Add connected request</button></form>
       <ul><li v-for="edge in layout.edges" :key="edge.key"><button type="button" @click="configure(edge, $event)">{{ edge.fromLabel }} → {{ edge.toLabel }}<span v-if="edge.delayMs !== undefined"> · Delay {{ edge.delayMs }} ms</span><span v-if="edge.waitFor"> · Wait for {{ edge.waitFor.pointer || '(root)' }}</span></button></li></ul>
     </details>
   </section>
@@ -101,5 +120,5 @@ header { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem .8rem; padd
 .node-top { display:flex; align-items:center; justify-content:space-between; gap:.3rem; }.node-state,.node-inputs { font-size:.65rem; color:var(--muted); }.map-node strong,.map-node code,.node-inputs { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }.map-node strong { font-size:.82rem; }.map-node code { font-size:.68rem; }
 .port { position:absolute; z-index:2; top:34px; width:24px; height:24px; padding:0; border:1px solid #afc4b7; border-radius:50%; background:var(--surface); color:var(--accent); touch-action:none; font-size:.8rem; }.input { left:-12px; }.output { right:-12px; }.port:hover { background:var(--accent); color:white; }.map-start { position:absolute; left:24px; width:84px; height:48px; display:grid; place-items:center; border:1px solid var(--line); border-radius:2rem; background:var(--accent-soft); font-size:.8rem; }.map-start .output { top:12px; }
 .edge-settings { position:absolute; z-index:3; transform:translate(-50%,-50%); display:grid; place-items:center; width:28px; height:28px; padding:0; border-radius:50%; border:1px solid #afc4b7; background:var(--surface); color:var(--accent); font-size:1rem; }.edge-settings.timed { background:#fff5d8; border-color:#b79b55; color:#755018; }.edge-settings:hover { outline:2px solid var(--accent); }
-.connect-hint { position:absolute; z-index:4; top:3rem; left:.6rem; right:.6rem; pointer-events:none; border:1px solid var(--line); border-radius:.4rem; box-shadow:0 2px 8px #17342618; margin:0; padding:.45rem .7rem; font-size:.75rem; background:var(--accent-soft); }.connect-hint button { pointer-events:auto; text-decoration:underline; }.map-empty { padding:3rem 1.5rem; color:var(--muted); font-size:.9rem; line-height:1.7; text-align:center; }.map-connections { padding:.5rem .8rem; font-size:.75rem; border-top:1px solid var(--line); }.map-connections ul { margin:.4rem 0; padding-left:1rem; }.map-connections form { display:flex; flex-wrap:wrap; align-items:end; gap:.5rem; margin:.5rem 0; }.map-connections label { display:grid; gap:.25rem; min-width:0; }.map-connections select { max-width:14rem; padding:.3rem; }
+.new-request-hint { position:absolute; pointer-events:none; width:214px; padding:1rem .7rem; border:2px dashed var(--accent); border-radius:.6rem; color:var(--accent); background:var(--accent-soft); font-size:.8rem; opacity:.9; }.connect-hint { position:absolute; z-index:4; top:3rem; left:.6rem; right:.6rem; pointer-events:none; border:1px solid var(--line); border-radius:.4rem; box-shadow:0 2px 8px #17342618; margin:0; padding:.45rem .7rem; font-size:.75rem; background:var(--accent-soft); }.connect-hint button { pointer-events:auto; text-decoration:underline; }.map-empty { padding:3rem 1.5rem; color:var(--muted); font-size:.9rem; line-height:1.7; text-align:center; }.map-connections { padding:.5rem .8rem; font-size:.75rem; border-top:1px solid var(--line); }.map-connections ul { margin:.4rem 0; padding-left:1rem; }.map-connections form { display:flex; flex-wrap:wrap; align-items:end; gap:.5rem; margin:.5rem 0; }.map-connections label { display:grid; gap:.25rem; min-width:0; }.map-connections select { max-width:14rem; padding:.3rem; }
 </style>

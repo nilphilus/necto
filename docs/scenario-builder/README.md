@@ -20,6 +20,10 @@ Open **Scenarios → Scenario Builder**. The existing **Save Scenario** remains 
 5. Choose **Apply connection** to save popup edits. **Cancel**, Escape and clicking outside discard those edits. The connection created by a drag remains; use **Remove connection** to delete it. Removing a connection also removes its response bindings after confirmation.
 6. **Save**, then **Review & run** to inspect targets, incoming policies and parallelism before sending.
 
+**Create the next request in one gesture:** drag an output handle onto empty map space. Builder adds a connected empty request at that position and opens the endpoint picker. Search and choose an endpoint (or press Enter for a single match). Closing the picker leaves the draft request in place; select it and choose **Choose endpoint…** later. Saved drafts may contain empty requests, but execution requires every request to have an endpoint.
+
+The inspector's **+ Next request** and the connection list's **Add connected request** provide the same shortcut without dragging. **Change endpoint** preserves the step ID, position and connections while resetting request-specific body/inputs after confirmation. Other connections may need updated response paths when the API contract changes.
+
 A connection **A → B** waits for A, then governs request **B**. Delay happens before B's first request; Wait for checks B's response and repeats B if needed. It never replays A. Solid lines carry response values; dashed lines only impose ordering. A clock icon identifies a connection with timing settings. The **Start → request** line lets you configure an independent/root request; resetting that line clears its settings without deleting the request.
 
 At a join, all source requests must finish before the target starts. Incoming delays overlap, so the longest delay applies. All incoming response conditions must match the *same target response*, using one shared target request per attempt. An unmet condition fails when its own retry count is exhausted; the next interval is the longest interval among currently unmet conditions. A condition is checked on every attempt, even if it matched an earlier response.
@@ -153,3 +157,5 @@ The connection browser test verifies real mouse drags, an anchored popup, respon
 The variables browser test authors all four sources, verifies shared generated/human values across actual concurrent HTTP requests, response-derived dependencies, JSON types, deletion guards, cancellation and fresh runs, v4 persistence without run values, and mobile layout. Screenshots use `NECTO_VARIABLE_SCREENSHOTS`.
 
 The presets browser test verifies ordered run selection, missing required inputs repaired in review, static/dynamic/shared/nested overrides, skipping covered prompts, preserving uncovered prompts, unchanged saved definitions/global activation and mobile review. Screenshots use `NECTO_PRESET_SCREENSHOTS`.
+
+The add-next browser test checks dropping into empty space, placeholder persistence, blocked execution until configuration, endpoint selection, preserved placement/identity, the next-request shortcut, ordered execution and mobile use. Screenshots use `NECTO_NEXT_SCREENSHOTS`.
