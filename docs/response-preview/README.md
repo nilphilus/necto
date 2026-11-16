@@ -1,6 +1,6 @@
 # Expand response children
 
-In **Response → Preview**, each non-empty list and object has a compact **[=]** button beside its existing +/− control. Hover for a tooltip, or use its accessible label. Click to expand children in that branch; click again to collapse the children while keeping that list/object open. Other branches stay unchanged.
+In **Response → Preview**, each non-empty list and object has a compact **double-chevron** button beside its existing +/− control. Downward chevrons expand children; upward chevrons collapse them. Hover for a tooltip, or use its accessible label. Click to expand children in that branch; click again to collapse the children while keeping that list/object open. Other branches stay unchanged.
 
 - Paging stays active. Only the visible page of each collection is expanded; moving to another page expands that page's children too.
 - Each branch expansion is bounded to 500 JSON values and 16 levels. If some branches remain collapsed, the preview explains this; individual expansion and Find remain available.
