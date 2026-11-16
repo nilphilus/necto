@@ -6,7 +6,7 @@ import { abortableDelay, expectedValue, validateWaiting, waitMatches } from './w
 import { savedBlueprint } from './useBuilder.js'
 
 const operation = id => ({ key: id, apiId: 'local', method: 'GET', path: '/' + id, name: id, parameters: [], resolve: value => value, tags: ['Demo'], servers: [] })
-const definition = (...ids) => ({ ...newBlueprint(), steps: ids.map(id => ({ ...newStep(operation(id), { fields: {}, body: '' }), id })) })
+const definition = (...ids) => ({ ...newBlueprint(), version: 2, steps: ids.map(id => ({ ...newStep(operation(id), { fields: {}, body: '' }), id })) })
 const condition = (overrides = {}) => ({ pointer: '/state', valueType: 'text', value: 'Ready', retryCount: 2, intervalMs: 1000, ...overrides })
 const planFor = blueprint => blueprint.steps.map(step => ({ ...step, operation: operation(step.id), session: { fields: {}, body: '{}' }, values: new Map(), dependencies: step.dependsOn, status: 'waiting' }))
 const response = json => ({ ok: true, status: 200, elapsed: 2, json })
@@ -91,11 +91,11 @@ test('invalid timing, pointers, retry budgets and expected types are rejected be
   for(const patch of [{retryCount:-1},{retryCount:101},{retryCount:1.5},{intervalMs:0},{intervalMs:600001},{pointer:'/__proto__/id'},{pointer:'state'},{valueType:'number',value:'"1"'},{valueType:'boolean',value:'1'},{valueType:'json',value:'{'},{value:'x'.repeat(16385)}])assert.throws(()=>validateWaiting({waitFor:condition(patch)}))
   assert.throws(()=>expectedValue(condition({valueType:'json',value:'['.repeat(40)+'0'+']'.repeat(40)})),/deeply nested/)
 })
-test('v2 round-trips timing without runtime state; existing v1 definitions load, but cannot smuggle ignored wait policies',()=>{
+test('v2 timing migrates to v3 connections without runtime state; existing v1 definitions load, but cannot smuggle ignored wait policies',()=>{
   const blueprint=definition('poll');Object.assign(blueprint.steps[0],{delayMs:1234,waitFor:condition({valueType:'boolean',value:'true'}),attempt:8,nextAttemptAt:999,attempts:[{status:200}],response:{json:{secret:'runtime-only'}}})
-  const saved=savedBlueprint(blueprint),loaded=parseBlueprint(JSON.stringify(saved));assert.equal(loaded.version,2);assert.equal(loaded.steps[0].delayMs,1234);assert.deepEqual(loaded.steps[0].waitFor,blueprint.steps[0].waitFor);assert.ok(!JSON.stringify(saved).includes('runtime-only'));assert.equal(saved.steps[0].attempts,undefined)
+  const saved=savedBlueprint(blueprint),loaded=parseBlueprint(JSON.stringify(saved));assert.equal(loaded.version,3);assert.equal(loaded.connections[0].delayMs,1234);assert.deepEqual(loaded.connections[0].waitFor,blueprint.steps[0].waitFor);assert.ok(!JSON.stringify(saved).includes('runtime-only'));assert.equal(saved.steps[0].attempts,undefined)
   const legacy=definition('a');legacy.version=1;validateBlueprint(legacy);legacy.steps[0].waitFor=condition();assert.throws(()=>validateBlueprint(legacy),/version 2/)
-  const operations=[operation('poll')],ctx={operations,configuration:{apiBaseUrl:'https://api.test'},createSession:()=>({fields:{},body:''}),valuesFor:()=>new Map()};const [plan]=prepareBlueprint(loaded,ctx);assert.deepEqual(plan.waitFor,loaded.steps[0].waitFor);assert.equal(plan.delayMs,1234)
+  const operations=[operation('poll')],ctx={operations,configuration:{apiBaseUrl:'https://api.test'},createSession:()=>({fields:{},body:''}),valuesFor:()=>new Map()};const [plan]=prepareBlueprint(loaded,ctx);assert.deepEqual(plan.entryPolicies[0].waitFor,loaded.connections[0].waitFor);assert.equal(plan.entryPolicies[0].delayMs,1234)
 })
 test('abortable delay rejects already aborted signals and a zero delay completes without a timer',async()=>{
   const controller=new AbortController();await abortableDelay(0,controller.signal);controller.abort(new Error('Stopped'))

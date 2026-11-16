@@ -44,7 +44,7 @@ const document={openapi:'3.1.0',info:{title:'Commerce API',version:'1'},paths:{
  await addInput({pointer:'/customerId',step:'Find customer',response:'/id'});await addInput({pointer:'/sku',step:'Check stock',response:'/sku'});await addInput({pointer:'/reference',source:'Generate data',generator:'Pattern · bounded regex',pattern:'INV-[A-Z]{3}-\\d{4}'})
  await add('Read confirmation','Read confirmation');await addInput({target:'path · id',step:'Create order',response:'/id'})
  await add('Approve dispatch','Approve dispatch');await addInput({target:'path · id',step:'Create order',response:'/id'});await addInput({pointer:'/approvalCode',source:'Ask at run time',prompt:'Enter dispatch approval code',type:'Text'})
- await p.getByRole('button',{name:'Save',exact:true}).click();await p.getByText('Saved in this browser.',{exact:false}).waitFor();assert.equal(calls.length,0);assert.equal(await p.locator('.edge').count(),4);await shot('scenario-builder-map')
+ await p.getByRole('button',{name:'Save',exact:true}).click();await p.getByText('Saved in this browser.',{exact:false}).waitFor();assert.equal(calls.length,0);assert.equal(await p.locator('.edge').count(),6);await shot('scenario-builder-map')
  await p.getByRole('button',{name:'Review & run',exact:true}).click();await p.getByRole('heading',{name:'Review scenario run',exact:true}).waitFor();assert.equal(calls.length,0);await shot('scenario-builder-review')
  await p.getByRole('button',{name:'Run scenario',exact:true}).click();await p.getByRole('region',{name:'Human input required'}).waitFor();assert.equal(peak,2)
  assert.ok(events.indexOf('start:/orders')>events.indexOf('end:/customers'));assert.ok(events.indexOf('start:/orders')>events.indexOf('end:/inventory'))

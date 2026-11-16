@@ -4,10 +4,11 @@ import { validateAssertions } from '../workbench/assertions.js'
 import { validateGenerator } from './generation.js'
 import { validateWaiting } from './waiting.js'
 import { pointerParts } from './pointers.js'
+import { allConnections, connectionKey } from './connections.js'
 export { pointerParts, readPointer } from './pointers.js'
 
 export const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
-export const newBlueprint = () => ({ format: 'necto-scenario-builder', version: 2, id: newId(), name: 'Untitled scenario', concurrency: 4, steps: [] })
+export const newBlueprint = () => ({ format: 'necto-scenario-builder', version: 3, connections: [], id: newId(), name: 'Untitled scenario', concurrency: 4, steps: [] })
 export function newStep(operation, session) {
   return { id: newId(), label: operation.name, operationKey: operation.key, apiId: operation.apiId ?? 'local', method: operation.method, path: operation.path,
     dependsOn: [], inputs: [], request: { fields: { ...session.fields }, body: session.body ?? '', ...payloadSnapshot(session), ...executionOptions(session),
@@ -44,11 +45,11 @@ export function applyInput(session, operation, input, value) {
     }
   }
 }
-export function dependencies(step) { return [...new Set([...step.dependsOn, ...step.inputs.filter(input => input.source === 'response').map(input => input.stepId)])] }
+export function dependencies(step, blueprint) { return [...new Set([...(blueprint?.version >= 3 ? allConnections(blueprint).filter(edge => edge.to === step.id && edge.from !== null).map(edge => edge.from) : step.dependsOn), ...step.inputs.filter(input => input.source === 'response').map(input => input.stepId)])] }
 export function layers(blueprint) {
   const remaining = new Map(blueprint.steps.map(step => [step.id, step])), done = new Set(), result = []
   while (remaining.size) {
-    const ready = [...remaining.values()].filter(step => dependencies(step).every(id => done.has(id)))
+    const ready = [...remaining.values()].filter(step => dependencies(step, blueprint).every(id => done.has(id)))
     if (!ready.length) throw new Error('Scenario contains a cycle or a missing dependency. Remove the circular connection.')
     result.push(ready)
     for (const step of ready) { done.add(step.id); remaining.delete(step.id) }
@@ -56,9 +57,10 @@ export function layers(blueprint) {
   return result
 }
 export function validateBlueprint(blueprint) {
-  if (blueprint?.format !== 'necto-scenario-builder' || ![1, 2].includes(blueprint.version) || typeof blueprint.id !== 'string' || !blueprint.id ||
+  if (blueprint?.format !== 'necto-scenario-builder' || ![1, 2, 3].includes(blueprint.version) || typeof blueprint.id !== 'string' || !blueprint.id ||
     typeof blueprint.name !== 'string' || !blueprint.name.trim() || blueprint.name.length > 200 || !Array.isArray(blueprint.steps) || blueprint.steps.length > 100 ||
     !Number.isInteger(blueprint.concurrency) || blueprint.concurrency < 1 || blueprint.concurrency > 8) throw new Error('Invalid Scenario Builder definition (maximum 100 steps; parallelism 1–8).')
+  if (blueprint.version < 3 && blueprint.connections !== undefined && (!Array.isArray(blueprint.connections) || blueprint.connections.length)) throw new Error('Connections require Scenario Builder version 3.')
   const ids = new Set()
   for (const step of blueprint.steps) {
     if (typeof step.id !== 'string' || !step.id || ids.has(step.id) || typeof step.label !== 'string' || !step.label.trim() || step.label.length > 200 ||
@@ -68,6 +70,7 @@ export function validateBlueprint(blueprint) {
       Object.values(step.request.fields).some(value => typeof value !== 'string')) throw new Error('Invalid scenario step or request.')
     ids.add(step.id)
     if (blueprint.version === 1 && (step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('Delay and response waiting require Scenario Builder version 2.')
+    if (blueprint.version === 3 && (step.dependsOn.length || step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('In version 3, dependencies and timing belong to connections.')
     validateWaiting(step)
     validatePayloadSnapshot(step.request); executionOptions(step.request); validateAssertions(step.request.assertions ?? [])
     if (step.request.binaryFile && !(step.request.binaryFile instanceof Blob) || step.request.formFields?.some(row => row.files && (!Array.isArray(row.files) || row.files.some(file => !(file instanceof Blob))))) throw new Error('Attach files in the browser; imported file data is not executable.')
@@ -84,7 +87,15 @@ export function validateBlueprint(blueprint) {
       if (input.source === 'human' && (typeof input.prompt !== 'string' || !input.prompt.trim() || !['text', 'number', 'boolean', 'json'].includes(input.valueType))) throw new Error('Human inputs need a question and value type.')
     }
   }
-  for (const step of blueprint.steps) if (dependencies(step).some(id => !ids.has(id) || id === step.id)) throw new Error(`Invalid dependency in ${step.label}.`)
+  if (blueprint.version === 3) {
+    if (!Array.isArray(blueprint.connections) || blueprint.connections.length > 1000) throw new Error('Invalid connection collection (maximum 1000).')
+    const pairs = new Set()
+    for (const edge of blueprint.connections) {
+      if (!edge || !(edge.from === null || ids.has(edge.from)) || !ids.has(edge.to) || edge.from === edge.to || pairs.has(connectionKey(edge.from, edge.to))) throw new Error('Invalid, duplicate or self connection.')
+      pairs.add(connectionKey(edge.from, edge.to)); validateWaiting(edge)
+    }
+  }
+  for (const step of blueprint.steps) if (dependencies(step, blueprint).some(id => !ids.has(id) || id === step.id)) throw new Error(`Invalid dependency in ${step.label}.`)
   layers(blueprint)
   return blueprint
 }
