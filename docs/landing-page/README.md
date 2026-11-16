@@ -28,9 +28,9 @@ When publishing, configure GitHub Pages to deploy this directory as the site roo
 
 ## Content decisions
 
-Lead with response-to-request value reuse, then show scenarios, whole-response search and graph views in one gallery. Presets, external APIs and Bring your agent are supporting capabilities. Installation details and implementation limits live on the technical page.
+Lead with response-to-request value reuse, then show saved chains, Scenario Builder, whole-response search and graph views in one gallery. The workbench section covers protected APIs, request and response formats, checks and CI reports. Installation details and implementation limits live on the technical page.
 
-Retain the repository tagline: **OpenAPI UI with a backbone.** Use the real `Necto.OpenApi` package name. The NuGet package was checked at authoring time (0.2.2). Do not describe the Commons Clause license as unrestricted open source. Do not advertise unmerged authentication or unfinished call overrides, unlimited payloads, inferred business workflows, or an agent that executes requests inside Necto.
+Retain the repository tagline **OpenAPI UI with a backbone.** Use the `Necto.OpenApi` package name. The gallery covers features from the repository, and the technical guide explains how to try them from the samples if the published package has an earlier UI.
 
 The short **Why Necto?** note links the name to Latin *nectō* (to bind or connect) and the product's response-to-request connections. Its dictionary reference is [Lewis & Short, via CLD](https://cld.bbaw.de/lemma/lat/necto).
 
@@ -42,5 +42,7 @@ Captured from SampleApi with the UI from main `3286b4b` at 1366 × 900:
 - `scenarios.png`: replay of Invoices → Invoice lines → Invoice line.
 - `search.png`: search for 100999 in a 1000-record response; mapped object selected on its later Preview page.
 - `graph.png`: endpoint graph opened from Invoice lines, fitted to view.
+
+`scenario-builder.png` comes from the [Scenario Builder documentation](../scenario-builder/images/connection-map.png), whose capture shows the request map and selected response.
 
 Use sample data only when refreshing these assets. Keep the complete original captures for the image viewer. Product buttons in screenshots are images; the separate interactive example is the working, browser-local demonstration.

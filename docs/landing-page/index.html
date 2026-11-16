@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Follow response values into your next API request. Explore connected endpoints, replay workflows, and navigate large JSON responses with Necto for ASP.NET Core.">
+  <meta name="description" content="Explore protected OpenAPI endpoints, follow response values into the next request, and build parallel API workflows with Necto for ASP.NET Core.">
   <meta name="theme-color" content="#173f35">
   <title>Necto — Follow the data. Test the whole flow.</title>
   <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
@@ -42,14 +42,24 @@
       <div class="product-tabs" role="tablist" aria-label="Explore Necto features">
         <button type="button" role="tab" id="tab-workflow" aria-controls="product-panel" aria-selected="true" data-feature="workflow"><span>01</span> Follow the data</button>
         <button type="button" role="tab" id="tab-scenarios" aria-controls="product-panel" aria-selected="false" tabindex="-1" data-feature="scenarios"><span>02</span> Replay the flow</button>
-        <button type="button" role="tab" id="tab-search" aria-controls="product-panel" aria-selected="false" tabindex="-1" data-feature="search"><span>03</span> Find your object</button>
-        <button type="button" role="tab" id="tab-graph" aria-controls="product-panel" aria-selected="false" tabindex="-1" data-feature="graph"><span>04</span> See the connections</button>
+        <button type="button" role="tab" id="tab-builder" aria-controls="product-panel" aria-selected="false" tabindex="-1" data-feature="builder"><span>03</span> Build a scenario</button>
+        <button type="button" role="tab" id="tab-search" aria-controls="product-panel" aria-selected="false" tabindex="-1" data-feature="search"><span>04</span> Find your object</button>
+        <button type="button" role="tab" id="tab-graph" aria-controls="product-panel" aria-selected="false" tabindex="-1" data-feature="graph"><span>05</span> See the connections</button>
       </div>
       <div class="product-frame" id="product-panel" role="tabpanel" aria-labelledby="tab-workflow" tabindex="0">
         <div class="frame-bar"><span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>Necto / Sample API · main</span><button type="button" id="expand-screenshot">Expand image <span aria-hidden="true">+</span></button></div>
         <img id="product-image" src="assets/workflow.png" alt="Necto showing a selected invoice and its response values." width="1366" height="768" loading="lazy">
       </div>
       <div class="feature-caption" aria-live="polite"><h3 id="feature-title">The right value. Already in the next request.</h3><p id="feature-description">Select an invoice, choose a related request, and carry its ID forward. Open the form to review or edit before sending.</p><a id="feature-link" href="technical.html#connections">How connections work <span aria-hidden="true">→</span></a></div>
+    </section>
+
+    <section class="possibilities wrap" aria-labelledby="workbench-title">
+      <div class="context-heading"><h2 id="workbench-title">From request<br>to verification.</h2></div>
+      <div class="extra-features">
+        <article><span class="feature-symbol" aria-hidden="true">↪</span><h3>Work with protected APIs</h3><p>Open protected API documentation and send authenticated requests with Bearer tokens, Basic auth, API keys, browser sessions, or OAuth2/OIDC with PKCE.</p><a href="https://github.com/nilphilus/necto/blob/main/docs/authentication/README.md">Authentication setup →</a></article>
+        <article><span class="feature-symbol" aria-hidden="true">⇅</span><h3>Send files. Inspect responses.</h3><p>Send JSON, forms, files, or XML. Inspect headers and streamed SSE or NDJSON events, explore nested JSON and XML, and download the original response.</p><a href="https://github.com/nilphilus/necto/blob/main/docs/api-workbench/README.md">Explore the API workbench →</a></article>
+        <article><span class="feature-symbol" aria-hidden="true">✓</span><h3>Verify each step</h3><p>Check status codes and response values. Inspect the exact request details captured at send time with secrets masked, compare responses from history, and export saved request chains for CI with JSON and JUnit reports.</p><a href="https://github.com/nilphilus/necto/blob/main/docs/api-workbench/README.md#ci-runner">Run saved chains in CI →</a></article>
+      </div>
     </section>
 
     <section class="possibilities wrap" aria-labelledby="context-title">
@@ -62,7 +72,7 @@
     </section>
 
     <section id="developers" class="developer-section" aria-labelledby="developer-title"><div class="developer-inner wrap">
-      <div><p class="eyebrow">At home in ASP.NET Core</p><h2 id="developer-title">Your API.<br>One more useful route.</h2><p>Necto ships its UI in the .NET package and reads your OpenAPI document. Serve the workspace alongside the API you already have.</p><ul><li>No separate frontend deployment</li><li>Connections informed by your C# code</li><li>A short path from install to first request</li></ul><a class="button light-button" href="technical.html">Read the setup guide <span aria-hidden="true">→</span></a></div>
+      <div><p class="eyebrow">At home in ASP.NET Core</p><h2 id="developer-title">Your API.<br>One more useful route.</h2><p>Necto ships its UI in the .NET package and reads your OpenAPI document. Serve the workspace alongside Minimal APIs or FastEndpoints.</p><ul><li>No separate frontend deployment</li><li>Generate request mappings and contract metadata from C#</li><li>Mark sensitive fields for masking in history and code exports</li></ul><a class="button light-button" href="technical.html">Read the setup guide <span aria-hidden="true">→</span></a></div>
       <div class="setup-code"><div class="code-heading"><span>Get started</span><span>ASP.NET Core · .NET 10</span></div><div class="install-line"><code>dotnet add package Necto.OpenApi</code><button type="button" class="copy-button" data-copy="install">Copy</button></div><div class="code-file"><span>Program.cs</span><button type="button" class="copy-button" data-copy="setup">Copy</button></div><pre><code><span class="code-comment">// Keep your existing OpenAPI registration</span>
 app.<span class="code-call">UseNectoUI</span>();</code></pre><div class="code-footer"><span class="live-dot" aria-hidden="true"></span> Add this once after <code>builder.Build()</code>. Keep your existing OpenAPI route. Open <code>/necto/</code>.</div></div>
     </div></section>

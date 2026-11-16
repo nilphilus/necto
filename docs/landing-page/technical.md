@@ -66,6 +66,12 @@ Saved requests retain inputs for one endpoint; presets supply shared values; sce
 
 Saved configurations live in browser storage; run results remain in workspace memory. Writes run only when explicitly executed. See the [scenario guide](../../Necto.UI/README.md#saved-scenarios) for storage and execution details.
 
+## Scenario Builder
+
+Add named requests, connect them, and join parallel branches. Fill request inputs from response fields, shared variables, generated data, presets, or answers collected during the run. Set delays and polling conditions, add response checks, and inspect the sent request and its response for each step.
+
+Builder workflows run in the browser and can be shared as JSON definitions. CI export is available for saved request chains. [Scenario Builder guide](../scenario-builder/README.md).
+
 ## Large responses
 
 Preview renders arrays and objects in local pages of 25 entries. Page changes do not call the API or modify its pagination. Whole-response search runs in a worker and can reveal mapped objects on other pages. Long strings and raw text are paged; downloading saves the full original text.

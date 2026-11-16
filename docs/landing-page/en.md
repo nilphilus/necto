@@ -20,8 +20,15 @@ Go from “what did I get?” to “what can I do next?” Keep the data, the co
 
 - **Follow the data:** select an invoice, choose a related request, and carry its ID forward. Review or edit before sending.
 - **Replay the flow:** save a request chain and run it with values from fresh responses. Inspect each step and its value sources.
+- **Build a scenario.** Connect parallel requests on a canvas and combine their responses in later steps. Share variables, generate test data, pause for input, or poll for a response value.
 - **Find your object:** search the whole response, jump to the matching page, and select the object you need.
 - **See the connections:** explore separate entity and endpoint graphs, inspect a node, and open its request.
+
+## From request to verification
+
+- **Work with protected APIs.** Load protected OpenAPI documents and authenticate with Bearer tokens, Basic auth, API keys, browser sessions, or OAuth2/OIDC with PKCE.
+- **Send files and inspect responses.** Send JSON, forms, files, or XML. Inspect headers, SSE and NDJSON streams, and nested JSON or XML. Download the original response.
+- **Verify each step.** Check status codes and response values, inspect sent requests with secrets masked, compare responses from history, and export saved chains for CI with JSON and JUnit reports.
 
 ## Set the context. Keep your momentum.
 
@@ -34,8 +41,8 @@ Go from “what did I get?” to “what can I do next?” Keep the data, the co
 Necto ships its UI in the .NET package and reads your OpenAPI document. Serve the workspace alongside the API you already have.
 
 - No separate frontend deployment
-- Connections informed by your C# code
-- A short path from install to first request
+- Request mappings and contract metadata generated from C# for Minimal APIs and FastEndpoints
+- Sensitive fields marked for masking in history and code exports
 
 **Read the setup guide**
 
