@@ -14,6 +14,7 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
   if (!blueprint.steps.length) throw new Error('Add at least one request.')
   const byKey = new Map(operations.map(operation => [operation.key, operation]))
   const plan = blueprint.steps.map(definition => {
+    if (!definition.operationKey) throw new Error(`${definition.label}: choose an endpoint before running.`)
     const operation = byKey.get(definition.operationKey)
     if (!operation || (operation.apiId ?? 'local') !== definition.apiId || operation.method !== definition.method || operation.path !== definition.path)
       throw new Error(`${definition.label}: endpoint unavailable. Check API visibility and connections.`)

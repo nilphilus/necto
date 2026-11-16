@@ -15,7 +15,7 @@ export function savedBlueprint(draft) {
   draft = upgradeBlueprint(draft)
   const saved = clone({ format: draft.format, version: 5, variables: draft.variables.map(variableSnapshot), id: draft.id, name: draft.name.trim(), concurrency: draft.concurrency,
     connections: allConnections(draft).filter(edge => edge.from !== null || hasTiming(edge)).map(edge => ({ from: edge.from, to: edge.to, ...waitOptions(edge) })),
-    steps: draft.steps.map(step => ({ id: step.id, label: step.label.trim(), operationKey: step.operationKey, apiId: step.apiId, method: step.method, path: step.path,
+    steps: draft.steps.map(step => ({ ...(step.position ? { position: { ...step.position } } : {}), id: step.id, label: step.label.trim(), operationKey: step.operationKey, apiId: step.apiId, method: step.method, path: step.path,
       dependsOn: [], inputs: step.inputs.map(input => ({ location: input.location,
         ...(input.location === 'body' ? { pointer: input.pointer } : { name: input.name }), source: input.source,
         ...(input.source === 'response' ? { stepId: input.stepId, responsePointer: input.responsePointer } : input.source === 'variable' ? { variableId: input.variableId } : input.source === 'human' ? { prompt: input.prompt, valueType: input.valueType } : input.source === 'generate' ? { generator: input.generator, ...(input.generator === 'regex' ? { pattern: input.pattern } : {}) } : {}) })),
