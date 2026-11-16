@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis;
 namespace Necto.Generator;
 public sealed partial class EndpointMappingGenerator
 {
-    private static void EmitEntityCatalog(SourceProductionContext context, Endpoint[] endpoints)
+    private static void EmitEntityCatalog(SourceProductionContext context, Endpoint[] endpoints,string scope)
     {
         var uses = new List<CatalogUse>();
         foreach (var endpoint in endpoints)
@@ -46,7 +46,7 @@ public sealed partial class EndpointMappingGenerator
                     NectoGeneratedMetadata.Register(endpoints, endpoints.MapGet(pattern, () => Results.Json(Catalog, System.Text.Json.JsonSerializerOptions.Web)).ExcludeFromDescription(), "entityCatalogUrl");
             }
             """);
-        context.AddSource("EntityCatalog.g.cs", code.ToString());
+        context.AddSource("EntityCatalog.g.cs", GeneratedScope.Isolate(code.ToString(),scope,false));
     }
     private sealed record CatalogUse(string Id, string Name, string Kind, string OperationId, string Direction, string Location, string?[] Path);
 }

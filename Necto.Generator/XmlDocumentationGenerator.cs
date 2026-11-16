@@ -13,7 +13,7 @@ public sealed class XmlDocumentationGenerator:IIncrementalGenerator
         var endpoints=context.SyntaxProvider.CreateSyntaxProvider(
             static(node,_)=>node is InvocationExpressionSyntax{Expression:MemberAccessExpressionSyntax{Name.Identifier.ValueText:"WithName"}},
             static(ctx,ct)=>Read(ctx,ct)).Where(static item=>item is not null);
-        context.RegisterSourceOutput(endpoints.Collect(),static(ctx,items)=>Emit(ctx,items.OfType<DocumentationEndpoint>().ToArray()));
+        context.RegisterSourceOutput(endpoints.Collect().Combine(GeneratedScope.For(context,"Documentation")),static(ctx,data)=>Emit(ctx,data.Left.OfType<DocumentationEndpoint>().ToArray(),data.Right));
     }
     private static DocumentationEndpoint? Read(GeneratorSyntaxContext context,CancellationToken token)
     {
@@ -60,7 +60,7 @@ public sealed class XmlDocumentationGenerator:IIncrementalGenerator
     private static string? Description(XElement? xml)=>string.Join("\n\n",new[]{Text(xml?.Element("summary")),Text(xml?.Element("remarks"))}.Where(value=>value is not null)) is {Length:>0} value?value:null;
     private static string Name(INamedTypeSymbol type)=>type.ContainingType is not null?Name(type.ContainingType)+"+"+type.MetadataName:(type.ContainingNamespace.IsGlobalNamespace?"":type.ContainingNamespace.ToDisplayString()+".")+type.MetadataName;
     private static string Literal(string? value)=>value is null?"null":SymbolDisplay.FormatLiteral(value,true);
-    private static void Emit(SourceProductionContext context,DocumentationEndpoint[] endpoints)
+    private static void Emit(SourceProductionContext context,DocumentationEndpoint[] endpoints,string scope)
     {
         var types=new Dictionary<string,INamedTypeSymbol>(StringComparer.Ordinal);var visited=new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);var definitions=new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
         void Visit(ITypeSymbol type,int depth=0)
@@ -114,7 +114,7 @@ public sealed class XmlDocumentationGenerator:IIncrementalGenerator
                 }
             code.AppendLine("}),");
         }
-        code.AppendLine("});\n}");context.AddSource("NectoDocumentation.g.cs",code.ToString());
+        code.AppendLine("});\n}");context.AddSource("NectoDocumentation.g.cs",GeneratedScope.Isolate(code.ToString(),scope));
     }
     private sealed record DocumentationEndpoint(string Id,IMethodSymbol Handler);
 }

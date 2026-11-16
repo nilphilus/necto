@@ -20,8 +20,8 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
             static (context, cancellationToken) => ReadEndpoint(context, cancellationToken))
             .Where(static endpoint => endpoint is not null);
 
-        context.RegisterSourceOutput(endpoints.Collect(), static (context, endpoints) =>
-            Emit(context, endpoints.OfType<Endpoint>()));
+        context.RegisterSourceOutput(endpoints.Collect().Combine(GeneratedScope.For(context,"Mappings")), static (context, data) =>
+            Emit(context, data.Left.OfType<Endpoint>(),data.Right));
     }
 
     private static Endpoint? ReadEndpoint(GeneratorSyntaxContext context, CancellationToken cancellationToken)
@@ -281,7 +281,7 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
     private static bool SameName(string? source, string? target) =>
         source is not null && string.Equals(source, target, StringComparison.OrdinalIgnoreCase);
 
-    private static void Emit(SourceProductionContext context, IEnumerable<Endpoint> endpoints)
+    private static void Emit(SourceProductionContext context, IEnumerable<Endpoint> endpoints,string scope)
     {
         var ordered = endpoints.GroupBy(endpoint => endpoint.Id, StringComparer.Ordinal)
             .Where(group => group.Count() == 1).Select(group => group.Single())
@@ -299,7 +299,7 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
 
             internal sealed class GeneratedNectoMappingsAttribute : NectoMappingsAttribute
             {
-                public override void Map(IEndpointRouteBuilder endpoints) => endpoints.MapNectoEndpointMappings();
+                public override void Map(IEndpointRouteBuilder endpoints) => GeneratedEndpointMappings.MapNectoEndpointMappings(endpoints);
             }
 
             internal static class GeneratedEndpointMappings
@@ -334,8 +334,8 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
                     EndpointMappingsMetadata.Map(endpoints, pattern, Mappings);
             }
             """);
-        EmitEntityCatalog(context, ordered);
-        context.AddSource("EndpointMappings.g.cs", code.ToString());
+        EmitEntityCatalog(context, ordered,scope);
+        context.AddSource("EndpointMappings.g.cs", GeneratedScope.Isolate(code.ToString(),scope));
     }
 
     private static string Literal(string? value) => value is null ? "null" : SymbolDisplay.FormatLiteral(value, quote: true);
