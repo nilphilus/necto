@@ -1,4 +1,7 @@
 <script setup>
+import FolderSave from '../scenario-folder/FolderSave.vue'
+import FolderLibrary from '../scenario-folder/FolderLibrary.vue'
+import FolderFeedback from '../scenario-folder/FolderFeedback.vue'
 import ScenarioCi from '../workbench/ScenarioCi.vue'
 import ScenarioExport from '../workbench/ScenarioExport.vue'
 
@@ -6,9 +9,9 @@ import { nextTick, ref } from 'vue'
 import { pathLabel } from './scenario.js'
 import ScenarioTrace from './ScenarioTrace.vue'
 const props = defineProps({ scenarios: Array, state: Object, pending: Boolean, busy: Boolean, error: String,
-  presetNames: Array, activePresetNames: Array, runs: Map, apiUrl: String, document: Object, mappings: Array, configuration: Object, deleted: Object })
+  presetNames: Array, activePresetNames: Array, runs: Map, apiUrl: String, document: Object, mappings: Array, configuration: Object, deleted: Object, folder:Object })
 
-const emit = defineEmits(['open', 'run', 'remove', 'stop', 'inspect', 'undo-remove', 'builder'])
+const emit = defineEmits(['open', 'run', 'remove', 'stop', 'inspect', 'undo-remove', 'builder', 'folder-settings'])
 const runId = ref('')
 const selectedPresets = ref([])
 const list = ref(null), undoButton = ref(null), title = ref(null)
@@ -39,6 +42,8 @@ function runScenario(scenario) {
 <template>
   <section class="scenario-panel work-area" aria-labelledby="scenarios-title">
     <div class="scenarios-heading"><h2 id="scenarios-title" ref="title" tabindex="-1">Scenarios</h2><button type="button" class="secondary" :disabled="busy" @click="emit('builder')">Scenario Builder →</button></div><p class="builder-intro muted">Save a quick request chain from the API view, or use Builder for parallel branches, manual connections and run-time inputs.</p>
+    <FolderFeedback :folder="folder" />
+    <FolderLibrary :folder="folder" />
     <div v-if="deleted" class="deletion-feedback" role="status">Deleted “{{ deleted.name }}”.
       <button ref="undoButton" type="button" class="secondary" :disabled="pending" @click="undoDeletion">Undo delete</button>
     </div>
@@ -47,6 +52,7 @@ function runScenario(scenario) {
       <li v-for="scenario in scenarios" :key="scenario.id" :data-scenario-id="scenario.id">
         <div class="saved-title"><strong>{{ scenario.name }}</strong><span class="muted">{{ scenario.steps.length }} steps</span><ScenarioExport :scenario="scenario" :api-url="apiUrl" /><ScenarioCi :scenario="scenario" :document="document" :mappings="mappings" :configuration="configuration" /></div>
 
+        <FolderSave :folder="folder" kind="chain" :scenario="scenario" :disabled="busy" @configure="emit('folder-settings')" />
         <details class="review"><summary>Review steps</summary>
           <ol>
             <li v-for="(step, index) in scenario.steps" :key="index">

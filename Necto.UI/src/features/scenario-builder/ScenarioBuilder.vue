@@ -1,4 +1,7 @@
 <script setup>
+import FolderSave from '../scenario-folder/FolderSave.vue'
+import FolderFeedback from '../scenario-folder/FolderFeedback.vue'
+import FolderLibrary from '../scenario-folder/FolderLibrary.vue'
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue'
 import SentRequest from './SentRequest.vue'
 import { removeStepDraft, restoreStepDraft } from './stepUndo.js'
@@ -17,8 +20,8 @@ import { waitOptions } from './waiting.js'
 import ScenarioBodyEditor from './ScenarioBodyEditor.vue'
 import ExpandedResponse from './ExpandedResponse.vue'
 
-const props = defineProps({ configuration: Object, operations: Array, scenarios: Array, context: Function, presetContext: Function, presetNames: { type: Array, default: () => [] }, activePresetNames: { type: Array, default: () => [] }, execute: Function, authentication: Object, busy: Boolean })
-const emit = defineEmits(['back', 'pending'])
+const props = defineProps({ configuration: Object, operations: Array, scenarios: Array, context: Function, presetContext: Function, presetNames: { type: Array, default: () => [] }, activePresetNames: { type: Array, default: () => [] }, execute: Function, authentication: Object, busy: Boolean, folder:Object })
+const emit = defineEmits(['back', 'pending', 'folder-settings'])
 const configurationRef = computed(() => props.configuration)
 const store = useBuilder(configurationRef)
 const { draft, saved, dirty, error, notice, execution, pending, questions } = store
@@ -37,7 +40,7 @@ const filtered = computed(() => props.operations.filter(operation => `${operatio
 const validation = computed(() => { try { validateBlueprint(draft.value); return '' } catch (cause) { return cause.message } })
 const dynamicTargets = computed(() => new Set(selected.value?.inputs.filter(input => input.location !== 'body').map(input => input.location + ':' + input.name)))
 const definitionChanged = () => { if (execution.status !== 'idle' && !pending.value) execution.stale = true }
-watch(draft, definitionChanged, { deep: true })
+watch(()=>[draft.value.name,draft.value.steps,draft.value.variables,draft.value.connections,draft.value.concurrency], definitionChanged, { deep: true })
 watch(() => draft.value.id, () => { removedStep.value = null; edgeDialog.value?.close(); edgeEdit.value = null; picker.value = saved.value.some(item => item.id === draft.value.id) ? draft.value.id : ''; selectedId.value = draft.value.steps[0]?.id ?? ''; tab.value = 'configure' })
 watch(pending, value => { if(value) removedStep.value=null; emit('pending', value) }, { immediate: true })
 onScopeDispose(() => emit('pending', false))
@@ -212,6 +215,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       <label>Saved<select v-model="picker" :disabled="pending" aria-label="Saved builder scenarios" @change="openSaved"><option value="">Current draft</option><option v-for="item in saved" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
       <button type="button" class="secondary" :disabled="pending || draft.steps.length >= 100" @click="openAdd">+ Add request</button>
       <SharedVariables :key="draft.id" :blueprint="draft" :operations="operations" :results="execution.steps" :disabled="pending" @save="draft.variables = $event" /><details class="builder-more"><summary>More</summary><div>
+        <FolderSave :folder="folder" kind="builder" :scenario="draft" :disabled="pending||!!validation" @configure="emit('folder-settings')" />
         <button type="button" class="secondary" :disabled="pending || !!validation" @click="exportDefinition">Export definition</button><button type="button" class="secondary" :disabled="pending" @click="fileInput.click()">Import definition</button>
         <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="importDefinition">
         <label v-if="scenarios?.length">Copy quick scenario<select v-model="quick" :disabled="pending" @change="importQuick"><option value="">Choose saved chain</option><option v-for="item in scenarios" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
@@ -219,6 +223,8 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         <p>Definitions include static inputs. Answers and results are kept only in the current run. Configure credentials with Authorize or presets.</p>
       </div></details>
     </div>
+    <FolderFeedback :folder="folder" />
+    <FolderLibrary :folder="folder" />
     <p v-if="error || validation" class="builder-message error" role="alert">{{ error || validation }}</p>
     <p v-if="removedStep" class="builder-message muted" role="status">Step removed: {{removedStep.step.label}}. <button type="button" class="secondary" :disabled="pending" @click="undoRemoveStep">Undo remove step</button><button type="button" class="secondary" aria-label="Dismiss step undo" @click="removedStep=null">×</button></p>
     <p v-if="notice" class="builder-message muted" role="status">{{ notice }}</p>

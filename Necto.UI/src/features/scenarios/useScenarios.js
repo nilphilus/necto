@@ -1,3 +1,4 @@
+import { sharedOrigin } from '../scenario-folder/origin.js'
 import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
@@ -27,9 +28,10 @@ export function useScenarios(configuration, { undoDuration = 30000 } = {}) {
       for (const scenario of next) validateScenario(scenario)
       if (new Set(next.map(scenario => scenario.id)).size !== next.length) throw new Error('Duplicate scenario IDs.')
       if (!reset) for (const old of previous) {
-        if (JSON.stringify(old) !== JSON.stringify(next.find(item => item.id === old.id))) {
+        const updated = next.find(item => item.id === old.id)
+        if (JSON.stringify({...old,_sharedSource:undefined}) !== JSON.stringify(updated?{...updated,_sharedSource:undefined}:undefined)) {
           runs.delete(old.id)
-          if (state.id === old.id) { const updated = next.find(item => item.id === old.id); stop(); Object.assign(state, {id:updated?.id ?? '',name:updated?.name ?? '',steps:[],error:'',status:updated?'saved':'idle'}) }
+          if (state.id === old.id) { stop(); Object.assign(state, {id:updated?.id ?? '',name:updated?.name ?? '',steps:[],error:'',status:updated?'saved':'idle'}) }
         }
       }
       scenarios.value = next; error.value = ''
@@ -44,10 +46,11 @@ export function useScenarios(configuration, { undoDuration = 30000 } = {}) {
     catch { throw new Error('Could not save scenarios in this browser.') }
     scenarios.value = next; error.value = ''
   }
-  function save(chain, name, overwriteId, valuesFor) {
+  function save(chain, name, overwriteId, valuesFor, folderSource) {
     if (pending.value) throw new Error('Stop the scenario before saving changes.')
     if (overwriteId && !scenarios.value.some(item => item.id === overwriteId)) throw new Error('This scenario no longer exists.')
     const scenario = snapshotScenario(chain, name, overwriteId || undefined, valuesFor)
+    const origin=overwriteId&&sharedOrigin(folderSource);if(origin)scenario._sharedSource=origin
     validateScenario(scenario)
     if (scenarios.value.some(item => item.name === scenario.name && item.id !== overwriteId)) throw new Error('A scenario with this name already exists.')
     persist(overwriteId ? scenarios.value.map(item => item.id === overwriteId ? scenario : item) : [...scenarios.value, scenario])
@@ -94,7 +97,7 @@ export function useScenarios(configuration, { undoDuration = 30000 } = {}) {
   async function run(scenario, context, execute) {
     if (pending.value) return
     state.error = ''; error.value = ''
-    const execution = reactive({ id: scenario.id, name: scenario.name, status: 'running', steps: [], error: '' })
+    const execution = reactive({ id: scenario.id, name: scenario.name, status: 'running', steps: [], error: '', ...(sharedOrigin(scenario._sharedSource)?{_sharedSource:sharedOrigin(scenario._sharedSource)}:{}) })
     runs.set(scenario.id, execution)
     try { execution.steps = prepareScenario(scenario, context) }
     catch (cause) {

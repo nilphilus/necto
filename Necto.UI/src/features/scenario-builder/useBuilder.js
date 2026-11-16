@@ -1,4 +1,5 @@
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
+import { sharedOrigin } from '../scenario-folder/origin.js'
 import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { payloadSnapshot } from '../workbench/body.js'
@@ -28,7 +29,7 @@ export function useBuilder(configuration) {
   const draft = ref(newBlueprint()), saved = ref([]), error = ref(''), notice = ref('')
   const execution = reactive({ status: 'idle', steps: [], error: '', stale: false, presetNames: [] }), pending = ref(false), questions = reactive(new Map())
   const key = computed(() => workspaceIdentity(configuration.value) && 'necto:scenario-builder:' + workspaceIdentity(configuration.value))
-  const dirty = computed(() => JSON.stringify(savedBlueprintSafe(draft.value)) !== JSON.stringify(saved.value.find(item => item.id === draft.value.id)))
+  const dirty = computed(() => JSON.stringify(savedBlueprintSafe(draft.value)) !== JSON.stringify(savedBlueprintSafe(saved.value.find(item => item.id === draft.value.id))))
   let controller, revision = 0
   function savedBlueprintSafe(value) { try { return savedBlueprint(value) } catch { return value } }
   function stop() { controller?.abort() }
@@ -62,6 +63,7 @@ export function useBuilder(configuration) {
   function save() {
     if (pending.value) return
     const blueprint = savedBlueprint(draft.value)
+    const origin=sharedOrigin(draft.value._sharedSource);if(origin)blueprint._sharedSource=origin
     persist([...saved.value.filter(item => item.id !== blueprint.id), blueprint])
     notice.value = 'Saved in this browser. Run inputs and responses are not included.'
   }

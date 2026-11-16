@@ -1,11 +1,12 @@
 <script setup>
+import ScenarioFolderSettings from '../scenario-folder/ScenarioFolderSettings.vue'
 import TransferPreview from './TransferPreview.vue'
 import { computed, ref } from 'vue'
 import {
   exportWorkspace,
   inspectWorkspace
 } from './workspace.js'
-const props = defineProps({ importDocument: Function, operations: Array, documentSource: Object, restoreDocument: Function })
+const props = defineProps({ importDocument: Function, operations: Array, documentSource: Object, restoreDocument: Function, folder:Object })
 const catalogWidth = defineModel('catalogWidth', { type: Number, required: true })
 const documentAssociation = ref('separate'), workspaceName = ref('')
 const includeBodies = ref(false),
@@ -81,6 +82,7 @@ async function loadDocument(event) {
 </script>
 <template>
   <section class="workspace-settings">
+    <ScenarioFolderSettings :folder="folder" />
     <h3>Layout</h3>
     <label for="catalog-width">
       Endpoint catalog width <span>{{ catalogWidth }} px</span>
