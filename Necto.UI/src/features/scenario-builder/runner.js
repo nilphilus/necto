@@ -40,6 +40,7 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
     for (const input of definition.inputs) if (input.location === 'body' && !activeInputs.includes(input) && !coveredBody(input, presetBody.paths ?? [])) {
       applyInput(session, operation, input, readPointer(JSON.parse(probed.body), input.pointer))
     }
+    for (const input of activeInputs) if (input.source === 'preset') throw new Error(`${definition.label}: select a matching run preset for ${input.location === 'body' ? input.pointer || '(whole body)' : input.name}, or choose another value source.`)
     for (const input of definition.inputs) {
       if (input.location === 'body' && !operation.requestBody || input.location !== 'body' &&
         !operation.parameters.some(parameter => parameter.in === input.location && parameter.name === input.name)) throw new Error(`${definition.label}: input target is no longer present in the API.`)

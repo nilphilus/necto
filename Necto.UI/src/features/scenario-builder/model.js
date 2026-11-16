@@ -9,7 +9,7 @@ import { allConnections, connectionKey } from './connections.js'
 export { pointerParts, readPointer } from './pointers.js'
 
 export const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
-export const newBlueprint = () => ({ format: 'necto-scenario-builder', version: 4, connections: [], variables: [], id: newId(), name: 'Untitled scenario', concurrency: 4, steps: [] })
+export const newBlueprint = () => ({ format: 'necto-scenario-builder', version: 5, connections: [], variables: [], id: newId(), name: 'Untitled scenario', concurrency: 4, steps: [] })
 export function newStep(operation, session) {
   return { id: newId(), label: operation.name, operationKey: operation.key, apiId: operation.apiId ?? 'local', method: operation.method, path: operation.path,
     dependsOn: [], inputs: [], request: { fields: { ...session.fields }, body: session.body ?? '', ...payloadSnapshot(session), ...executionOptions(session),
@@ -58,7 +58,7 @@ export function layers(blueprint) {
   return result
 }
 export function validateBlueprint(blueprint) {
-  if (blueprint?.format !== 'necto-scenario-builder' || ![1, 2, 3, 4].includes(blueprint.version) || typeof blueprint.id !== 'string' || !blueprint.id ||
+  if (blueprint?.format !== 'necto-scenario-builder' || ![1, 2, 3, 4, 5].includes(blueprint.version) || typeof blueprint.id !== 'string' || !blueprint.id ||
     typeof blueprint.name !== 'string' || !blueprint.name.trim() || blueprint.name.length > 200 || !Array.isArray(blueprint.steps) || blueprint.steps.length > 100 ||
     !Number.isInteger(blueprint.concurrency) || blueprint.concurrency < 1 || blueprint.concurrency > 8) throw new Error('Invalid Scenario Builder definition (maximum 100 steps; parallelism 1–8).')
   if (blueprint.version < 3 && blueprint.connections !== undefined && (!Array.isArray(blueprint.connections) || blueprint.connections.length)) throw new Error('Connections require Scenario Builder version 3.')
@@ -77,12 +77,14 @@ export function validateBlueprint(blueprint) {
     if (step.request.binaryFile && !(step.request.binaryFile instanceof Blob) || step.request.formFields?.some(row => row.files && (!Array.isArray(row.files) || row.files.some(file => !(file instanceof Blob))))) throw new Error('Attach files in the browser; imported file data is not executable.')
     const targets = []
     for (const input of step.inputs) {
-      if (!['path', 'query', 'header', 'body'].includes(input.location) || !['response', 'human', 'generate', 'variable'].includes(input.source) ||
+      if (!['path', 'query', 'header', 'body'].includes(input.location) || !['response', 'human', 'generate', 'variable', 'preset'].includes(input.source) ||
         (input.location !== 'body' && (typeof input.name !== 'string' || !input.name || /[\r\n]/.test(input.name)))) throw new Error(`Invalid input in ${step.label}.`)
       const path = input.location === 'body' ? pointerParts(input.pointer) : [input.location === 'header' ? input.name.toLowerCase() : input.name]
       if (targets.some(target => target.location === input.location && (input.location !== 'body' ? target.path[0] === path[0] :
         path.slice(0, Math.min(path.length, target.path.length)).every((part, index) => part === target.path[index])))) throw new Error(`Overlapping input targets in ${step.label}.`)
       targets.push({ location: input.location, path })
+      if (input.source === 'preset' && input.location === 'body' && input.pointer === '') throw new Error('Presets match named body fields. Choose a field instead of the whole body.')
+      if (input.source === 'preset' && blueprint.version < 5) throw new Error('Explicit preset sources require Scenario Builder version 5.')
       if (input.source === 'response') { if (typeof input.stepId !== 'string') throw new Error('Choose a source step.'); pointerParts(input.responsePointer) }
       if (input.source === 'generate') validateGenerator(input)
       if (input.source === 'human' && (typeof input.prompt !== 'string' || !input.prompt.trim() || !['text', 'number', 'boolean', 'json'].includes(input.valueType))) throw new Error('Human inputs need a question and value type.')
