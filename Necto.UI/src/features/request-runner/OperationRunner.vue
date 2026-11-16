@@ -8,6 +8,7 @@ import { requestIdentity } from '../workbench/requestContext.js'
 
 
 import BodyEditor from '../workbench/BodyEditor.vue'
+import ExpandedBodyEditor from '../workbench/ExpandedBodyEditor.vue'
 import RequestTools from '../workbench/RequestToolsMenu.vue'
 import ResponsePreview from './ResponsePreview.vue'
 import RequestSendIcon from './RequestSendIcon.vue'
@@ -271,9 +272,13 @@ function parameterHint(parameter) {
         <div v-if="content" class="field">
           <p class="body-origin"><strong>{{ session.sampleName ? 'Saved request' : hasBodyExample(content[1], operation.resolve) ? 'OpenAPI example' : 'Generated template' }}</strong><span v-if="!session.sampleName && !hasBodyExample(content[1], operation.resolve)"> · Fill placeholder values before sending. API validation may require different values.</span></p>
           <details v-if="content[1].schema" class="body-schema"><summary>Body fields and requirements</summary><dl><template v-for="field in bodyFields(operation, content[1].schema)" :key="field.path"><dt><code>{{ field.path }}</code></dt><dd>{{ field.rules }}</dd></template></dl><small>Requirements published by this API. Additional business rules may apply.</small></details>
-          <label class="field-label" @click="focusFirstBodyValue">
-            <span>Request body <small>{{ content[0] }}</small></span>
+          <div class="body-heading">
+            <label :for="`${parameterIdPrefix}-body`" @click="focusFirstBodyValue">Request body <small>{{ content[0] }}</small></label>
+            <ExpandedBodyEditor :session="session" @tab="tabBodyValue" />
+          </div>
+          <div class="field-label">
             <textarea
+              :id="`${parameterIdPrefix}-body`"
               ref="bodyEditor"
               v-model="displayedBody"
               rows="3"
@@ -283,7 +288,7 @@ function parameterHint(parameter) {
               @blur="editingBody = false"
               @keydown.tab="tabBodyValue"
             />
-          </label>
+          </div>
           <details v-if="bodyPresetResult.sources?.length" class="body-preset-origins">
             <summary>Presets override {{ bodyPresetResult.sources.length }} body fields</summary>
             <ul><li v-for="source in bodyPresetResult.sources" :key="JSON.stringify(source.path)"><code>{{ JSON.stringify(source.path) }}</code> · <button type="button" class="preset-link" @click="emit('edit-preset', source.preset)">{{ source.preset }}</button></li></ul>
@@ -403,14 +408,15 @@ function parameterHint(parameter) {
 .body-preset-origins { font-size: .78rem; margin-top: .5rem; overflow-wrap: anywhere; }
 .body-preset-origins summary { cursor: pointer; }
 .body-origin, .body-schema { font-size: .78rem; margin: 0 0 .5rem; }
+.body-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .35rem; }
 .body-schema summary { cursor: pointer; color: var(--accent); }
 .body-schema dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: .35rem; overflow-wrap: anywhere; }
 .body-schema dd { margin: 0; color: var(--muted); }
 .field + .field { margin-top: .85rem; }
 .field p { margin: .35rem 0 0; font-size: .82rem; }
 .field-label { display: grid; gap: .35rem; }
-.field-label span { font-weight: 650; font-size: .88rem; }
-.field-label small { margin-left: .4rem; color: var(--muted); font-weight: 400; }
+.body-heading label { font-weight: 650; font-size: .88rem; }
+.body-heading small { margin-left: .4rem; color: var(--muted); font-weight: 400; }
 .field > input, .field-label textarea { width: 100%; }
 .preset-field {
   position: relative;
