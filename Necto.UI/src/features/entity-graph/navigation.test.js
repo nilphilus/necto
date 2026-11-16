@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { wheelScale, zoomScroll, MIN_ZOOM, MAX_ZOOM } from './navigation.js'
+import { wheelScale, zoomScroll, MIN_ZOOM, MAX_ZOOM } from '../graph-navigation.js'
 test('wheel zoom is proportional at overview scales and normalizes input devices',()=>{
  assert.ok(wheelScale(.03,-100,0,600)>.03)
  assert.equal(wheelScale(1,2,1,600),wheelScale(1,32,0,600))
