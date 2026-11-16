@@ -1,6 +1,6 @@
 import { applyBodyPresets, buildRequest, contextKey } from '../request-runner/request.js'
 import { effectiveTarget } from '../workbench/target.js'
-import { describeBody } from '../workbench/body.js'
+import { sentRequest } from './sentRequest.js'
 import { applyInput, dependencies, pointerParts, readPointer, validateBlueprint } from './model.js'
 import { staticVariableValue } from './variables.js'
 import { generateValue } from './generation.js'
@@ -148,7 +148,7 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
         let response
         try {
           response = await execute(step.operation, step.session, step.values, combined, ({ url, options }) => {
-            step.request = { url: url.href, headers: Object.fromEntries(options.headers), body: describeBody(options.body) }
+            step.request = sentRequest({url,options})
           })
         } finally { releaseSlot(); releaseSlot = undefined }
         combined.throwIfAborted()

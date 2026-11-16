@@ -1,0 +1,7 @@
+require('./qa-fixture.cjs').run(async({p,assert,builder,add,save,saved,shot})=>{
+ await builder();await add('Create invoice');const editor=p.getByRole('region',{name:'Request body schema',exact:true}),city=editor.locator('[data-body-path="/address/city"]')
+ await city.getByRole('checkbox',{name:'Include city',exact:true}).uncheck();assert.equal(await city.evaluate(el=>el.classList.contains('omitted-field')),true);assert.ok(Number(await city.locator('> .json-line > .field-editor').evaluate(el=>getComputedStyle(el).opacity))<1);await save();assert.equal(Object.hasOwn(JSON.parse((await saved()).steps[0].request.body).address,'city'),false)
+ await editor.getByRole('button',{name:'Expand body editor',exact:true}).click();await shot();await p.getByRole('button',{name:'About field name',exact:true}).click();const help=p.getByRole('dialog',{name:'About field name',exact:true});await help.getByText('Name shown on the invoice.',{exact:true}).waitFor();await help.getByRole('button',{name:'Close description',exact:true}).click();await p.getByRole('button',{name:'Close body editor',exact:true}).click()
+ await city.getByRole('checkbox',{name:'Include city',exact:true}).check();assert.equal(await city.evaluate(el=>el.classList.contains('omitted-field')),false)
+ await p.setViewportSize({width:390,height:844});await editor.getByRole('button',{name:'About field name',exact:true}).click();await help.waitFor();assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
+})

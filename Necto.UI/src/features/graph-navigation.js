@@ -5,7 +5,7 @@ export function wheelScale(scale, delta, mode, height) {
   return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, scale * Math.exp(-Math.max(-200, Math.min(200, pixels)) * .008)))
 }
 export function zoomScroll(scroll, cursor, before, after) { return (scroll + cursor) / before * after - cursor }
-export function useEntityNavigation(canvas, width, height, zoom, autoFit) {
+export function useGraphNavigation(canvas, width, height, zoom, autoFit) {
   const view = reactive({ x:0, y:0, width:0, height:0 })
   let observer, revision = 0
   function sync() {

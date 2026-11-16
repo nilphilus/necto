@@ -1,6 +1,6 @@
 <script setup>
-import GraphMinimap from './GraphMinimap.vue'
-import { useEntityNavigation, MIN_ZOOM, MAX_ZOOM } from './navigation.js'
+import GraphMinimap from '../GraphMinimap.vue'
+import { useGraphNavigation, MIN_ZOOM, MAX_ZOOM } from '../graph-navigation.js'
 import IdentifierCatalog from './IdentifierCatalog.vue'
 import { computed, nextTick, ref, watch, useId } from 'vue'
 import { useGraphViewport } from '../graph-viewport.js'
@@ -43,20 +43,21 @@ const names = computed(() => new Map(graph.value.nodes.map(node => [node.id, nod
 const width = computed(() => Math.max(620, ...positions.value.map(node => node.x + 305)))
 const height = computed(() => Math.max(380, ...positions.value.map(node => node.y + 125)))
 const { autoFit, fit, center } = useGraphViewport(canvas, width, height, zoom)
-const { view, sync, zoomAt, wheel, navigate } = useEntityNavigation(canvas, width, height, zoom, autoFit)
+const { view, sync, zoomAt, wheel, navigate } = useGraphNavigation(canvas, width, height, zoom, autoFit)
 const miniEdges = computed(() => connections.value.map(edge => ({ ...edge, from:byId.value.get(edge.from), to:byId.value.get(edge.to) })).filter(edge=>edge.from&&edge.to))
 watch(() => props.initialOperationKey, key => { selectedId.value = graph.value.nodes.find(node => node.endpoints.some(entry => entry.operation.key === key))?.id ?? '' }, { immediate: true })
 watch(selected, value => { if (!value) focused.value = false })
 watch(search, () => { focused.value = false; if (!filtered.value.some(node => node.id === selectedId.value)) selectedId.value = '' })
 watch(() => props.spec, () => { selectedId.value = ''; search.value = '' })
 watch([focused, kind, search], () => canvas.value?.scrollTo(0, 0))
-async function selectEntity(id) {
+async function selectEntity(id, reveal = false) {
   selectedId.value = id
   if (focused.value || !byId.value.has(id)) {
     focused.value = true
     canvas.value?.scrollTo(0, 0)
   }
   await nextTick()
+  if (reveal) center(byId.value.get(id), entitySize)
   if (window.matchMedia('(max-width: 800px)').matches) {
     detailsTitle.value?.scrollIntoView({ block: 'start', behavior: 'instant' })
     detailsTitle.value?.focus({ preventScroll: true })
@@ -127,7 +128,7 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
           <h4>Connections ({{ relationships.length }})</h4>
           <ul class="relationship-list">
             <li v-for="edge in relationships" :key="edge.id">
-              <button type="button" @click="selectEntity(edge.from === selectedId ? edge.to : edge.from)">{{ names.get(edge.from) }} → {{ names.get(edge.to) }}</button>
+              <button type="button" @click="selectEntity(edge.from === selectedId ? edge.to : edge.from, true)">{{ names.get(edge.from) }} → {{ names.get(edge.to) }}</button>
               <code>{{ edge.label }}</code><small>{{ edge.kind === 'schema' ? 'Schema reference' : 'Value flow' }}</small>
             </li>
           </ul>

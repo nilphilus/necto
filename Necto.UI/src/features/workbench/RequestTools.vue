@@ -9,7 +9,7 @@ import { computed, ref, useId, nextTick, watch } from 'vue'
 import MarkdownText from './MarkdownText.vue'
 import { buildRequest } from '../request-runner/request.js'
 import { requestSnippet } from './snippets.js'
-import { assertionKinds } from './assertions.js'
+import ResponseChecksEditor from './ResponseChecksEditor.vue'
 const props = defineProps({
   operation: Object,
   session: Object,
@@ -126,13 +126,7 @@ function resetServer() {
   if (props.configuration?.serverProfiles)
     delete props.configuration.serverProfiles[props.operation.apiId ?? 'local']
 }
-function addCheck() {
-  ;(props.session.assertions ??= []).push({
-    kind: 'status',
-    path: '',
-    expected: '200'
-  })
-}
+
 </script>
 <template>
   <button v-if="!hideTrigger" ref="trigger" type="button" class="secondary" aria-haspopup="dialog" :aria-controls="toolsId" @click="dialog.showModal()">Tools</button>
@@ -218,44 +212,7 @@ function addCheck() {
       </p>
     </section>
     <details v-if="tab === 'Configure'" :id="sectionId('Checks')" :open="requestedSection === 'Checks'" class="configure-group"><summary>Response checks</summary>
-      <p>
-        Checks run after each response. Paths use JSON Pointer, for example
-        /lines/0/id.
-      </p>
-      <div
-        v-for="(check, index) in session.assertions"
-        :key="index"
-        class="check"
-      >
-        <select v-model="check.kind" aria-label="Check type">
-          <option
-            v-for="(label, kind) in assertionKinds"
-            :value="kind"
-            :key="kind"
-          >
-            {{ label }}
-          </option></select
-        ><input
-          v-if="!['status', 'duration'].includes(check.kind)"
-          v-model="check.path"
-          placeholder="/field"
-          aria-label="JSON Pointer"
-        /><input
-          v-if="!['exists', 'nonempty'].includes(check.kind)"
-          v-model="check.expected"
-          placeholder="Expected value"
-          aria-label="Expected value"
-        /><button type="button" @click="session.assertions.splice(index, 1)">
-          Remove
-        </button>
-      </div>
-      <button
-        type="button"
-        :disabled="session.assertions?.length >= 50"
-        @click="addCheck"
-      >
-        Add check
-      </button>
+      <ResponseChecksEditor :session="session" />
     </details>
     <details v-if="tab === 'Configure'" :id="sectionId('Server')" :open="requestedSection === 'Server'" class="configure-group"><summary>API server</summary>
       <p>

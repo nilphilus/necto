@@ -1,5 +1,8 @@
 <script setup>
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue'
+import SentRequest from './SentRequest.vue'
+import { removeStepDraft, restoreStepDraft } from './stepUndo.js'
+import ResponseChecksEditor from '../workbench/ResponseChecksEditor.vue'
 import ScenarioMap from './ScenarioMap.vue'
 import StepInputs from './StepInputs.vue'
 import SharedVariables from './SharedVariables.vue'
@@ -19,7 +22,7 @@ const emit = defineEmits(['back', 'pending'])
 const configurationRef = computed(() => props.configuration)
 const store = useBuilder(configurationRef)
 const { draft, saved, dirty, error, notice, execution, pending, questions } = store
-const pickingStepId = ref('')
+const pickingStepId = ref(''), removedStep = ref(null)
 const selectedId = ref(''), tab = ref('configure'), search = ref(''), addDialog = ref(null), runDialog = ref(null), fileInput = ref(null)
 const selectedPresets = ref([])
 const review = ref([]), allowHuman = ref(true), runProblem = ref(''), picker = ref(''), quick = ref('')
@@ -35,8 +38,8 @@ const validation = computed(() => { try { validateBlueprint(draft.value); return
 const dynamicTargets = computed(() => new Set(selected.value?.inputs.filter(input => input.location !== 'body').map(input => input.location + ':' + input.name)))
 const definitionChanged = () => { if (execution.status !== 'idle' && !pending.value) execution.stale = true }
 watch(draft, definitionChanged, { deep: true })
-watch(() => draft.value.id, () => { edgeDialog.value?.close(); edgeEdit.value = null; picker.value = saved.value.some(item => item.id === draft.value.id) ? draft.value.id : ''; selectedId.value = draft.value.steps[0]?.id ?? ''; tab.value = 'configure' })
-watch(pending, value => emit('pending', value), { immediate: true })
+watch(() => draft.value.id, () => { removedStep.value = null; edgeDialog.value?.close(); edgeEdit.value = null; picker.value = saved.value.some(item => item.id === draft.value.id) ? draft.value.id : ''; selectedId.value = draft.value.steps[0]?.id ?? ''; tab.value = 'configure' })
+watch(pending, value => { if(value) removedStep.value=null; emit('pending', value) }, { immediate: true })
 onScopeDispose(() => emit('pending', false))
 if (props.authentication) onScopeDispose(props.authentication.onChange(ids => store.invalidate(ids)))
 watch(() => props.operations.map(operation => operation.key), available => {
@@ -78,10 +81,14 @@ function removeStep() {
   const used = draft.value.variables.filter(variable => variable.source === 'response' && variable.stepId === id)
   if (used.length) { error.value = 'Change or remove response variables first: ' + used.map(variable => variable.name).join(', '); return }
   if (draft.value.steps.some(step => dependencies(step, draft.value).includes(id)) && !window.confirm('Remove this step and all connections that use its response?')) return
-  draft.value.connections = draft.value.connections.filter(edge => edge.from !== id && edge.to !== id)
-  draft.value.steps = draft.value.steps.filter(step => step.id !== id)
-  for (const step of draft.value.steps) { step.dependsOn = step.dependsOn.filter(dependency => dependency !== id); step.inputs = step.inputs.filter(input => input.source !== 'response' || input.stepId !== id) }
+  const removed = removeStepDraft(draft.value,id)
+  draft.value = removed.next; removedStep.value = removed.snapshot
   selectedId.value = draft.value.steps[0]?.id ?? ''
+}
+function undoRemoveStep() {
+ if(pending.value||!removedStep.value)return
+ attempt(()=>{const id=removedStep.value.step.id;draft.value=restoreStepDraft(draft.value,removedStep.value);removedStep.value=null;selectedId.value=id;tab.value='configure'})
+
 }
 function candidateConnection(edge, inputs) {
   const pair = connectionKey(edge.from, edge.to)
@@ -213,6 +220,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       </div></details>
     </div>
     <p v-if="error || validation" class="builder-message error" role="alert">{{ error || validation }}</p>
+    <p v-if="removedStep" class="builder-message muted" role="status">Step removed: {{removedStep.step.label}}. <button type="button" class="secondary" :disabled="pending" @click="undoRemoveStep">Undo remove step</button><button type="button" class="secondary" aria-label="Dismiss step undo" @click="removedStep=null">×</button></p>
     <p v-if="notice" class="builder-message muted" role="status">{{ notice }}</p>
     <div v-if="execution.status !== 'idle'" class="builder-run-status" role="status"><strong>{{ execution.stale ? 'Previous run · ' : '' }}{{ execution.status }}</strong><span v-if="execution.presetNames?.length">Presets: {{ execution.presetNames.join(' → ') }}</span><span>{{ execution.steps.filter(step => step.status === 'completed').length }} / {{ execution.steps.length }} completed</span><span v-if="questions.size">{{ questions.size }} awaiting your input</span><span class="error">{{ execution.error }}</span></div>
     <section v-if="questions.size" class="human-queue" aria-label="Human input required">
@@ -228,13 +236,14 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         <template v-if="selected">
           <header class="inspector-header"><label>Step name<input v-model="selected.label" :disabled="pending" maxlength="200" aria-label="Step name"></label><div class="request-endpoint-actions"><button type="button" class="secondary" :disabled="pending" @click="openAdd(selected.id)">{{ selected.operationKey ? 'Change endpoint' : 'Choose endpoint…' }}</button><button type="button" class="secondary" :disabled="pending || draft.steps.length >= 100" @click="createNext({from:selected.id})">+ Next request</button></div><code><span class="method" :data-method="selected.method">{{ selected.method }}</span> {{ selected.path }}</code></header>
           <div class="inspector-tabs" role="group" aria-label="Step view"><button type="button" :aria-pressed="tab === 'configure'" @click="tab = 'configure'">Configure</button><button type="button" :aria-pressed="tab === 'response'" @click="tab = 'response'">Response<span v-if="runStep?.httpStatus"> · {{ runStep.httpStatus }}</span></button></div>
-          <div v-if="tab === 'response'" class="inspector-content response-content"><p v-if="runStep?.status === 'delaying'" class="attempt-progress" role="status">Delaying until {{ new Date(runStep.nextAttemptAt).toLocaleTimeString() }}</p><p v-if="runStep?.attempt" class="attempt-progress" role="status">Attempt {{ runStep.attempt }} / {{ runStep.maxAttempts }} · {{ runStep.status }}<span v-if="runStep.nextAttemptAt"> · Next attempt at {{ new Date(runStep.nextAttemptAt).toLocaleTimeString() }}</span></p><details v-if="runStep?.attempts?.length > 1" class="attempt-history"><summary>Attempt history ({{ runStep.attempts.length }})</summary><ol><li v-for="attempt in runStep.attempts" :key="attempt.attempt">{{ attempt.attempt }} · HTTP {{ attempt.status ?? '—' }} · {{ attempt.elapsed ?? '—' }} ms · {{ attempt.matched ? 'value matched' : 'not matched' }}</li></ol></details><p v-if="execution.stale" class="muted">Result from the previous run. Run again to use the updated definition.</p><p v-if="runStep?.error" class="error">{{ runStep.error }}</p><ExpandedResponse v-if="runStep?.response" :key="selectedId" :result="runStep.response" :operation="runStep.operation" :pending="pending" :stale="execution.stale" /><p v-else class="muted">{{ runStep ? runStep.status : 'Run the scenario to see this response.' }}</p></div>
+          <div v-if="tab === 'response'" class="inspector-content response-content"><p v-if="runStep?.status === 'delaying'" class="attempt-progress" role="status">Delaying until {{ new Date(runStep.nextAttemptAt).toLocaleTimeString() }}</p><p v-if="runStep?.attempt" class="attempt-progress" role="status">Attempt {{ runStep.attempt }} / {{ runStep.maxAttempts }} · {{ runStep.status }}<span v-if="runStep.nextAttemptAt"> · Next attempt at {{ new Date(runStep.nextAttemptAt).toLocaleTimeString() }}</span></p><details v-if="runStep?.attempts?.length > 1" class="attempt-history"><summary>Attempt history ({{ runStep.attempts.length }})</summary><ol><li v-for="attempt in runStep.attempts" :key="attempt.attempt">{{ attempt.attempt }} · HTTP {{ attempt.status ?? '—' }} · {{ attempt.elapsed ?? '—' }} ms · {{ attempt.matched ? 'value matched' : 'not matched' }}</li></ol></details><p v-if="execution.stale" class="muted">Result from the previous run. Run again to use the updated definition.</p><p v-if="runStep?.error" class="error">{{ runStep.error }}</p><SentRequest v-if="runStep?.request" :key="selectedId+':request'" :request="runStep.request" :attempt="runStep.attempt" /><ExpandedResponse v-if="runStep?.response" :key="selectedId" :result="runStep.response" :operation="runStep.operation" :pending="pending" :stale="execution.stale" /><p v-else class="muted">{{ runStep ? runStep.status : 'Run the scenario to see this response.' }}</p></div>
           <div v-else class="inspector-content">
             <p v-if="!selected.operationKey" class="empty-request-note">Choose an endpoint for this request. Its connection is already in place.</p><p v-else-if="!operation" class="error">Endpoint unavailable. Enable its API connection before running.</p>
             <section class="incoming-links" aria-label="Incoming connections"><h4>Incoming connections</h4><button v-for="edge in inbound" :key="connectionKey(edge.from, edge.to)" type="button" class="secondary" @click="openConnection(edge, $event)">{{ connectionSummary(edge, draft.steps) }}<small v-if="edge.delayMs !== undefined || edge.waitFor"> · Delay / Wait for</small></button><p class="muted">Drag between handles on the map. Configure timing and response bindings using ⚙ on the line.</p></section>
             <StepInputs v-if="operation?.parameters.some(parameter => ['path','query','header'].includes(parameter.in))" :parameters-only="true" :step="selected" :operation="operation" :steps="draft.steps" :variables="draft.variables" :operations="operations" :results="execution.steps" :disabled="pending" />
             <details class="static-request" open><summary>Request · static inputs</summary><fieldset :disabled="pending || !operation"><template v-if="operation"><label v-for="parameter in operation.parameters.filter(parameter => ['path', 'query', 'header'].includes(parameter.in))" :key="parameter.in + ':' + parameter.name">{{ parameter.in }} · {{ parameter.name }}<span v-if="dynamicTargets.has(parameter.in + ':' + parameter.name)" class="input-tag">Filled at run time</span><input v-model="selected.request.fields[parameter.in + ':' + parameter.name]" :disabled="dynamicTargets.has(parameter.in + ':' + parameter.name)" :placeholder="parameter.required || parameter.in === 'path' ? 'Required' : 'Optional'"></label></template></fieldset></details>
             <ScenarioBodyEditor v-if="operation?.requestBody" :key="selected.id" :step="selected" :operation="operation" :steps="draft.steps" :operations="operations" :variables="draft.variables" :results="execution.steps" :disabled="pending" />
+            <details class="step-checks"><summary>Response checks ({{selected.request.assertions?.length??0}})</summary><ResponseChecksEditor :session="selected.request" :disabled="pending" /></details>
             <details class="request-limits"><summary>Request limits</summary><fieldset :disabled="pending"><label>Timeout (ms)<input v-model.number="selected.request.timeout" type="number" min="1" max="600000"></label><label>Response budget (MiB)<input v-model.number="selected.request.responseLimitMiB" type="number" min="1" max="512"></label></fieldset></details>
             <button type="button" class="secondary error remove-step" :disabled="pending" @click="removeStep">Remove step</button>
           </div>
