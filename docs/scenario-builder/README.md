@@ -46,6 +46,29 @@ JSON values keep their type when written into JSON request bodies. Target array 
 
 Editing a definition marks previous results as belonging to the previous run. They remain available as a reference; they never become the next run's input values.
 
+## Shared variables
+
+Open **Variables** in the Builder toolbar and define a name and source. In a request's **Dynamic inputs**, choose **Shared variable** and select that name. Bind it to any supported parameter, JSON field or whole body.
+
+| Source | Behavior |
+| --- | --- |
+| Static value | A typed text, number, boolean or JSON constant. Included in saved/exported definitions. |
+| Generate data | Faker/category/pattern evaluated once when first used, then reused by every consumer. A new run generates a new value. |
+| Ask at run time | One question per run, even when several parallel requests need the answer. Requires human-in-the-loop mode. |
+| Response field | A JSON Pointer from a source step's final successful response, after any response waiting finishes. Consumers automatically depend on that producer. |
+
+For example, generate `customerEmail` once, ask for `approvalCode` once and capture `customerId` from a lookup. Two parallel checks can use the same three values, plus a static JSON `metadata` object. Polling retries keep those same inputs.
+
+![Shared variable definitions](images/shared-variables.png)
+
+Variables resolve on demand: unused generators do not run and unused human variables do not ask questions. Waiting for a shared answer consumes no HTTP slot. Missing response fields fail consumers rather than reusing an old value. Variable dependencies participate in cycle validation and appear as data-carrying connections on the map.
+
+Names contain letters, digits and underscore, start with a letter/underscore and are unique ignoring case. Bindings use stable IDs, so renaming is safe. Removing a used variable is blocked until its input bindings are changed. Removing a step used as a response-variable producer is also blocked. Up to 100 variables are supported.
+
+The editor applies changes atomically; Cancel/Escape discard edits. Definitions are read only during a run. Run values are never written back to the definition or workspace backup; normal in-memory request/response history can still contain sent values. Static values are persisted, so keep credentials in **Authorize**. Variables are scoped to one run, not shared globally across scenarios, and this feature does not evaluate scripts or expand string templates.
+
+![One human prompt supplies both parallel consumers](images/shared-variable-prompt.png)
+
 ## Human in the loop
 
 Mark a field **Ask at run time**, give it a question and choose text, number, boolean or JSON. When its dependencies finish, the step pauses before sending. Enter the value and choose **Continue**.
@@ -68,7 +91,7 @@ Inputs, generated values and human answers are prepared once and reused across p
 
 Use a read endpoint to poll asynchronous work. If you enable waiting on POST/PUT/PATCH/DELETE, it repeats that request and can repeat server changes. The run review shows the HTTP method, maximum call count and interval before sending. There is no automatic retry policy for ordinary requests.
 
-Newly saved/exported definitions use format version 3, which older Builder versions reject rather than ignoring connection settings. Existing version 1/2 definitions still open and upgrade when saved. Old per-step timing is moved to one incoming connection, or a Start connection for a root request; join delays and polling behavior are preserved. The tab must remain open; browser timer throttling can lengthen waits.
+Newly saved/exported definitions use format version 4, which older Builder versions reject rather than ignoring connection settings. Existing version 1/2/3 definitions still open and upgrade when saved. Old per-step timing is moved to one incoming connection, or a Start connection for a root request; join delays and polling behavior are preserved. The tab must remain open; browser timer throttling can lengthen waits.
 
 ![Delay, response waiting and bindings in a popup beside the connection](images/connection-popup.png)
 
@@ -102,6 +125,7 @@ npm run build --prefix Necto.UI
 node Necto.UI/tests/scenario-builder.e2e.cjs
 node Necto.UI/tests/scenario-waiting.e2e.cjs
 node Necto.UI/tests/scenario-connections.e2e.cjs
+node Necto.UI/tests/scenario-variables.e2e.cjs
 ```
 
 The browser test needs Playwright and Chromium; it honors `PLAYWRIGHT_MODULE`, `PLAYWRIGHT_BROWSERS_PATH` and `NECTO_BUILDER_SCREENSHOTS`. It builds a five-step workflow through the UI and verifies actual parallel HTTP requests, a join of two JSON responses, Faker generation, fan-out, human pause/resume/cancel, saved-definition reload and mobile layout.
@@ -109,3 +133,5 @@ The browser test needs Playwright and Chromium; it honors `PLAYWRIGHT_MODULE`, `
 The waiting browser test exercises an asynchronous job: start once, delay, poll until ready, then fetch the resulting report. It also verifies attempt limits, spacing, independent progress with parallelism one, persistence, exhaustion, cancellation and mobile layout. Screenshots use `NECTO_WAIT_SCREENSHOTS`.
 
 The connection browser test verifies real mouse drags, an anchored popup, response bindings, cancellation of edits, invalid/cyclic/duplicate links, zoom, keyboard and touch alternatives, v3 persistence, and polling the target without repeating the source. Screenshots use `NECTO_CONNECTION_SCREENSHOTS`.
+
+The variables browser test authors all four sources, verifies shared generated/human values across actual concurrent HTTP requests, response-derived dependencies, JSON types, deletion guards, cancellation and fresh runs, v4 persistence without run values, and mobile layout. Screenshots use `NECTO_VARIABLE_SCREENSHOTS`.

@@ -2,6 +2,7 @@ import { applyBodyPresets, buildRequest, contextKey } from '../request-runner/re
 import { effectiveTarget } from '../workbench/target.js'
 import { describeBody } from '../workbench/body.js'
 import { applyInput, dependencies, readPointer, validateBlueprint } from './model.js'
+import { staticVariableValue } from './variables.js'
 import { generateValue } from './generation.js'
 import { abortableDelay, waitMatches } from './waiting.js'
 import { allConnections, connectionSummary, upgradeBlueprint } from './connections.js'
@@ -12,7 +13,7 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
   const edges = allConnections(blueprint)
   if (!blueprint.steps.length) throw new Error('Add at least one request.')
   const byKey = new Map(operations.map(operation => [operation.key, operation]))
-  return blueprint.steps.map(definition => {
+  const plan = blueprint.steps.map(definition => {
     const operation = byKey.get(definition.operationKey)
     if (!operation || (operation.apiId ?? 'local') !== definition.apiId || operation.method !== definition.method || operation.path !== definition.path)
       throw new Error(`${definition.label}: endpoint unavailable. Check API visibility and connections.`)
@@ -44,6 +45,8 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
     step.target = effectiveTarget(operation, configuration, draft, values)
     return step
   })
+  plan.variables = JSON.parse(JSON.stringify(blueprint.variables))
+  return plan
 }
 
 // DAG scheduler: ready nodes start immediately; a join waits for every dependency.
@@ -63,6 +66,32 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
       combined.addEventListener('abort', aborted, { once: true }); waiting.push(entry)
     })
   }
+  const variableDefinitions = new Map((plan.variables ?? []).map(variable => [variable.id, variable])), variableValues = new Map()
+  const questionIds = new Map(), reservedIds = new Set(byId.keys())
+  for (const variable of variableDefinitions.values()) { let id = 'variable:' + variable.id; while (reservedIds.has(id)) id += ':'; reservedIds.add(id); questionIds.set(variable.id, id) }
+  function resolveVariable(id) {
+    if (!variableValues.has(id)) variableValues.set(id, (async () => {
+      const variable = variableDefinitions.get(id)
+      if (!variable) throw new Error('Shared variable is unavailable.')
+      combined.throwIfAborted()
+      let value
+      if (variable.source === 'static') value = staticVariableValue(variable)
+      else if (variable.source === 'generate') value = await generate(variable)
+      else if (variable.source === 'response') {
+        const producer = byId.get(variable.stepId)
+        if (producer?.status !== 'completed') throw new Error(`Source step for ${variable.name} is not completed.`)
+        value = readPointer(producer.response?.json, variable.responsePointer)
+      } else {
+        if (!ask) throw new Error('Shared variable needs human input. Enable human-in-the-loop mode.')
+        const answers = await ask({ id: questionIds.get(variable.id), sharedVariable: true, label: 'Shared variable · ' + variable.name }, [{ location: 'variable', name: variable.name, prompt: variable.prompt, valueType: variable.valueType }], combined)
+        if (!Array.isArray(answers) || answers.length !== 1) throw new Error('Missing shared variable input.')
+        value = answers[0]
+      }
+      combined.throwIfAborted()
+      return value
+    })())
+    return variableValues.get(id)
+  }
   const run = async step => {
     step.status = 'preparing'
     let releaseSlot
@@ -77,7 +106,8 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
         step.status = 'preparing'
       }
       for (const input of step.inputs.filter(input => input.source !== 'human')) {
-        const value = input.source === 'generate' ? await generate(input) : readPointer(byId.get(input.stepId)?.response?.json, input.responsePointer)
+        if (input.source === 'variable' && variableDefinitions.get(input.variableId)?.source === 'human') step.status = 'needs-input'
+        const value = input.source === 'variable' ? await resolveVariable(input.variableId) : input.source === 'generate' ? await generate(input) : readPointer(byId.get(input.stepId)?.response?.json, input.responsePointer)
         combined.throwIfAborted()
         applyInput(step.session, step.operation, input, value)
       }
@@ -140,6 +170,7 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
     if (!running.size) break
     await Promise.race(running.values())
   }
+  variableValues.clear()
   for (const step of plan) if (step.status === 'waiting') step.status = 'skipped'
   if (failure) return { status: 'failed', error: `${failure.step.label}: ${failure.cause.message}` }
   if (signal.aborted) return { status: 'cancelled', error: 'Scenario stopped.' }
