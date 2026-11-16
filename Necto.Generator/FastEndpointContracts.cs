@@ -73,7 +73,7 @@ public sealed partial class EndpointMappingGenerator
         }
     }
 
-    private static void EmitFastEndpointRoutes(SourceProductionContext context, Endpoint[] endpoints)
+    private static void EmitFastEndpointRoutes(SourceProductionContext context, Endpoint[] endpoints, string scope)
     {
         var fastEndpoints = endpoints.Where(endpoint => endpoint.FastEndpointType is not null).ToArray();
         if (fastEndpoints.Length == 0)
@@ -173,6 +173,6 @@ public sealed partial class EndpointMappingGenerator
                 }
             }
             """);
-        context.AddSource("FastEndpointRoutes.g.cs", code.ToString());
+        context.AddSource("FastEndpointRoutes.g.cs", GeneratedScope.Isolate(code.ToString(),scope,import:false));
     }
 }
