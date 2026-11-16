@@ -12,3 +12,7 @@ test('large or deeply nested diagnostic bodies do not prevent dispatch snapshots
  assert.match(sentRequest(request('x'.repeat(250001))).body,/omitted/)
  assert.match(sentRequest(request('{"nested":'.repeat(140)+'0'+'}'.repeat(140))).body,/omitted/)
 })
+test('bounded JSON snapshots retain all dispatched array items instead of silently cutting at 1000',()=>{
+ const snapshot=sentRequest({url:new URL('https://api.test'),options:{headers:new Headers(),body:JSON.stringify(Array.from({length:1001},(_,id)=>({id})))}})
+ assert.equal(snapshot.body.length,1001);assert.equal(snapshot.body[1000].id,1000)
+})
