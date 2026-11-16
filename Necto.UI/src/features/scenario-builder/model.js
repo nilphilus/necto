@@ -73,6 +73,7 @@ export function validateBlueprint(blueprint) {
     ids.add(step.id)
     if (blueprint.version === 1 && (step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('Delay and response waiting require Scenario Builder version 2.')
     if (blueprint.version >= 3 && (step.dependsOn.length || step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('In version 3+, dependencies and timing belong to connections.')
+    if (Object.keys(step.request.bodyFieldEdits ?? {}).length) throw new Error(`${step.label}: finish entering a number at ${Object.keys(step.request.bodyFieldEdits)[0] || '(body)'} before saving or running. Use Raw JSON for an intentional invalid payload.`)
     validateWaiting(step)
     validatePayloadSnapshot(step.request); executionOptions(step.request); validateAssertions(step.request.assertions ?? [])
     if (step.request.binaryFile && !(step.request.binaryFile instanceof Blob) || step.request.formFields?.some(row => row.files && (!Array.isArray(row.files) || row.files.some(file => !(file instanceof Blob))))) throw new Error('Attach files in the browser; imported file data is not executable.')
