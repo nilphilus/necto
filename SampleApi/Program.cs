@@ -82,6 +82,7 @@ app.MapGet("/invoices/{invoiceId:int}/xml-document", Results<Ok<InvoiceXmlPayloa
 
 app.MapGet("/invoices/wrapped", () => new PagedResult<Invoice>(invoices, 500)).WithName("WrappedInvoices").WithTags("Invoices");
 app.MapPost("/invoices/constrained", ([FromBody] ConstrainedInvoice invoice) => TypedResults.Ok(invoice)).WithName("ConstrainedInvoice").WithTags("Invoices");
+app.MapGet("/invoices/related-model", () => new RelatedInvoice(42, new CustomerId(17))).WithName("RelatedInvoice").WithTags("Invoices");
 
 var summaries = new[]
 {
@@ -234,3 +235,4 @@ record InvoiceXmlPayload([property: EndpointValue("invoiceId")] int Id, string R
 
 record PagedResult<T>([property: System.Text.Json.Serialization.JsonPropertyName("items")] T[] Items, int TotalCount);
 record ConstrainedInvoice([property: System.ComponentModel.DataAnnotations.Required, System.ComponentModel.DataAnnotations.StringLength(32, MinimumLength = 3)] string Reference, [property: System.ComponentModel.DataAnnotations.Range(1, 10000)] int Quantity);
+record RelatedInvoice(int Id, [property: NectoRelation(typeof(Customer))] CustomerId CustomerId);

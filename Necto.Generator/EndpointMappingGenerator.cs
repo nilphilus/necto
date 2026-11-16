@@ -119,7 +119,7 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
             var propertyType = NonNullable(property.Type);
             yield return new Field(propertyType, JsonName(property), name,
                 ValueKey(property), "", eachItem, path.Length > (eachItem ? 1 : 0) ? path : null,
-                type.Name + property.Name, type.ToDisplayString());
+                type.Name + property.Name, type.ToDisplayString(), property.Name, ReadRelation(property), Attribute(property,"System.Text.Json.Serialization.JsonConverterAttribute") is not null);
             if (IsTypedId(propertyType))
                 continue;
             var item = propertyType is IArrayTypeSymbol { Rank: 1 } array
@@ -145,7 +145,7 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
             }
             foreach (var property in JsonProperties(type))
                 yield return new Field(NonNullable(property.Type), JsonName(property), property.Name,
-                    ValueKey(property), "body", Owner: type.ToDisplayString());
+                    ValueKey(property), "body", Owner: type.ToDisplayString(), ClrProperty: property.Name, Relation: ReadRelation(property), Opaque: Attribute(property,"System.Text.Json.Serialization.JsonConverterAttribute") is not null);
             yield break;
         }
 
@@ -365,10 +365,21 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
         context.AddSource("EndpointMappings.g.cs", GeneratedScope.Isolate(code.ToString(),scope));
     }
 
+    private static RelationHint? ReadRelation(IPropertySymbol property)
+    {
+        var attribute=Attribute(property,"Necto.NectoRelationAttribute");
+        if(attribute?.ConstructorArguments.FirstOrDefault().Value is not INamedTypeSymbol target)return null;
+        var name=attribute.ConstructorArguments.Length>1?attribute.ConstructorArguments[1].Value as string:"Id";
+        var destination=JsonProperties(target).FirstOrDefault(item=>item.Name==name);
+        if(destination is null || Attribute(destination,"System.Text.Json.Serialization.JsonConverterAttribute") is not null || !SymbolEqualityComparer.Default.Equals(NonNullable(property.Type),NonNullable(destination.Type)))return null;
+        return new(target.ToDisplayString(),destination.Name,JsonName(destination));
+    }
+
     private static string Literal(string? value) => value is null ? "null" : SymbolDisplay.FormatLiteral(value, quote: true);
 
     private sealed record Endpoint(string Id, Field[] Response, Field[] Request, string? FastEndpointType = null);
     private sealed record Field(
         ITypeSymbol Type, string? WireName, string? ConventionName, string? Key, string Location,
-        bool EachItem = false, string?[]? ObjectPath = null, string? QualifiedName = null, string? Owner = null);
+        bool EachItem = false, string?[]? ObjectPath = null, string? QualifiedName = null, string? Owner = null, string? ClrProperty = null, RelationHint? Relation = null, bool Opaque = false);
+    private sealed record RelationHint(string TargetOwner, string TargetProperty, string TargetWire);
 }

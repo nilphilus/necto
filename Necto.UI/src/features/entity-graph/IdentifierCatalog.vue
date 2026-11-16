@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
 import { readBoundedText } from '../workbench/response.js'
-import { catalogPage, catalogUses, validateEntityCatalog } from './identifierCatalog.js'
+import { catalogPage, catalogUses, catalogRelations, validateEntityCatalog } from './identifierCatalog.js'
 const props=defineProps({configuration:Object,authentication:Object,operations:Array})
 const emit=defineEmits(['open-operation'])
 const dialog=ref(null),trigger=ref(null),entries=ref([]),selected=ref(null),query=ref(''),page=ref(1),pending=ref(false),error=ref('')
@@ -34,7 +34,7 @@ function openOperation(operation){dialog.value.close();emit('open-operation',ope
   <label>Find a model or identifier<input v-model="query" type="search"></label>
   <div class="catalog-layout"><section><ul><li v-for="item in result.items" :key="item.id"><button class="secondary" type="button" :aria-pressed="selected?.id===item.id" @click="selected=item">{{item.name}} <small>{{item.kind}}</small></button></li></ul>
   <button class="secondary" type="button" :disabled="page===1" @click="page--">Previous</button><span> {{page}} / {{Math.max(1,Math.ceil(result.total/25))}} </span><button class="secondary" type="button" :disabled="page*25>=result.total" @click="page++">Next</button></section>
-  <section v-if="selected"><h4>{{selected.name}}</h4><p v-if="!uses.length">No unambiguous operations in the current catalog.</p><ul><li v-for="(use,index) in uses" :key="index"><strong>{{use.direction==='response'?'Available from':'Accepted by'}}</strong> · {{use.location}} <code>{{use.pathLabel||'(whole value)'}}</code><button class="secondary" type="button" @click="openOperation(use.operation)">{{use.operation.name}}</button></li></ul></section></div>
+  <section v-if="selected"><h4>{{selected.name}}</h4><details v-if="catalogRelations(selected, entries).length" open><summary>Entity relations</summary><ul><li v-for="relation in catalogRelations(selected, entries)" :key="relation.property + relation.targetId"><p>{{relation.explanation}}</p><button class="secondary" type="button" @click="selected=relation.target">Explore {{relation.target.name}}</button></li></ul></details><p v-if="!uses.length">No unambiguous operations in the current catalog.</p><ul><li v-for="(use,index) in uses" :key="index"><strong>{{use.direction==='response'?'Available from':'Accepted by'}}</strong> · {{use.location}} <code>{{use.pathLabel||'(whole value)'}}</code><button class="secondary" type="button" @click="openOperation(use.operation)">{{use.operation.name}}</button></li></ul></section></div>
  </dialog></Teleport>
 </template>
 <style scoped>

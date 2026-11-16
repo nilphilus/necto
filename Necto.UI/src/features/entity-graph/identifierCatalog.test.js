@@ -10,3 +10,11 @@ test('identifier navigation is scoped, unambiguous and paginated',()=>{
 })
 
 test('malformed uses fail before rendering',()=>{assert.throws(()=>validateEntityCatalog([{id:"x",name:"x",kind:"model",uses:[{}]}]),/Unsupported/);assert.deepEqual(validateEntityCatalog([]),[])})
+
+test('relations only expose validated targets and remain bounded',async()=>{
+ const {catalogRelations}=await import('./identifierCatalog.js')
+ const target={id:'model:Customer',kind:'model',name:'Customer'}
+ const relation={targetId:target.id,property:'customerId',targetProperty:'id',match:'explicit',explanation:'Customer identifier'}
+ assert.equal(catalogRelations({relations:[relation,{}]},[target]).length,1)
+ assert.equal(catalogRelations({relations:[relation]},[]).length,0)
+})
