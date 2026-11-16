@@ -19,3 +19,20 @@ test('raw edits and discriminator variants retain the correct schema selection',
  const schemas={business:{type:'object',properties:{company:{type:'string'}}},person:{type:'object',properties:{name:{type:'string'}}}},op={...operation,resolve:value=>value?.$ref?schemas[value.$ref]:value},discriminated={discriminator:{propertyName:'kind',mapping:{business:'business',person:'person'}},oneOf:[{$ref:'business'},{$ref:'person'}]}
  assert.deepEqual(JSON.parse(JSON.stringify(variantTemplate(op,discriminated,1))),{name:'string',kind:'person'});assert.equal(inferVariant(op,discriminated,{kind:'person'},0),1)
 })
+
+test('unfinished number edits never become null and block saving until resolved',async()=>{
+ const {editBodyNumber}=await import('./bodySchema.js'),{newBlueprint,newStep}=await import('./model.js'),{savedBlueprint}=await import('./useBuilder.js')
+ const operation={key:'POST /numbers',name:'Numbers',method:'POST',path:'/numbers',resolve:value=>value,requestBody:{content:{'application/json':{schema:{type:'object'}}}}}
+ const step=newStep(operation,{fields:{},body:'{"count":7}'}),blueprint={...newBlueprint(),steps:[step]}
+ editBodyNumber(step,operation,['count'],'');assert.equal(JSON.parse(step.request.body).count,7);assert.throws(()=>savedBlueprint(blueprint),/finish entering a number/)
+ editBodyNumber(step,operation,['count'],'0');assert.equal(JSON.parse(savedBlueprint(blueprint).steps[0].request.body).count,0)
+ editBodyNumber(step,operation,['count'],'1.5',true);assert.throws(()=>savedBlueprint(blueprint),/finish entering a number/)
+})
+test('removing array entries rebases pending numeric edits without silently discarding other rows',async()=>{
+ const {editBodyNumber}=await import('./bodySchema.js'),s=step()
+ editBodyNumber(s,operation,['items',2,'id'],'')
+ removeArrayItem(s,operation,['items'],0)
+ assert.deepEqual(s.request.bodyFieldEdits,{'/items/1/id':''})
+ sourceFor(s,operation,['items',1,'id'],'generate',{type:'integer'})
+ assert.equal(s.request.bodyFieldEdits,undefined)
+})
