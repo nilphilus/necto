@@ -15,20 +15,33 @@ export function schemaView(operation, raw, variant=0, seen=new Set()) {
 }
 export function bodyAt(step,path) { try{return readPointer(JSON.parse(step.request.body),pointer(path))}catch{return undefined} }
 export function bindingAt(step,path) { return step.inputs.find(input=>input.location==='body'&&input.pointer===pointer(path)) }
-export function writeBody(step,operation,path,value) { applyInput(step.request,operation,{location:'body',pointer:pointer(path)},value) }
+export function clearBodyEdits(step,path=[]) {
+ if(!step.request.bodyFieldEdits)return
+ for(const key of Object.keys(step.request.bodyFieldEdits))if(prefix(path,pointerParts(key))||prefix(pointerParts(key),path))delete step.request.bodyFieldEdits[key]
+ if(!Object.keys(step.request.bodyFieldEdits).length)delete step.request.bodyFieldEdits
+}
+export function writeBody(step,operation,path,value) { applyInput(step.request,operation,{location:'body',pointer:pointer(path)},value);clearBodyEdits(step,path) }
+export function editBodyNumber(step,operation,path,text,integer=false) {
+ const value=Number(text)
+ if(text.trim()===''||!Number.isFinite(value)||integer&&!Number.isInteger(value)) {
+  (step.request.bodyFieldEdits??={})[pointer(path)]=text
+  return
+ }
+ writeBody(step,operation,path,value)
+}
 export function sourceFor(step,operation,path,source,schema) {
   const overlapping=step.inputs.filter(input=>input.location==='body'&&(prefix(path,pointerParts(input.pointer))||prefix(pointerParts(input.pointer),path)))
   const next=step.inputs.filter(input=>!overlapping.includes(input))
   if(source!=='static')next.push({location:'body',pointer:pointer(path),source,...(source==='response'?{stepId:'',responsePointer:''}:source==='variable'?{variableId:''}:source==='generate'?{generator:schema.format==='email'?'email':schema.type==='integer'||schema.type==='number'?'integer':schema.type==='boolean'?'boolean':'uuid',pattern:'INV-[A-Z]{3}-\\d{4}'}:source==='human'?{prompt:'Enter '+(path.at(-1)??'request body'),valueType:schema.type==='number'||schema.type==='integer'?'number':schema.type==='boolean'?'boolean':schema.type==='object'||schema.type==='array'?'json':'text'}:{})})
   if(source!=='static'&&bodyAt(step,path)===undefined)writeBody(step,operation,path,schemaTemplate(operation,schema))
-  step.inputs=next
+  step.inputs=next;clearBodyEdits(step,path)
 }
 export function removeBodyField(step,path) {
   const parts=[...path],key=parts.pop()
   const body=JSON.parse(step.request.body),parent=parts.length?readPointer(body,pointer(parts)):body
   if(Array.isArray(parent))throw new Error('Use Remove item for array entries.')
   if(parent&&typeof parent==='object')delete parent[key]
-  step.request.body=JSON.stringify(body,null,2)
+  step.request.body=JSON.stringify(body,null,2);clearBodyEdits(step,path)
   step.inputs=step.inputs.filter(input=>input.location!=='body'||!prefix(path,pointerParts(input.pointer)))
 }
 export function removeArrayItem(step,operation,path,index) {
@@ -43,7 +56,17 @@ export function removeArrayItem(step,operation,path,index) {
     }
     inputs.push(input)
   }
+  const edits={}
+  for(const [key,text] of Object.entries(step.request.bodyFieldEdits??{})) {
+   const target=pointerParts(key)
+   if(prefix(path,target)&&target.length>path.length&&/^(0|[1-9]\d*)$/.test(target[path.length])) {
+    const item=Number(target[path.length]);if(item===index)continue
+    if(item>index)target[path.length]=String(item-1)
+   }
+   edits[pointer(target)]=text
+  }
   writeBody(step,operation,path,items);step.inputs=inputs
+  if(Object.keys(edits).length)step.request.bodyFieldEdits=edits
 }
 
 export function inferVariant(operation,raw,value,stored) {

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch, inject } from 'vue'
-import { bodyAt, bindingAt, writeBody, sourceFor, schemaView, removeBodyField, removeArrayItem, pointer, prefix, inferVariant, BODY_VALUE, variantTemplate } from './bodySchema.js'
+import { bodyAt, bindingAt, writeBody, sourceFor, schemaView, removeBodyField, removeArrayItem, pointer, prefix, inferVariant, BODY_VALUE, variantTemplate, editBodyNumber } from './bodySchema.js'
 import { pointerParts, readPointer } from './pointers.js'
 import { schemaTemplate } from '../request-runner/schemaTemplate.js'
 import { generators } from './generation.js'
@@ -43,7 +43,7 @@ function changeVariant(index,element){attempt(()=>{if(!window.confirm('Replace t
    <template v-if="source==='static'"><small v-if="value===null">JSON null</small>
     <select v-if="schema.enum" :value="JSON.stringify(value)" :aria-label="'Value for '+name" @change="set(JSON.parse($event.target.value))"><option v-if="value===undefined" value="" disabled>Choose value</option><option v-for="item in schema.enum" :key="JSON.stringify(item)" :value="JSON.stringify(item)">{{typeof item==='object'?JSON.stringify(item):String(item)}}</option></select>
     <select v-else-if="type==='boolean'" :value="value===undefined?'':JSON.stringify(value)" :aria-label="'Value for '+name" @change="set(JSON.parse($event.target.value))"><option value="" disabled>Not set</option><option value="true">true</option><option value="false">false</option><option v-if="nullable" value="null">null</option></select>
-    <input v-else-if="type==='number'||type==='integer'" :value="value??''" type="number" :step="type==='integer'?1:'any'" :aria-label="'Value for '+name" @change="event=>set(event.target.value===''?null:Number(event.target.value))">
+    <input v-else-if="type==='number'||type==='integer'" :value="step.request.bodyFieldEdits?.[pointer(path)]??value??''" type="number" :step="type==='integer'?1:'any'" :aria-label="'Value for '+name" @input="attempt(()=>editBodyNumber(step,operation,path,$event.target.value,type==='integer'))">
     <input v-else-if="type==='string'" :value="value??''" :type="schema.writeOnly||schema.format==='password'?'password':'text'" :aria-label="'Value for '+name" @input="set($event.target.value)">
     <button v-if="['object','array'].includes(type)&&value===null" type="button" class="secondary" @click="attempt(()=>set(schemaTemplate(operation,schema)))">Create {{type}}</button><button v-if="nullable&&value!==null" type="button" class="secondary" @click="set(null)">Set null</button>
    </template>
@@ -67,6 +67,7 @@ function changeVariant(index,element){attempt(()=>{if(!window.confirm('Replace t
    <template v-else-if="type==='object'"><textarea v-model="jsonText" :disabled="disabled" :aria-label="'JSON value for '+name" rows="3" @change="attempt(()=>set(JSON.parse(jsonText)))" /></template>
   </div>
   <div v-if="source==='static'&&open&&['object','array'].includes(type)&&value!==null" class="punctuation closing">{{type==='object'?'}':']'}}{{last?'':','}}</div>
+  <p v-if="Object.hasOwn(step.request.bodyFieldEdits??{},pointer(path))" class="error" role="alert">Enter {{type==='integer'?'an integer':'a number'}} before saving or running. Clearing the input does not mean JSON null.</p>
   <p v-if="error" class="error" role="alert">{{error}}</p>
  </section>
 </template>
