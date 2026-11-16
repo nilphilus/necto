@@ -2,7 +2,7 @@
 import { computed, useId } from 'vue'
 import { pointerHints } from './pointerHints.js'
 import { generators } from './generation.js'
-const props = defineProps({ step: Object, operation: Object, steps: Array, operations: Array, results: Array, disabled: Boolean })
+const props = defineProps({ step: Object, operation: Object, steps: Array, operations: Array, results: Array, disabled: Boolean, fixedSource: String })
 const prefix = useId()
 function hints(input) {
   const step = props.steps.find(step => step.id === input.stepId)
@@ -16,8 +16,8 @@ function sourceChanged(input) {
 }
 function add() {
   const target = targets.value[0]
-  props.step.inputs.push({ location: target?.in ?? 'body', name: target?.name ?? '', pointer: '', source: 'human',
-    prompt: 'Enter ' + (target?.name ?? 'a value'), valueType: 'text', generator: 'uuid', pattern: 'INV-[A-Z]{3}-\\d{4}', stepId: '', responsePointer: '' })
+  props.step.inputs.push({ location: target?.in ?? 'body', name: target?.name ?? '', pointer: '', source: props.fixedSource ? 'response' : 'human',
+    prompt: 'Enter ' + (target?.name ?? 'a value'), valueType: 'text', generator: 'uuid', pattern: 'INV-[A-Z]{3}-\\d{4}', stepId: props.fixedSource ?? '', responsePointer: '' })
 }
 function setTarget(input, value) {
   if (value === 'body') { input.location = 'body'; input.pointer ??= ''; return }
@@ -33,9 +33,9 @@ function setTarget(input, value) {
       <div class="input-row"><label>Target<select aria-label="Target" :value="input.location === 'body' ? 'body' : targets.findIndex(target => target.in === input.location && target.name === input.name)" @change="setTarget(input, $event.target.value)"><option v-for="(target, i) in targets" :key="i" :value="i">{{ target.in }} · {{ target.name }}</option><option v-if="operation?.requestBody" value="body">Body</option></select></label>
         <button type="button" class="remove-input secondary" :aria-label="'Remove input ' + (index + 1)" @click="step.inputs.splice(index, 1)">×</button></div>
       <label v-if="input.location === 'body'">Target JSON Pointer<input aria-label="Target JSON Pointer" v-model="input.pointer" placeholder="/customer/id · empty = whole body"><small>For text/XML, leave empty to replace the whole body.</small></label>
-      <label>Value source<select aria-label="Value source" v-model="input.source" @change="sourceChanged(input)"><option value="response">Earlier response</option><option value="generate">Generate data</option><option value="human">Ask at run time</option></select></label>
+      <label v-if="!fixedSource">Value source<select aria-label="Value source" v-model="input.source" @change="sourceChanged(input)"><option value="response">Earlier response</option><option value="generate">Generate data</option><option value="human">Ask at run time</option></select></label>
       <template v-if="input.source === 'response'">
-        <label>Source step<select aria-label="Source step" v-model="input.stepId"><option value="" disabled>Choose a step</option><option v-for="other in steps.filter(other => other.id !== step.id)" :key="other.id" :value="other.id">{{ other.label }}</option></select></label>
+        <label v-if="!fixedSource">Source step<select aria-label="Source step" v-model="input.stepId"><option value="" disabled>Choose a step</option><option v-for="other in steps.filter(other => other.id !== step.id)" :key="other.id" :value="other.id">{{ other.label }}</option></select></label>
         <label>Response JSON Pointer<input aria-label="Response JSON Pointer" :list="prefix + '-pointer-' + index" v-model="input.responsePointer" placeholder="/items/0/id · empty = entire JSON"><small>Choose a suggested path or enter your own. No inferred mapping required.</small></label><datalist :id="prefix + '-pointer-' + index"><option v-for="path in hints(input)" :key="path" :value="path" /></datalist>
       </template>
       <template v-else-if="input.source === 'generate'">

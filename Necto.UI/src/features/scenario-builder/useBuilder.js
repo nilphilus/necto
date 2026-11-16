@@ -6,12 +6,16 @@ import { executionOptions } from '../workbench/executionOptions.js'
 import { newBlueprint, validateBlueprint, parseHuman } from './model.js'
 import { prepareBlueprint, executeBlueprint } from './runner.js'
 import { waitOptions } from './waiting.js'
+import { allConnections, hasTiming, upgradeBlueprint } from './connections.js'
 
 const clone = value => JSON.parse(JSON.stringify(value))
 export function savedBlueprint(draft) {
-  const saved = clone({ format: draft.format, version: 2, id: draft.id, name: draft.name.trim(), concurrency: draft.concurrency,
+  validateBlueprint(draft)
+  draft = upgradeBlueprint(draft)
+  const saved = clone({ format: draft.format, version: 3, id: draft.id, name: draft.name.trim(), concurrency: draft.concurrency,
+    connections: allConnections(draft).filter(edge => edge.from !== null || hasTiming(edge)).map(edge => ({ from: edge.from, to: edge.to, ...waitOptions(edge) })),
     steps: draft.steps.map(step => ({ id: step.id, label: step.label.trim(), operationKey: step.operationKey, apiId: step.apiId, method: step.method, path: step.path,
-      ...waitOptions(step), dependsOn: [...step.dependsOn], inputs: step.inputs.map(input => ({ location: input.location,
+      dependsOn: [], inputs: step.inputs.map(input => ({ location: input.location,
         ...(input.location === 'body' ? { pointer: input.pointer } : { name: input.name }), source: input.source,
         ...(input.source === 'response' ? { stepId: input.stepId, responsePointer: input.responsePointer } : input.source === 'human' ? { prompt: input.prompt, valueType: input.valueType } : { generator: input.generator, ...(input.generator === 'regex' ? { pattern: input.pattern } : {}) }) })),
       request: { fields: { ...step.request.fields }, body: step.request.body, ...payloadSnapshot(step.request), ...executionOptions(step.request),
@@ -60,7 +64,7 @@ export function useBuilder(configuration) {
     persist([...saved.value.filter(item => item.id !== blueprint.id), blueprint])
     notice.value = 'Saved in this browser. Run inputs and responses are not included.'
   }
-  function open(blueprint) { if (pending.value) return; clearRun(); draft.value = { ...clone(blueprint), version: 2 }; notice.value = ''; error.value = '' }
+  function open(blueprint) { if (pending.value) return; clearRun(); draft.value = upgradeBlueprint(clone(blueprint)); notice.value = ''; error.value = '' }
   function fresh() { open(newBlueprint()) }
   function remove() { if (pending.value) return; persist(saved.value.filter(item => item.id !== draft.value.id)); fresh() }
   function ask(step, inputs, signal) {

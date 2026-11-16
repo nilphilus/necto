@@ -3,10 +3,13 @@ import { effectiveTarget } from '../workbench/target.js'
 import { describeBody } from '../workbench/body.js'
 import { applyInput, dependencies, readPointer, validateBlueprint } from './model.js'
 import { generateValue } from './generation.js'
-import { abortableDelay, waitMatches, waitOptions } from './waiting.js'
+import { abortableDelay, waitMatches } from './waiting.js'
+import { allConnections, connectionSummary, upgradeBlueprint } from './connections.js'
 
 export function prepareBlueprint(blueprint, { operations, configuration, createSession, valuesFor }) {
   validateBlueprint(blueprint)
+  blueprint = upgradeBlueprint(blueprint)
+  const edges = allConnections(blueprint)
   if (!blueprint.steps.length) throw new Error('Add at least one request.')
   const byKey = new Map(operations.map(operation => [operation.key, operation]))
   return blueprint.steps.map(definition => {
@@ -26,7 +29,7 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
         !operation.parameters.some(parameter => parameter.in === input.location && parameter.name === input.name)) throw new Error(`${definition.label}: input target is no longer present in the API.`)
     }
     const step = { id: definition.id, label: definition.label, operation, session, values,
-      ...waitOptions(definition), inputs: JSON.parse(JSON.stringify(definition.inputs)), dependencies: dependencies(definition), status: 'waiting', error: '' }
+      entryPolicies: edges.filter(edge => edge.to === definition.id).map(edge => ({ ...edge, label: connectionSummary(edge, blueprint.steps) })), inputs: JSON.parse(JSON.stringify(definition.inputs)), dependencies: dependencies(definition, blueprint), status: 'waiting', error: '' }
     // Check every static request before sending anything. Dynamic values are checked again at dispatch.
     const draft = { ...session, fields: { ...session.fields } }
     try {
@@ -63,11 +66,14 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
   const run = async step => {
     step.status = 'preparing'
     let releaseSlot
+    const policies = step.entryPolicies ?? [step]
+    const delayMs = Math.max(0, ...policies.map(policy => policy.delayMs ?? 0))
+    const conditions = policies.filter(policy => policy.waitFor)
     try {
       combined.throwIfAborted()
-      if (step.delayMs) {
-        step.status = 'delaying'; step.nextAttemptAt = Date.now() + step.delayMs
-        await sleep(step.delayMs, combined); combined.throwIfAborted(); step.nextAttemptAt = undefined
+      if (delayMs) {
+        step.status = 'delaying'; step.nextAttemptAt = Date.now() + delayMs
+        await sleep(delayMs, combined); combined.throwIfAborted(); step.nextAttemptAt = undefined
         step.status = 'preparing'
       }
       for (const input of step.inputs.filter(input => input.source !== 'human')) {
@@ -86,7 +92,7 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
       }
       combined.throwIfAborted()
       step.attempts = []
-      const maximum = 1 + (step.waitFor?.retryCount ?? 0)
+      const maximum = Math.max(1, ...conditions.map(policy => policy.waitFor.retryCount + 1))
       for (let attempt = 1; attempt <= maximum; attempt++) {
         step.attempt = attempt; step.maxAttempts = maximum; step.status = 'queued'
         const permit = acquire()
@@ -103,15 +109,18 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
         const record = { attempt, status: response?.status, elapsed: response?.elapsed, matched: false }
         step.attempts.push(record)
         if (!response || !response.ok && !response.assertions?.some(check => check.kind === 'status' && check.passed)) throw new Error(response ? `HTTP ${response.status} ${response.statusText ?? ''}` : step.session.error || 'No response received.')
-        const matched = !step.waitFor || waitMatches(response, step.waitFor)
+        const unmet = conditions.filter(policy => !waitMatches(response, policy.waitFor))
+        const matched = !unmet.length
         record.matched = matched
         if (matched) {
           if (response.assertions?.some(check => !check.passed)) throw new Error('Response checks failed.')
           break
         }
-        if (attempt === maximum) throw new Error(`Response condition at ${step.waitFor.pointer || '(root)'} was not met after ${maximum} attempt${maximum === 1 ? '' : 's'}.`)
-        step.status = 'retry-wait'; step.nextAttemptAt = Date.now() + step.waitFor.intervalMs
-        await sleep(step.waitFor.intervalMs, combined); combined.throwIfAborted(); step.nextAttemptAt = undefined
+        const exhausted = unmet.find(policy => attempt > policy.waitFor.retryCount)
+        if (exhausted) throw new Error(`Response condition at ${exhausted.waitFor.pointer || '(root)'}${exhausted.label ? ' on ' + exhausted.label : ''} was not met after ${attempt} attempt${attempt === 1 ? '' : 's'}.`)
+        const intervalMs = Math.max(...unmet.map(policy => policy.waitFor.intervalMs))
+        step.status = 'retry-wait'; step.nextAttemptAt = Date.now() + intervalMs
+        await sleep(intervalMs, combined); combined.throwIfAborted(); step.nextAttemptAt = undefined
       }
       step.status = 'completed'
     } catch (cause) {

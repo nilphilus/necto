@@ -10,7 +10,7 @@ import { initialPayload, resolveRequestValues } from '../request-runner/request.
 import { exportWorkspace, inspectWorkspace } from '../workbench/workspace.js'
 import { notifyWorkspaceImport } from '../workbench/workspaceUpdates.js'
 const operation = id => ({ key: id, apiId: 'local', name: id, method: 'GET', path: '/' + id, parameters: [], tags: ['Test'], servers: [], resolve: value => value })
-const draft = (...ids) => ({ ...newBlueprint(), name: 'Fan out and join', steps: ids.map(id => ({ ...newStep(operation(id), { fields: {}, body: '' }), id })) })
+const draft = (...ids) => ({ ...newBlueprint(), version: 2, name: 'Fan out and join', steps: ids.map(id => ({ ...newStep(operation(id), { fields: {}, body: '' }), id })) })
 const prepared = blueprint => blueprint.steps.map(step => ({ id: step.id, label: step.label, operation: operation(step.id), session: { fields: {}, body: '{}' }, values: new Map(), inputs: step.inputs, dependencies: dependencies(step), status: 'waiting' }))
 const deferred = () => { let resolve; const promise = new Promise(done => resolve = done); return { promise, resolve } }
 const tick = () => new Promise(resolve => setImmediate(resolve))

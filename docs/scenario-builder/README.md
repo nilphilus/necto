@@ -9,18 +9,24 @@ Build a workflow, not just a replay of a request chain.
 
 Open **Scenarios → Scenario Builder**. The existing **Save Scenario** remains the quick way to replay a linear chain.
 
-![Scenario map and selected response](images/scenario-builder-completed.png)
+![Scenario map and selected response](images/connection-map.png)
 
 ## Build a workflow
 
 1. **Add request**, search any endpoint, and give the step a useful name.
-2. Edit **Request · static inputs** for fixed parameters and the request body. Current presets and API server settings also apply when you review/run.
-3. Add a **Dynamic input** and choose its target: path/query/header parameter, a JSON body field, or the whole body.
-4. Choose **Earlier response**, **Generate data** or **Ask at run time**.
-5. Use **Run after** to add an ordering dependency without copying a value. A response input adds its own dependency automatically.
-6. **Save**, then **Review & run** to inspect API targets and choose parallelism/human-in-the-loop mode before sending.
+2. Edit **Request · static inputs** for fixed parameters and the request body. Generated values and human prompts remain in the request's **Dynamic inputs**.
+3. **Drag the output handle ● to another request's input handle** to connect them. You can also tap/click an output and then an input, or use **Connections → Add without dragging** with the keyboard.
+4. Click **⚙ on the line** to open its settings next to that connection. Configure Delay, Wait for, and response values to copy from the source into the target. Choose a target parameter/JSON body path and a source response JSON Pointer; inferred mappings are not required.
+5. Choose **Apply connection** to save popup edits. **Cancel**, Escape and clicking outside discard those edits. The connection created by a drag remains; use **Remove connection** to delete it. Removing a connection also removes its response bindings after confirmation.
+6. **Save**, then **Review & run** to inspect targets, incoming policies and parallelism before sending.
 
-Independent steps start together. A step waits for *all* its dependencies. Solid arrows carry response data; dashed arrows only impose ordering. Cycles, missing endpoints and overlapping input targets prevent a run. Static request preparation is checked for every step before any request is sent; response values are resolved only after their source succeeds. Dynamic inputs take precedence over matching presets.
+A connection **A → B** waits for A, then governs request **B**. Delay happens before B's first request; Wait for checks B's response and repeats B if needed. It never replays A. Solid lines carry response values; dashed lines only impose ordering. A clock icon identifies a connection with timing settings. The **Start → request** line lets you configure an independent/root request; resetting that line clears its settings without deleting the request.
+
+At a join, all source requests must finish before the target starts. Incoming delays overlap, so the longest delay applies. All incoming response conditions must match the *same target response*, using one shared target request per attempt. An unmet condition fails when its own retry count is exhausted; the next interval is the longest interval among currently unmet conditions. A condition is checked on every attempt, even if it matched an earlier response.
+
+Cycles, self-links, missing endpoints and conflicting input targets are rejected. Dragging an existing connection opens its settings instead of creating a duplicate. Escape cancels an unfinished drag. Use zoom or scroll the map to reach another request; the connection list is an alternative on small screens. During a run, connections can be inspected but not edited.
+
+Static request preparation is checked for every step before sending. Each run uses fresh responses; missing bound values fail the target rather than reusing old IDs. Explicit dynamic inputs take precedence over presets. Existing authentication, serialization, request limits and response preview are reused.
 
 For example:
 
@@ -50,7 +56,7 @@ Several steps may ask questions independently. Waiting for an answer does not oc
 
 ## Delay and response-value waiting
 
-In a step's **Timing & response waiting** panel:
+Click the connection's gear/clock icon to open **Timing & response waiting**. These settings belong to that connection and govern its target request:
 
 - **Delay:** wait once after dependencies finish and before preparing inputs or asking a human, then send the first request. Configure 0–600000 ms.
 - **Wait for response value:** choose a JSON Pointer, expected value and type, retry count and interval. For example, poll `/jobs/{id}` until `/state` equals the text `Completed`, then let dependent requests use that matching response.
@@ -62,9 +68,9 @@ Inputs, generated values and human answers are prepared once and reused across p
 
 Use a read endpoint to poll asynchronous work. If you enable waiting on POST/PUT/PATCH/DELETE, it repeats that request and can repeat server changes. The run review shows the HTTP method, maximum call count and interval before sending. There is no automatic retry policy for ordinary requests.
 
-Newly saved/exported definitions use format version 2, which older Builder versions reject rather than ignoring timing settings. Existing version 1 definitions still open and upgrade when saved. The tab must remain open; browser timer throttling can lengthen waits.
+Newly saved/exported definitions use format version 3, which older Builder versions reject rather than ignoring connection settings. Existing version 1/2 definitions still open and upgrade when saved. Old per-step timing is moved to one incoming connection, or a Start connection for a root request; join delays and polling behavior are preserved. The tab must remain open; browser timer throttling can lengthen waits.
 
-![Delay and response wait configuration](images/wait-controls.png)
+![Delay, response waiting and bindings in a popup beside the connection](images/connection-popup.png)
 
 See [production workflow recommendations](production-workflows.md) for useful next steps beyond fixed delays and equality polling.
 
@@ -95,8 +101,11 @@ node --test Necto.UI/src/features/*/*.test.js
 npm run build --prefix Necto.UI
 node Necto.UI/tests/scenario-builder.e2e.cjs
 node Necto.UI/tests/scenario-waiting.e2e.cjs
+node Necto.UI/tests/scenario-connections.e2e.cjs
 ```
 
 The browser test needs Playwright and Chromium; it honors `PLAYWRIGHT_MODULE`, `PLAYWRIGHT_BROWSERS_PATH` and `NECTO_BUILDER_SCREENSHOTS`. It builds a five-step workflow through the UI and verifies actual parallel HTTP requests, a join of two JSON responses, Faker generation, fan-out, human pause/resume/cancel, saved-definition reload and mobile layout.
 
 The waiting browser test exercises an asynchronous job: start once, delay, poll until ready, then fetch the resulting report. It also verifies attempt limits, spacing, independent progress with parallelism one, persistence, exhaustion, cancellation and mobile layout. Screenshots use `NECTO_WAIT_SCREENSHOTS`.
+
+The connection browser test verifies real mouse drags, an anchored popup, response bindings, cancellation of edits, invalid/cyclic/duplicate links, zoom, keyboard and touch alternatives, v3 persistence, and polling the target without repeating the source. Screenshots use `NECTO_CONNECTION_SCREENSHOTS`.
