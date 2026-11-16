@@ -1,4 +1,5 @@
 import { executionOptions } from './executionOptions.js'
+import { validateBlueprint } from '../scenario-builder/model.js'
 import { validateScenario } from '../scenarios/scenario.js'
 import { normalizeConnection } from '../external-apis/connections.js'
 import { validatePayloadSnapshot } from './body.js'
@@ -18,7 +19,7 @@ function safeUrl(value) {
   }
 }
 const allowed = (key) =>
-  /^necto:(scenarios|samples|request-samples|environments|external-apis|servers):/.test(key)
+  /^necto:(scenario-builder|scenarios|samples|request-samples|environments|external-apis|servers):/.test(key)
 function scrub(value, includeBodies, key = '') {
   if (sensitiveName(key)) return undefined
   if (Array.isArray(value))
@@ -94,7 +95,11 @@ export function inspectWorkspace(text, storage) {
     )
       throw new Error('Invalid or duplicate workspace entry.')
     const value = entry.value
-    if (entry.key.startsWith('necto:scenarios:')) {
+    if (entry.key.startsWith('necto:scenario-builder:')) {
+      if (value.version !== 1 || !Array.isArray(value.blueprints) || value.blueprints.length > 100) throw new Error('Invalid builder collection.')
+      value.blueprints.forEach(validateBlueprint)
+      if (new Set(value.blueprints.map(item => item.id)).size !== value.blueprints.length) throw new Error('Duplicate builder IDs.')
+    } else if (entry.key.startsWith('necto:scenarios:')) {
       if (value.version !== 1 || !Array.isArray(value.scenarios))
         throw new Error('Invalid scenario collection.')
       value.scenarios.forEach(validateScenario)

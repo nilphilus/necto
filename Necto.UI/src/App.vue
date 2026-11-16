@@ -25,6 +25,7 @@ import ExternalApiSettings from './features/external-apis/ExternalApiSettings.vu
 import EndpointGraph from './features/endpoint-graph/EndpointGraph.vue'
 import EntityGraph from './features/entity-graph/EntityGraph.vue'
 import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
+import ScenarioBuilder from './features/scenario-builder/ScenarioBuilder.vue'
 import { useScenarios } from './features/scenarios/useScenarios.js'
 import { rememberBinding, snapshotScenario } from './features/scenarios/scenario.js'
 import { readRoute, routePath } from './features/routing/routes.js'
@@ -48,6 +49,8 @@ const externalPending = computed(() => showExternalApis.value && [...externalSta
 const selectedChain = ref([])
 const inspectedScenarioStep = ref(null)
 const scenarioPanel = ref(null)
+const builderPending = ref(false)
+const builderVisited = ref(false)
 const scenarioStore = useScenarios(configuration)
 const { scenarios, state: scenarioState, runs: scenarioRuns, pending: scenarioPending, error: scenarioError } = scenarioStore
 const scenarioName = ref('')
@@ -63,7 +66,8 @@ const scenarioDirty = computed(() => {
 })
 const overwriteScenario = computed(() => scenarios.value.find(scenario =>
   scenario.id === editingScenarioId.value && scenario.name === scenarioName.value.trim()))
-const scenarioBusy = computed(() => scenarioPending.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
+const workspaceLocked = computed(() => scenarioPending.value || builderPending.value)
+const scenarioBusy = computed(() => workspaceLocked.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
 const presets = ref(new Map())
 const presetColors = ref(new Map())
 const catalogMedia = matchMedia('(max-width: 760px)')
@@ -92,6 +96,7 @@ const presetNameInput = ref(null)
 const presetFields = ref(null)
 const presetDeleteControl = ref(null)
 const graphView = ref('')
+watch(graphView, view => { if (view === 'builder') builderVisited.value = true })
 const basePath = new URL(document.baseURI).pathname
 const historyEntries = new Map()
 const pendingRoute = shallowRef(null)
@@ -493,6 +498,7 @@ function resetChain(steps) {
 }
 
 function navigateView(view) {
+  if (workspaceLocked.value) return
   if (view === graphView.value && !routeError.value && !pendingRoute.value) return
   if (!view && inspectedScenarioStep.value !== null && editingScenarioId.value) {
     enterScenario(selectedChain.value, editingScenarioId.value, scenarioName.value, inspectedScenarioStep.value)
@@ -536,6 +542,7 @@ function selectChainStep(index) {
 }
 
 function restoreRoute() {
+  if (builderPending.value) { writeRoute({ view: 'builder' }, { replace: true }); return }
   const route = readRoute(window.location.pathname, basePath)
   activeRoute = route
   graphView.value = route.view
@@ -715,16 +722,16 @@ function removeScenario(id) {
   <main class="app">
     <header class="hero" :inert="settingsOpen">
       <nav v-if="spec" class="view-navigation" aria-label="Workspace views">
-        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="!graphView" @click="navigateView('')">API</button>
-        <button v-if="configuration?.agentUrl" type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'agent'" @click="navigateView('agent')">Bring your agent</button>
-        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'scenarios'" @click="navigateView('scenarios')">Scenarios</button>
-        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'entities'" @click="navigateView('entities')">Entity graph</button>
-        <button type="button" class="secondary" :disabled="scenarioPending" :aria-pressed="graphView === 'endpoints'" @click="navigateView('endpoints')">Endpoint graph</button>
+        <button type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="!graphView" @click="navigateView('')">API</button>
+        <button v-if="configuration?.agentUrl" type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="graphView === 'agent'" @click="navigateView('agent')">Bring your agent</button>
+        <button type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="graphView === 'scenarios' || graphView === 'builder'" @click="navigateView('scenarios')">Scenarios</button>
+        <button type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="graphView === 'entities'" @click="navigateView('entities')">Entity graph</button>
+        <button type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="graphView === 'endpoints'" @click="navigateView('endpoints')">Endpoint graph</button>
       </nav>
       <label v-if="spec" class="mobile-workspace-view">
         <span class="sr-only">Workspace view</span>
-        <select :value="graphView" :disabled="scenarioPending" @change="navigateView($event.target.value)">
-          <option value="">API</option><option v-if="configuration?.agentUrl" value="agent">Bring your agent</option><option value="scenarios">Scenarios</option><option value="entities">Entity graph</option><option value="endpoints">Endpoint graph</option>
+        <select :value="graphView" :disabled="workspaceLocked" @change="navigateView($event.target.value)">
+          <option value="">API</option><option v-if="configuration?.agentUrl" value="agent">Bring your agent</option><option value="scenarios">Scenarios</option><option value="builder">Scenario Builder</option><option value="entities">Entity graph</option><option value="endpoints">Endpoint graph</option>
         </select>
       </label>
       <div class="api-identity">
@@ -737,7 +744,7 @@ function removeScenario(id) {
           <DescriptionHelp class="desktop-api-help" label="About API" :summary="spec?.info?.summary" :description="spec?.info?.description" />
         </div>
         <button ref="authorizationButton" type="button" class="secondary authorize-button" aria-label="Authorize" :title="authorizedCount ? 'Authorize · configured' : 'Authorize'" :data-configured="authorizedCount > 0" @click="openAuthorization()"><svg class="authorize-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="4"/><path d="m11 11 9 9m-3-3 2-2m-5 2 2-2"/></svg><span class="authorize-label">Authorize<small v-if="authorizedCount"> · configured</small></span></button>
-        <button v-if="spec" ref="settingsButton" type="button" class="secondary settings-icon" :disabled="scenarioPending"
+        <button v-if="spec" ref="settingsButton" type="button" class="secondary settings-icon" :disabled="workspaceLocked"
           aria-label="Settings" title="Settings" :aria-expanded="settingsOpen" :aria-controls="settingsOpen ? 'settings-panel' : undefined" @click="toggleSettings">
           <span aria-hidden="true">⚙︎</span>
         </button>
@@ -765,7 +772,7 @@ function removeScenario(id) {
               <button type="button" class="secondary" :aria-pressed="settingsTab === 'workspace'" @click="settingsTab = 'workspace'">Workspace</button>
             </nav>
           </div>
-          <div :inert="scenarioPending">
+          <div :inert="workspaceLocked">
             <section v-show="settingsTab === 'presets'" class="preset-panel" aria-labelledby="presets-title">
               <header class="preset-intro">
                 <h3 id="presets-title">Request presets</h3>
@@ -833,7 +840,8 @@ function removeScenario(id) {
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <EndpointGraph :inert="settingsOpen" :initial-operation-key="current?.operation.key" v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
-      <ScenarioPanel :api-url="configuration?.openApiUrl" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
+      <ScenarioBuilder v-if="builderVisited" v-show="graphView === 'builder'" :inert="settingsOpen" :configuration="configuration" :operations="operations" :scenarios="scenarios" :context="scenarioContext" :authentication="authentication" :execute="(operation, session, values, signal, onRequest) => run(operation, session, values, { signal, onRequest })" :busy="scenarioBusy" @pending="builderPending = $event" @back="navigateView('scenarios')" />
+      <ScenarioPanel @builder="navigateView('builder')" :api-url="configuration?.openApiUrl" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
 
         :deleted="scenarioStore.deleted.value" @undo-remove="undoRemoveScenario" :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"
@@ -852,7 +860,7 @@ function removeScenario(id) {
         <strong>Presets</strong>
         <button v-for="name in displayedPresetOrder.names" :key="name" type="button" class="preset-toggle"
           :class="{ 'preset-group-start': name === displayedPresetOrder.firstInactive }"
-          :disabled="scenarioPending" :aria-pressed="activePresetNames.includes(name)"
+          :disabled="workspaceLocked" :aria-pressed="activePresetNames.includes(name)"
           :style="{ '--preset-color': presetColors.get(name) ?? defaultPresetColor }"
           @click="togglePreset(name, !activePresetNames.includes(name))">{{ name }}</button>
         <template v-if="activePresetNames.length">
@@ -874,7 +882,7 @@ function removeScenario(id) {
             <span aria-hidden="true">{{ catalogOpen ? '‹' : '›' }}</span>
           </button>
           <div v-show="catalogOpen" id="endpoint-catalog" class="catalog-container">
-            <EndpointCatalog :inert="scenarioPending"
+            <EndpointCatalog :inert="workspaceLocked"
               :groups="groups"
               :external-count="connections.length" :show-external="showExternalApis" :external-loading="externalPending"
               @toggle-external="showExternalApis = $event"
@@ -888,7 +896,7 @@ function removeScenario(id) {
         </div>
         <div ref="workArea" class="work-area">
           <p v-if="mappingError" class="mapping-notice muted" role="status">{{ mappingError }}</p>
-          <article v-if="current && !pendingRoute" :inert="scenarioPending" aria-labelledby="endpoint-title">
+          <article v-if="current && !pendingRoute" :inert="workspaceLocked" aria-labelledby="endpoint-title">
             <div v-if="chain.length > 1 || editingScenario" class="chain-header">
               <nav class="breadcrumbs" aria-label="Request chain">
                 <ol>

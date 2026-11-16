@@ -1,0 +1,56 @@
+<script setup>
+import { computed, useId } from 'vue'
+import { pointerHints } from './pointerHints.js'
+import { generators } from './generation.js'
+const props = defineProps({ step: Object, operation: Object, steps: Array, operations: Array, results: Array, disabled: Boolean })
+const prefix = useId()
+function hints(input) {
+  const step = props.steps.find(step => step.id === input.stepId)
+  return pointerHints(props.operations?.find(operation => operation.key === step?.operationKey), props.results?.find(result => result.id === input.stepId)?.response?.json)
+}
+const targets = computed(() => (props.operation?.parameters ?? []).filter(parameter => ['path', 'query', 'header'].includes(parameter.in)))
+function sourceChanged(input) {
+  if (input.source === 'response') { input.stepId ??= ''; input.responsePointer ??= '' }
+  if (input.source === 'human') { input.prompt ??= 'Enter ' + (input.name || 'a value'); input.valueType ??= 'text' }
+  if (input.source === 'generate') { input.generator ??= 'uuid'; input.pattern ??= 'INV-[A-Z]{3}-\\d{4}' }
+}
+function add() {
+  const target = targets.value[0]
+  props.step.inputs.push({ location: target?.in ?? 'body', name: target?.name ?? '', pointer: '', source: 'human',
+    prompt: 'Enter ' + (target?.name ?? 'a value'), valueType: 'text', generator: 'uuid', pattern: 'INV-[A-Z]{3}-\\d{4}', stepId: '', responsePointer: '' })
+}
+function setTarget(input, value) {
+  if (value === 'body') { input.location = 'body'; input.pointer ??= ''; return }
+  const target = targets.value[Number(value)]; input.location = target.in; input.name = target.name
+}
+</script>
+<template>
+  <section class="step-inputs" aria-label="Dynamic inputs">
+    <header><h4>Dynamic inputs</h4><button type="button" class="secondary" :disabled="disabled || !targets.length && !operation?.requestBody" @click="add">Add input</button></header>
+    <p v-if="!step.inputs.length" class="muted">Static values come from the request below. Add a source to fill a field at run time.</p>
+    <fieldset v-for="(input, index) in step.inputs" :key="index" :disabled="disabled" class="input-card">
+      <legend>Input {{ index + 1 }}</legend>
+      <div class="input-row"><label>Target<select aria-label="Target" :value="input.location === 'body' ? 'body' : targets.findIndex(target => target.in === input.location && target.name === input.name)" @change="setTarget(input, $event.target.value)"><option v-for="(target, i) in targets" :key="i" :value="i">{{ target.in }} · {{ target.name }}</option><option v-if="operation?.requestBody" value="body">Body</option></select></label>
+        <button type="button" class="remove-input secondary" :aria-label="'Remove input ' + (index + 1)" @click="step.inputs.splice(index, 1)">×</button></div>
+      <label v-if="input.location === 'body'">Target JSON Pointer<input aria-label="Target JSON Pointer" v-model="input.pointer" placeholder="/customer/id · empty = whole body"><small>For text/XML, leave empty to replace the whole body.</small></label>
+      <label>Value source<select aria-label="Value source" v-model="input.source" @change="sourceChanged(input)"><option value="response">Earlier response</option><option value="generate">Generate data</option><option value="human">Ask at run time</option></select></label>
+      <template v-if="input.source === 'response'">
+        <label>Source step<select aria-label="Source step" v-model="input.stepId"><option value="" disabled>Choose a step</option><option v-for="other in steps.filter(other => other.id !== step.id)" :key="other.id" :value="other.id">{{ other.label }}</option></select></label>
+        <label>Response JSON Pointer<input aria-label="Response JSON Pointer" :list="prefix + '-pointer-' + index" v-model="input.responsePointer" placeholder="/items/0/id · empty = entire JSON"><small>Choose a suggested path or enter your own. No inferred mapping required.</small></label><datalist :id="prefix + '-pointer-' + index"><option v-for="path in hints(input)" :key="path" :value="path" /></datalist>
+      </template>
+      <template v-else-if="input.source === 'generate'">
+        <label>Generator tag<select aria-label="Generator tag" v-model="input.generator" @change="input.pattern ??= 'INV-[A-Z]{3}-\\d{4}'"><option v-for="[value, label] in generators" :key="value" :value="value">{{ label }}</option></select></label>
+        <label v-if="input.generator === 'regex'">Pattern<input aria-label="Pattern" v-model="input.pattern" placeholder="INV-[A-Z]{3}-\d{4}"><small>Literals, ranges, \d, \w, \s, ?, {n}, {min,max}. No groups or unbounded repetition. Maximum 256 generated characters.</small></label>
+        <small>Faker · a new value for every run. Choose a generator that matches the API field type.</small>
+      </template>
+      <template v-else>
+        <label>Question<input aria-label="Question" v-model="input.prompt" placeholder="Enter the one-time approval code"></label>
+        <label>Value type<select aria-label="Value type" v-model="input.valueType"><option value="text">Text</option><option value="number">Number</option><option value="boolean">Boolean</option><option value="json">JSON value</option></select></label>
+        <small>The step pauses before sending. Answers stay in this run and are excluded from saved definitions.</small>
+      </template>
+    </fieldset>
+  </section>
+</template>
+<style scoped>
+header { display:flex; justify-content:space-between; align-items:center; gap:.5rem; }h4 { margin:0; font-size:.85rem; }.step-inputs p { font-size:.78rem; line-height:1.5; }.input-card { display:grid; gap:.55rem; min-width:0; margin:.6rem 0; padding:.65rem; border:1px solid var(--line); border-radius:.5rem; background:var(--subtle); }legend { font-size:.7rem; color:var(--muted); }label { display:grid; gap:.25rem; font-size:.76rem; min-width:0; }input,select { width:100%; min-width:0; padding:.4rem; }small { font-size:.68rem; color:var(--muted); line-height:1.5; }.input-row { display:flex; gap:.45rem; align-items:end; }.input-row label { flex:1; }.remove-input { align-self:start; }
+</style>
