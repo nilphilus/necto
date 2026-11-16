@@ -112,9 +112,9 @@ function bodyValue(value, example) {
 export function applyBodyPresets(operation, body, values, mediaType) {
   const layers = values.get(bodyPresets)
   const matches = new Set()
-  const sources = []
+  const sources = [], paths = []
   const sourceNames = presetOrigins.get(values)?.bodyNames ?? []
-  if (!layers) return { body, matches, sources }
+  if (!layers || mediaType !== undefined && !isJson(mediaType)) return { body, matches, sources }
   let parsed
   try { parsed = JSON.parse(body.trim() ? body : '{}') } catch { return { body, matches, sources } }
   let shape
@@ -143,6 +143,7 @@ export function applyBodyPresets(operation, body, values, mediaType) {
       const sample = Object.hasOwn(example, name) ? example[name] : undefined
       if (entry) {
         applied = true
+        paths.push([...path, name])
         if (source) sources.push({ path: [...path, name], preset: source })
         if (root) matches.add(name)
         entries.push([name, bodyValue(entry.value, sample ?? (present ? value[name] : undefined))])
@@ -157,7 +158,7 @@ export function applyBodyPresets(operation, body, values, mediaType) {
   }
   try {
     const filled = fill(parsed, shape, true)
-    return { body: applied ? formatJson(filled) : body, matches, applied, sources }
+    return { body: applied ? formatJson(filled) : body, matches, applied, sources, paths }
   } catch (error) {
     if (!(error instanceof TemplateLimitError)) throw error
     return { body, matches: new Set(), sources: [], notice: 'Automatic body presets exceed the generation budget. Disable body presets and enter the request body manually.' }

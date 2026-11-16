@@ -1,7 +1,7 @@
 import { applyBodyPresets, buildRequest, contextKey } from '../request-runner/request.js'
 import { effectiveTarget } from '../workbench/target.js'
 import { describeBody } from '../workbench/body.js'
-import { applyInput, dependencies, readPointer, validateBlueprint } from './model.js'
+import { applyInput, dependencies, pointerParts, readPointer, validateBlueprint } from './model.js'
 import { staticVariableValue } from './variables.js'
 import { generateValue } from './generation.js'
 import { abortableDelay, waitMatches } from './waiting.js'
@@ -22,15 +22,30 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
     const context = valuesFor(operation), presetBody = applyBodyPresets(operation, session.body, context, session.mediaType)
     if (presetBody.notice) throw new Error(`${definition.label}: ${presetBody.notice}`)
     session.body = presetBody.body
-    // Materialize body presets first. Explicit dynamic inputs win over presets.
-    const values = new Map([...context].filter(([key]) => typeof key === 'string'))
-    for (const input of definition.inputs) if (input.location !== 'body') values.delete(contextKey({ in: input.location, name: input.name }))
+    // Presets are run overrides, including bindings, generated and human inputs.
+    const values = new Map(context)
+    const probe = { ...session, fields: { ...session.fields } }
+    for (const input of definition.inputs) if (input.location === 'body' && input.pointer) {
+      try { applyInput(probe, operation, input, null) } catch { /* Uncovered invalid targets are checked below. */ }
+    }
+    const probed = applyBodyPresets(operation, probe.body, context, session.mediaType)
+    if (probed.notice) throw new Error(`${definition.label}: ${probed.notice}`)
+    const paths = [...(presetBody.paths ?? []), ...(probed.paths ?? [])]
+    const coveredBody = (input, candidates) => {
+      const target = pointerParts(input.pointer)
+      return candidates.some(path => path.length <= target.length && path.every((part, index) => String(part) === target[index]))
+    }
+    const activeInputs = definition.inputs.filter(input => input.location !== 'body'
+      ? !values.has(contextKey({ in: input.location, name: input.name })) : !coveredBody(input, paths))
+    for (const input of definition.inputs) if (input.location === 'body' && !activeInputs.includes(input) && !coveredBody(input, presetBody.paths ?? [])) {
+      applyInput(session, operation, input, readPointer(JSON.parse(probed.body), input.pointer))
+    }
     for (const input of definition.inputs) {
       if (input.location === 'body' && !operation.requestBody || input.location !== 'body' &&
         !operation.parameters.some(parameter => parameter.in === input.location && parameter.name === input.name)) throw new Error(`${definition.label}: input target is no longer present in the API.`)
     }
     const step = { id: definition.id, label: definition.label, operation, session, values,
-      entryPolicies: edges.filter(edge => edge.to === definition.id).map(edge => ({ ...edge, label: connectionSummary(edge, blueprint.steps) })), inputs: JSON.parse(JSON.stringify(definition.inputs)), dependencies: dependencies(definition, blueprint), status: 'waiting', error: '' }
+      entryPolicies: edges.filter(edge => edge.to === definition.id).map(edge => ({ ...edge, label: connectionSummary(edge, blueprint.steps) })), presetOverrides: [...new Set([...values.keys()].filter(key => typeof key === 'string').concat(paths.map(path => 'body:/' + path.map(part => String(part).replaceAll('~','~0').replaceAll('/','~1')).join('/'))))], inputs: JSON.parse(JSON.stringify(activeInputs)), dependencies: dependencies(definition, blueprint), status: 'waiting', error: '' }
     // Check every static request before sending anything. Dynamic values are checked again at dispatch.
     const draft = { ...session, fields: { ...session.fields } }
     try {

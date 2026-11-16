@@ -26,7 +26,7 @@ export function savedBlueprint(draft) {
 }
 export function useBuilder(configuration) {
   const draft = ref(newBlueprint()), saved = ref([]), error = ref(''), notice = ref('')
-  const execution = reactive({ status: 'idle', steps: [], error: '', stale: false }), pending = ref(false), questions = reactive(new Map())
+  const execution = reactive({ status: 'idle', steps: [], error: '', stale: false, presetNames: [] }), pending = ref(false), questions = reactive(new Map())
   const key = computed(() => workspaceIdentity(configuration.value) && 'necto:scenario-builder:' + workspaceIdentity(configuration.value))
   const dirty = computed(() => JSON.stringify(savedBlueprintSafe(draft.value)) !== JSON.stringify(saved.value.find(item => item.id === draft.value.id)))
   let controller, revision = 0
@@ -36,7 +36,7 @@ export function useBuilder(configuration) {
     if (ids && !execution.steps.some(step => ids.includes(step.operation.apiId ?? 'local'))) return
     revision++; clearRun()
   }
-  function clearRun() { stop(); questions.clear(); Object.assign(execution, { status: 'idle', steps: [], error: '', stale: false }) }
+  function clearRun() { stop(); questions.clear(); Object.assign(execution, { status: 'idle', steps: [], error: '', stale: false, presetNames: [] }) }
   function load() {
     saved.value = []; error.value = ''
     if (!key.value) return
@@ -87,7 +87,7 @@ export function useBuilder(configuration) {
     const plan = prepareBlueprint(draft.value, context)
     if (!allowHuman && plan.some(step => step.inputs.some(input => input.source === 'human' || input.source === 'variable' && plan.variables.find(variable => variable.id === input.variableId)?.source === 'human'))) throw new Error('Enable human-in-the-loop for steps that ask for input.')
     const runRevision = revision
-    Object.assign(execution, { status: 'running', steps: plan, error: '', stale: false })
+    Object.assign(execution, { status: 'running', steps: plan, error: '', stale: false, presetNames: [...(context.presetNames ?? [])] })
     const current = controller = new AbortController(); pending.value = true
     try {
       const outcome = await executeBlueprint(execution.steps, { concurrency: draft.value.concurrency, execute, signal: current.signal, ask: allowHuman ? ask : undefined })
