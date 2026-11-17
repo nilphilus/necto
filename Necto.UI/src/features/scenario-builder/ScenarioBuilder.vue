@@ -300,6 +300,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
           </div>
         </template>
         <div v-else class="inspector-empty"><strong>Build your API workflow</strong><p>Add any endpoint, name its step and choose where its inputs come from.</p><p>A → B + C → D: connect B and C to A, then D to both. Parallel branches are shown side by side.</p><button type="button" class="primary" :disabled="pending" @click="openAdd">Add first request</button></div>
+        <p v-if="validation || error" class="step-editor-error error" role="alert">{{ validation || error }}</p>
         <footer class="step-dialog-footer"><small>Edits update the current draft. Save the scenario to keep them in this browser.</small><button type="button" class="secondary" :disabled="pending||!!validation" @click="save">Save scenario</button><button type="button" class="primary" @click="stepDialog.close()">Done</button></footer>
       </div>
     </dialog>
@@ -319,6 +320,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
   </section>
 </template>
 <style scoped>
+.step-editor-error { margin:0; padding:.5rem 1rem; font-size:.78rem; max-height:5rem; overflow:auto; overflow-wrap:anywhere; }
 .input-suggestions { font-size:.78rem; margin-block:.7rem; }.input-suggestions ul { margin:.35rem 0 .65rem; padding-left:1rem; }.input-suggestions li { margin-bottom:.25rem; }.input-suggestions small { margin-inline:.4rem; color:var(--muted); }
 .step-dialog { width:min(76rem,calc(100vw - 2rem)); height:min(90dvh,60rem); max-height:calc(100dvh - 2rem); padding:0; color:inherit; box-shadow:0 16px 65px #17342650; }
 .step-dialog::backdrop { background:#17342666; }
