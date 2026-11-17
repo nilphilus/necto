@@ -1,0 +1,23 @@
+const {run}=require('./qa-fixture.cjs')
+run(async({p,assert,builder,add,save,saved,shot,calls,closeEditor,execute})=>{
+ await builder();await add('Create invoice')
+ const editor=p.getByRole('dialog',{name:'Edit step',exact:true});await editor.waitFor()
+ const bounds=await editor.boundingBox();assert.ok(bounds.width>1000);assert.ok(bounds.height>700)
+ await editor.getByLabel('Step name',{exact:true}).fill('Create reviewed invoice')
+ await editor.getByLabel('Value for name',{exact:true}).fill('Edited in wide popup')
+ const focused=await p.evaluate(()=>document.querySelector('.step-dialog').contains(document.activeElement));assert.equal(focused,true)
+ // Nested endpoint picker and expanded body editor return to the active step.
+ await editor.getByRole('button',{name:'Change endpoint',exact:true}).click();await p.getByRole('button',{name:'Close endpoint picker',exact:true}).click();await editor.waitFor()
+ await editor.getByRole('button',{name:'Expand body editor',exact:true}).click();await p.getByRole('dialog',{name:'Configure request body',exact:true}).waitFor();await p.keyboard.press('Escape');await editor.waitFor();assert.equal(await editor.getByLabel('Value for name',{exact:true}).inputValue(),'Edited in wide popup')
+ await save();assert.equal(JSON.parse((await saved()).steps[0].request.body).name,'Edited in wide popup');assert.equal(calls.length,0)
+ await shot();await closeEditor();assert.equal(await p.locator('.step-dialog[open]').count(),0)
+ const map=await p.locator('.scenario-map').boundingBox();assert.ok(map.width>1300)
+ const card=p.locator('.map-node').filter({hasText:'Create reviewed invoice'});await card.click();await editor.waitFor();await p.keyboard.press('Escape');assert.equal(await p.evaluate(()=>document.activeElement?.classList.contains('map-node')),true)
+ await card.click();await editor.getByLabel('Step name',{exact:true}).fill('Retained draft edit');await p.keyboard.press('Escape');await p.locator('.map-node').filter({hasText:'Retained draft edit'}).waitFor()
+ // Adding a successor opens its editor after the nested picker closes.
+ await p.locator('.map-node').filter({hasText:'Retained draft edit'}).click();await editor.getByRole('button',{name:'+ Next request',exact:true}).click();await p.locator('.endpoint-options button').filter({hasText:'Find customer'}).click();assert.equal(await editor.getByLabel('Step name',{exact:true}).inputValue(),'Find customer');await closeEditor()
+ await execute(2);await p.locator('.map-node').filter({hasText:'Find customer'}).click();const response=p.getByRole('dialog',{name:'Step response',exact:true});await response.waitFor();await response.getByText('42',{exact:true}).first().waitFor();await response.getByRole('button',{name:'Done',exact:true}).click()
+ await p.setViewportSize({width:390,height:844});await p.locator('.map-node').filter({hasText:'Retained draft edit'}).click();const mobile=p.locator('.step-dialog[open]'),box=await mobile.boundingBox();assert.ok(box.width<=390&&box.height<=844);assert.equal(await mobile.evaluate(e=>e.scrollWidth>e.clientWidth),false);await mobile.getByRole('button',{name:'Configure',exact:true}).click();assert.equal(await mobile.getByLabel('Value for name',{exact:true}).inputValue(),'Edited in wide popup');await p.keyboard.press('Escape')
+ assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
+ console.log('PASS: wide modal, full map, draft/save semantics, nested pickers, Escape/focus restore, successor, response and mobile layout')
+})

@@ -12,12 +12,13 @@ exports.run=async(test)=>{
  await page.addInitScript(base=>localStorage.setItem('necto:environments:'+base+'/openapi.json',JSON.stringify({version:2,active:[],presets:[['Demo',[['token',{value:'PRESET-TOKEN'}]]]]})),base)
  await page.goto(base)
  const builder=async()=>{await page.getByRole('button',{name:'Scenarios',exact:true}).click();await page.getByRole('button',{name:'Scenario Builder →',exact:true}).click()}
- const add=async name=>{await page.getByRole('button',{name:'+ Add request',exact:true}).click();await page.getByRole('searchbox',{name:'Find endpoint',exact:true}).fill(name);await page.locator('.endpoint-options button').filter({hasText:name}).click()}
- const review=async()=>{await page.getByRole('button',{name:'Review & run',exact:true}).click();return page.getByRole('dialog',{name:'Review scenario run',exact:true})}
+ const closeEditor=async()=>{const editor=page.locator('.step-dialog[open]');if(await editor.count())await editor.getByRole('button',{name:'Done',exact:true}).click()}
+ const add=async name=>{await closeEditor();await page.getByRole('button',{name:'+ Add request',exact:true}).click();await page.getByRole('searchbox',{name:'Find endpoint',exact:true}).fill(name);await page.locator('.endpoint-options button').filter({hasText:name}).click()}
+ const review=async()=>{await closeEditor();await page.getByRole('button',{name:'Review & run',exact:true}).click();return page.getByRole('dialog',{name:'Review scenario run',exact:true})}
  const execute=async(count=1)=>{const dialog=await review();await dialog.getByRole('button',{name:'Run scenario',exact:true}).click();await page.locator('.builder-run-status').filter({hasText:`${count} / ${count} completed`}).waitFor()}
- const save=()=>page.getByRole('button',{name:'Save',exact:true}).click()
+ const save=async()=>{const editor=page.locator('.step-dialog[open]');if(await editor.count())await editor.getByRole('button',{name:'Save scenario',exact:true}).click();else await page.getByRole('button',{name:'Save',exact:true}).click()}
  const saved=()=>page.evaluate(()=>JSON.parse(Object.entries(localStorage).find(([key])=>key.startsWith('necto:scenario-builder:'))[1]).blueprints[0])
  const shot=async()=>{if(process.env.NECTO_QA_SCREENSHOTS){await fs.mkdir(process.env.NECTO_QA_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.NECTO_QA_SCREENSHOTS,name+'.png')})}}
- await test({p:page,assert,builder,add,review,execute,save,saved,shot,calls});assert.deepEqual(errors,[]);console.log('PASS: '+name)
+ await test({p:page,assert,builder,add,review,execute,save,saved,shot,calls,closeEditor});assert.deepEqual(errors,[]);console.log('PASS: '+name)
  }catch(e){console.error(e);if(page)await page.screenshot({path:'/tmp/'+name+'-failure.png'});process.exitCode=1}finally{if(browser)await browser.close();if(server)server.close()}
 }
