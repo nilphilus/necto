@@ -1,3 +1,4 @@
+import { pickRandom } from './random.js'
 import { evaluateExpression } from './expression.js'
 import { applyBodyPresets, buildRequest, contextKey } from '../request-runner/request.js'
 import { effectiveTarget } from '../workbench/target.js'
@@ -69,7 +70,7 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
 
 // DAG scheduler: ready nodes start immediately; a join waits for every dependency.
 // Only explicit response-wait policies repeat requests. Errors stop the run.
-export async function executeBlueprint(plan, { concurrency = 4, execute, signal, ask, generate = generateValue, sleep = abortableDelay }) {
+export async function executeBlueprint(plan, { concurrency = 4, execute, signal, ask, generate = generateValue, sleep = abortableDelay, pick = pickRandom }) {
   const controller = new AbortController(), combined = AbortSignal.any([signal, controller.signal])
   const byId = new Map(plan.map(step => [step.id, step])), running = new Map()
   let failure, activeRequests = 0
@@ -95,10 +96,10 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
       let value
       if (variable.source === 'static') value = staticVariableValue(variable)
       else if (variable.source === 'generate') value = await generate(variable)
-      else if (variable.source === 'response') {
+      else if (['response','random'].includes(variable.source)) {
         const producer = byId.get(variable.stepId)
         if (producer?.status !== 'completed') throw new Error(`Source step for ${variable.name} is not completed.`)
-        value = readPointer(producer.response?.json, variable.responsePointer)
+        value = variable.source === 'random' ? pick(producer.response?.json,variable) : readPointer(producer.response?.json, variable.responsePointer)
       } else {
         if (!ask) throw new Error('Shared variable needs human input. Enable human-in-the-loop mode.')
         const answers = await ask({ id: questionIds.get(variable.id), sharedVariable: true, label: 'Shared variable · ' + variable.name }, [{ location: 'variable', name: variable.name, prompt: variable.prompt, valueType: variable.valueType }], combined)
@@ -141,6 +142,10 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
           }
           combined.throwIfAborted()
           value=evaluateExpression(input.expression,values)
+        } else if(input.source==='random') {
+          const producer=byId.get(input.stepId)
+          if(producer?.status!=='completed')throw new Error('Pick random source step is not completed.')
+          value=pick(producer.response?.json,input)
         } else value = input.source === 'variable' ? await resolveVariable(input.variableId) : input.source === 'generate' ? await generate(input) : readPointer(byId.get(input.stepId)?.response?.json, input.responsePointer)
         combined.throwIfAborted()
         applyInput(step.session, step.operation, input, value)

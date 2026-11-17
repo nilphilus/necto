@@ -1,4 +1,5 @@
 <script setup>
+import RandomSourceEditor from './RandomSourceEditor.vue'
 import { nextTick, ref } from 'vue'
 import { newId, validateBlueprint } from './model.js'
 import { generators } from './generation.js'
@@ -15,7 +16,7 @@ function add() {
 }
 function defaults(variable) {
   variable.valueType ??= 'text'; variable.value ??= ''; variable.prompt ??= 'Enter ' + variable.name
-  variable.generator ??= 'uuid'; variable.pattern ??= 'INV-[A-Z]{3}-\\d{4}'; variable.stepId ??= ''; variable.responsePointer ??= ''
+  variable.generator ??= 'uuid'; variable.pattern ??= 'INV-[A-Z]{3}-\\d{4}'; variable.stepId ??= ''; variable.responsePointer ??= '';variable.itemPointer ??= ''
 }
 function typeChanged(variable) { variable.value = ({ text: '', number: '0', boolean: 'true', json: 'null' })[variable.valueType] }
 function remove(variable) {
@@ -40,11 +41,12 @@ function save() {
       <div class="variables-content"><p class="muted">Use “Shared variable” as a request input source. Response variables add their producer as a dependency automatically. Static values are included in saved/exported definitions; keep credentials in Authorize.</p>
         <fieldset v-for="(variable, index) in variables" :key="variable.id" class="variable-card" :disabled="disabled"><legend>Variable {{ index + 1 }}</legend>
           <div class="variable-name"><label>Name<input v-model="variable.name" aria-label="Variable name" maxlength="64" placeholder="customerEmail"></label><button type="button" class="secondary" :aria-label="'Remove variable ' + variable.name" @click="remove(variable)">Remove</button></div>
-          <label>Source<select v-model="variable.source" aria-label="Variable source" @change="defaults(variable)"><option value="static">Static value</option><option value="generate">Generate data</option><option value="human">Ask at run time</option><option value="response">Response field</option></select></label>
+          <label>Source<select v-model="variable.source" aria-label="Variable source" @change="defaults(variable)"><option value="static">Static value</option><option value="generate">Generate data</option><option value="human">Ask at run time</option><option value="response">Response field</option><option value="random">Pick random</option></select></label>
           <label v-if="['static','human'].includes(variable.source)">Value type<select v-model="variable.valueType" aria-label="Variable value type" @change="typeChanged(variable)"><option value="text">Text</option><option value="number">Number</option><option value="boolean">Boolean</option><option value="json">JSON</option></select></label>
           <label v-if="variable.source === 'static'">Value<textarea v-model="variable.value" aria-label="Variable static value" rows="2" spellcheck="false" /></label>
           <template v-if="variable.source === 'generate'"><label>Generator<select v-model="variable.generator" aria-label="Variable generator"><option v-for="[id,label] in generators" :key="id" :value="id">{{ label }}</option></select></label><label v-if="variable.generator === 'regex'">Pattern<input v-model="variable.pattern" aria-label="Variable pattern" placeholder="INV-[A-Z]{3}-\d{4}"></label></template>
           <label v-if="variable.source === 'human'">Question<input v-model="variable.prompt" aria-label="Variable question"><small>Asked once, only if used. Answers are not saved with the definition.</small></label>
+          <RandomSourceEditor v-if="variable.source==='random'" :source="variable" :steps="blueprint.steps" :shared="true" :disabled="disabled" />
           <template v-if="variable.source === 'response'"><label>Source step<select v-model="variable.stepId" aria-label="Variable source step"><option value="" disabled>Choose a step</option><option v-for="step in blueprint.steps" :key="step.id" :value="step.id">{{ step.label }}</option></select></label><label>Response JSON Pointer<input v-model="variable.responsePointer" aria-label="Variable response pointer" :list="'variable-path-' + variable.id" placeholder="/id"><small>Captured from the final successful response, after polling finishes.</small></label><datalist :id="'variable-path-' + variable.id"><option v-for="path in hints(variable)" :key="path" :value="path" /></datalist></template>
           <small class="uses">Used by {{ blueprint.steps.filter(step => step.inputs.flatMap(inputSources).some(input => input.source === 'variable' && input.variableId === variable.id)).length }} request(s)</small>
         </fieldset>

@@ -1,11 +1,11 @@
 ---
 name: necto-scenarios
-description: Create or update importable Necto Scenario Builder files from a user's workflow using project code, OpenAPI and Necto relationship mappings. Use for parallel API steps, response bindings, human inputs, generated data, presets, isolated JavaScript expressions, delay and polling. Prepare files without executing the API.
+description: Create or update importable Necto Scenario Builder files from a user's workflow using project code, OpenAPI and Necto relationship mappings. Use for parallel API steps, response bindings, human inputs, generated data, presets, isolated JavaScript expressions, random array selection, delay and polling. Prepare files without executing the API.
 ---
 
 # Necto scenario authoring
 
-Turn the user's workflow into a reviewed `necto-scenarios/*.necto.json` file. Use Scenario Builder version 6 inside the shared-file wrapper. Read [the format reference](references/format.md) and [the example](examples/invoice-inspection.necto.json) before authoring.
+Turn the user's workflow into a reviewed `necto-scenarios/*.necto.json` file. Use Scenario Builder version 7 inside the shared-file wrapper. Read [the format reference](references/format.md) and [the example](examples/invoice-inspection.necto.json) before authoring.
 
 ## Discover the actual contract
 
@@ -19,6 +19,7 @@ Turn the user's workflow into a reviewed `necto-scenarios/*.necto.json` file. Us
 
 - Name steps by intent. Independent steps may run in parallel; joins must wait for every prerequisite. Set conservative concurrency (default 4, range 1–8).
 - Show a short plan with each value flow, its evidence (file/line or metadata source), unresolved assumptions and mutations. Proceed with the authorized file creation; do not require a separate approval for routine authoring.
+- For an explicitly requested random record, use `source: "random"` with a verified array `responsePointer` and selected `itemPointer`. See [Pick random](references/random.md). Use a shared random variable when several fields must come from the same record. Do not assume randomness satisfies business eligibility: obtain/filter the eligible array first.
 - Never choose the first array item without a reason. Prefer a unique lookup/filter. Use a documented index only when ordering/cardinality is guaranteed; otherwise ask the user to supply the intended ID through a human input/preset. Builder response bindings use JSON Pointer, not quick-chain selector syntax.
 - Keep JSON body structure intact with typed placeholders, then bind individual values. Do not use template strings such as `${step.id}`: Necto uses `inputs`.
 - Use shared variables for reused values. Use human inputs for values only a person knows, presets for environment-specific named values and supported generators for synthetic data. Never generate foreign keys that must already exist.

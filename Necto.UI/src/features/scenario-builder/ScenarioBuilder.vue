@@ -81,7 +81,7 @@ function add(operation) {
 }
 function removeStep() {
   const id = selected.value.id
-  const used = draft.value.variables.filter(variable => variable.source === 'response' && variable.stepId === id)
+  const used = draft.value.variables.filter(variable => ['response','random'].includes(variable.source) && variable.stepId === id)
   if (used.length) { error.value = 'Change or remove response variables first: ' + used.map(variable => variable.name).join(', '); return }
   if (draft.value.steps.some(step => dependencies(step, draft.value).includes(id)) && !window.confirm('Remove this step and all connections that use its response?')) return
   const removed = removeStepDraft(draft.value,id)
@@ -264,7 +264,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         <StepWaiting :step="edgeEdit" :operation="edgeOperation" :disabled="pending" />
         <StepInputs v-if="edgeEdit.from !== null" :step="mappingEdit" :operation="edgeOperation" :steps="draft.steps" :variables="draft.variables" :operations="operations" :results="execution.steps" :fixed-source="edgeEdit.from" :disabled="pending" />
         <p v-else class="muted">Start has no response to bind. Use this connection to configure an independent request.</p>
-        <p v-if="edgeTarget.inputs.some(input => input.source === 'expression' && inputProducers(input, draft).includes(edgeEdit.from))" class="muted">This connection supplies expression inputs. Edit the expression in the target request.</p><p v-if="edgeTarget.inputs.some(input => input.source === 'variable' && variableProducer(input, draft) === edgeEdit.from)" class="muted">This connection also carries shared response variables. Edit those bindings in the target request’s Dynamic inputs.</p><p v-if="edgeProblem" class="error" role="alert">{{ edgeProblem }}</p><p v-if="pending" class="muted">Run in progress. Connection settings are read only.</p>
+        <p v-if="edgeTarget.inputs.some(input => ['expression','random'].includes(input.source) && inputProducers(input, draft).includes(edgeEdit.from))" class="muted">This connection supplies dynamic inputs. Edit their configuration in the target request.</p><p v-if="edgeTarget.inputs.some(input => input.source === 'variable' && variableProducer(input, draft) === edgeEdit.from)" class="muted">This connection also carries shared response variables. Edit those bindings in the target request’s Dynamic inputs.</p><p v-if="edgeProblem" class="error" role="alert">{{ edgeProblem }}</p><p v-if="pending" class="muted">Run in progress. Connection settings are read only.</p>
         </div><footer><button type="button" class="secondary error" :disabled="pending" @click="removeConnection">{{ edgeEdit.from === null ? 'Reset start connection' : 'Remove connection' }}</button><button type="button" class="secondary" @click="edgeDialog.close()">Cancel</button><button type="submit" class="primary" :disabled="pending">Apply connection</button></footer>
       </form>
     </dialog>
