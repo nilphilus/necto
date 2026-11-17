@@ -8,7 +8,9 @@
     <PackageId>Necto.OpenApi</PackageId>
     <Version>0.3.0</Version>
     <Description>OpenAPI UI for ASP.NET Core with a Roslyn source generator that maps response values to inputs in related requests.</Description>
+    <PackageProjectUrl>https://nilphilus.github.io/necto/</PackageProjectUrl>
     <RepositoryUrl>https://github.com/nilphilus/necto</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
   </PropertyGroup>

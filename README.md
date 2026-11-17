@@ -14,14 +14,10 @@ ASP.NET Core APIs.
 - **Connected context:** explore entity and endpoint graphs, reuse presets,
   connect external APIs, or bring your own MCP-capable agent.
 
-**[HTML landing page](docs/landing-page/index.html)** ·
-[Preview instructions](docs/landing-page/README.md#preview) ·
-[Setup and technical guide](docs/landing-page/technical.md)
-
-The public website is planned for **[nilphilus.github.io/necto](https://nilphilus.github.io/necto/)**
-after the repository is public and GitHub Pages is enabled. It is not published
-yet; GitHub currently displays the HTML link above as source. Use the preview
-instructions to open the working website locally.
+**[Product website](https://nilphilus.github.io/necto/)** ·
+[Setup and technical guide](https://nilphilus.github.io/necto/technical.html) ·
+[Source code](https://github.com/nilphilus/necto) ·
+[Local website preview](docs/landing-page/README.md#preview)
 
 ![Necto: selected invoice values ready for related requests](docs/landing-page/assets/workflow.png)
 
