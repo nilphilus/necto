@@ -188,3 +188,5 @@ Install the [Necto scenario authoring skill](skills/README.md) in your API proje
 Scenario Builder also supports [isolated expressions](docs/scenario-expressions/README.md) to calculate field values from selected earlier responses or shared variables, using a bounded JavaScript subset without host access.
 
 Use [Pick random](docs/scenario-random/README.md) to select an array item from a previous response, or share one selection across several fields through a scenario variable.
+
+Troubleshooting: [ambiguous generated OpenAPI documentation helpers](docs/troubleshooting/generated-source-collisions.md), including safe XML generator output configuration.
