@@ -1,0 +1,27 @@
+const {run}=require('./qa-fixture.cjs')
+run(async({p,assert,builder,shot,calls})=>{
+ await p.setViewportSize({width:1680,height:1000});await builder()
+ const step=(id,label,method,path)=>({id,label,operationKey:method+' '+path,apiId:'local',method,path,dependsOn:[],inputs:[],request:{fields:{},body:method==='POST'?'{"name":"Draft","customerId":7}':'',assertions:[],timeout:30000,responseLimitMiB:32}})
+ const b={format:'necto-scenario-builder',version:7,id:'edge-routing',name:'A–B–C with direct A–C',concurrency:4,variables:[],steps:[step('a','A','GET','/customer'),step('b','B','GET','/rows'),step('c','C','POST','/invoices')],connections:[{from:'a',to:'b'},{from:'b',to:'c'},{from:'a',to:'c'}]}
+ await p.evaluate(b=>localStorage.setItem('necto:scenario-builder:'+location.origin+'/openapi.json',JSON.stringify({version:1,blueprints:[b]})),b);await p.reload();await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:b.name})
+ async function geometry(){return p.evaluate(()=>{
+  const canvas=document.querySelector('.map-canvas'),bounds=canvas.getBoundingClientRect(),zoom=Number(document.querySelector('.scenario-map select').value)
+  const cards=[...document.querySelectorAll('.map-node')].map(e=>{const r=e.getBoundingClientRect();return {id:e.dataset.stepId,x:(r.left-bounds.left)/zoom,y:(r.top-bounds.top)/zoom,width:r.width/zoom,height:r.height/zoom}})
+  const path=[...document.querySelectorAll('.edge-settings')].find(e=>e.dataset.connection==='["a","c"]'),center=path.getBoundingClientRect()
+  const svgPath=[...document.querySelectorAll('.map-canvas svg > path.edge')].find(e=>e.dataset.route==='["a","c"]')
+  const points=[...svgPath.getAttribute('d').matchAll(/[ML] ([\d.-]+) ([\d.-]+)/g)].map(m=>({x:Number(m[1]),y:Number(m[2])}))
+  return {cards,points,button:{x:(center.left+center.width/2-bounds.left)/zoom,y:(center.top+center.height/2-bounds.top)/zoom}}
+ })}
+ function check(g){
+  assert.ok(g.points.length>2)
+  for(let i=1;i<g.points.length;i++){const a=g.points[i-1],b=g.points[i];for(const n of g.cards){const hit=a.y===b.y?a.y>n.y+.05&&a.y<n.y+n.height-.05&&Math.max(a.x,b.x)>n.x+.05&&Math.min(a.x,b.x)<n.x+n.width-.05:a.x>n.x+.05&&a.x<n.x+n.width-.05&&Math.max(a.y,b.y)>n.y+.05&&Math.min(a.y,b.y)<n.y+n.height-.05;assert.equal(hit,false,'line avoids '+n.id)}}
+  for(const n of g.cards)assert.equal(g.button.x>n.x-14&&g.button.x<n.x+n.width+14&&g.button.y>n.y-14&&g.button.y<n.y+n.height+14,false,'button clears '+n.id)
+ }
+ check(await geometry());await shot()
+ const configure=p.getByRole('button',{name:'Configure connection A → C',exact:true});await configure.click();const popup=p.getByRole('dialog');await popup.getByRole('heading',{name:'A → C',exact:true}).waitFor();await popup.getByRole('button',{name:'Cancel',exact:true}).click()
+ await p.getByRole('combobox',{name:'Zoom',exact:true}).selectOption('0.65');check(await geometry());await configure.click();await popup.getByRole('heading',{name:'A → C',exact:true}).waitFor();await popup.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(calls.length,0)
+ // Persisted manually positioned obstacles must be respected too.
+ b.steps.forEach((step,i)=>step.position={x:170+i*280,y:100});await p.evaluate(b=>localStorage.setItem('necto:scenario-builder:'+location.origin+'/openapi.json',JSON.stringify({version:1,blueprints:[b]})),b);await p.reload();await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:b.name});check(await geometry())
+ b.steps[1].position.x=300;await p.evaluate(b=>localStorage.setItem('necto:scenario-builder:'+location.origin+'/openapi.json',JSON.stringify({version:1,blueprints:[b]})),b);await p.reload();await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:b.name});await p.locator('.route-notice').waitFor();await p.locator('.map-connections summary').click();await p.locator('.map-connections').getByRole('button',{name:'A → C',exact:true}).click();await popup.getByRole('heading',{name:'A → C',exact:true}).waitFor();await popup.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(calls.length,0)
+ console.log('PASS: real card/line geometry for A–C avoids B; settings follow route; zoom and pinned positions; no API requests')
+})

@@ -1,4 +1,5 @@
 <script setup>
+import { createEdgeRouter } from './edgeRouting.js'
 import { computed, onScopeDispose, ref, watch } from 'vue'
 import { inputProducers } from './variables.js'
 import { layers } from './model.js'
@@ -23,15 +24,19 @@ const layout = computed(() => {
   }
   const height = Math.max(baseHeight, ...nodes.map(node => node.y + 150)), width = Math.max(baseWidth, ...nodes.map(node => node.x + 250))
   const byId = new Map(nodes.map(node => [node.step.id, node]))
+  const route = createEdgeRouter(nodes,height)
   const edges = allConnections(props.blueprint).flatMap(edge => {
     const from = byId.get(edge.from), to = byId.get(edge.to)
     if (!to || edge.from !== null && !from) return []
-    const x = from ? from.x + 214 : 108, y = from ? from.y + 46 : height / 2, tx = to.x, ty = to.y + 46
+    const geometry = route(edge.from,edge.to)
     return [{ ...edge, key: connectionKey(edge.from, edge.to), fromLabel: from?.step.label ?? 'Start', toLabel: to.step.label,
       data: to.step.inputs.some(input => inputProducers(input, props.blueprint).includes(edge.from)),
-      x: (x + tx) / 2, y: (y + ty) / 2, d: curve(x, y, tx, ty) }]
+      ...(geometry??{d:'',x:0,y:0}),routed:Boolean(geometry) }]
   })
-  return { width, height, nodes, edges }
+  const routed=edges.filter(edge=>edge.routed)
+  let routeWidth=width,routeHeight=height
+  for(const edge of routed)for(const point of edge.points){routeWidth=Math.max(routeWidth,point.x+20);routeHeight=Math.max(routeHeight,point.y+20)}
+  return { width:routeWidth,height:routeHeight,startY:height/2,nodes,edges,routed }
 })
 function curve(x, y, tx, ty) { return `M ${x} ${y} C ${x + 36} ${y}, ${tx - 36} ${ty}, ${tx} ${ty}` }
 const ghost = computed(() => drag.value && curve(drag.value.sx, drag.value.sy, drag.value.x, drag.value.y))
@@ -80,6 +85,7 @@ watch(() => props.blueprint.steps.map(step => step.id).join('|'), cancel)
 <template>
   <section class="scenario-map" aria-label="Scenario map">
     <header><strong>Scenario map</strong><span>Drag ● to a request or empty space. ⚙ configures a connection.</span><label>Zoom <select v-model.number="zoom"><option :value=".65">65%</option><option :value=".8">80%</option><option :value="1">100%</option></select></label></header>
+    <p v-if="layout.edges.some(edge=>!edge.routed)" class="route-notice" role="status">Some connections cannot be drawn without crossing a request. Use the Connections list below.</p>
     <p v-if="drag" class="connect-hint" role="status">Connect to a request or release on empty space. Source: {{ blueprint.steps.find(step => step.id === drag.from)?.label ?? 'Start' }}. <button type="button" @click="cancel">Cancel (Esc)</button></p>
     <div class="map-scroll" tabindex="0" aria-label="Scroll scenario map">
       <p v-if="!blueprint.steps.length" class="map-empty">Add requests, then drag between their connection handles.<br>Independent requests start in parallel.</p>
@@ -87,11 +93,11 @@ watch(() => props.blueprint.steps.map(step => step.id).join('|'), cancel)
         <div ref="canvas" class="map-canvas" :style="{ width: layout.width + 'px', height: layout.height + 'px', transform: `scale(${zoom})` }" @pointermove="move" @pointerup="finish" @pointercancel="cancel">
           <svg :width="layout.width" :height="layout.height" aria-hidden="true">
             <defs><marker id="builder-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>
-            <path v-for="edge in layout.edges" :key="edge.key" :d="edge.d" class="edge" :class="{ data: edge.data, timed: hasTiming(edge) }" marker-end="url(#builder-arrow)" />
+            <path v-for="edge in layout.routed" :key="edge.key" :d="edge.d" :data-route="edge.key" class="edge" :class="{ data: edge.data, timed: hasTiming(edge) }" marker-end="url(#builder-arrow)" />
             <path v-if="ghost" :d="ghost" class="edge ghost" />
           </svg>
           <div v-if="drag?.blank" class="new-request-hint" :style="{left:drag.x + 'px',top:Math.max(20,drag.y - 46) + 'px'}">+ New request<br><small>Release to choose an endpoint</small></div>
-          <div class="map-start" :style="{ top: layout.height / 2 - 24 + 'px' }"><strong>Start</strong><button type="button" class="port output" :disabled="disabled" aria-label="Connect from Start" @pointerdown="begin($event, null, 108, layout.height / 2)" @click="event => event.detail === 0 && begin(event, null, 108, layout.height / 2)">●</button></div>
+          <div class="map-start" :style="{ top: layout.startY - 24 + 'px' }"><strong>Start</strong><button type="button" class="port output" :disabled="disabled" aria-label="Connect from Start" @pointerdown="begin($event, null, 108, layout.startY)" @click="event => event.detail === 0 && begin(event, null, 108, layout.startY)">●</button></div>
           <div v-for="node in layout.nodes" :key="node.step.id" class="node-wrap" :data-input-step="node.step.id" :style="{ left: node.x + 'px', top: node.y + 'px' }">
             <button type="button" class="port input" :disabled="disabled" :aria-label="'Connect to ' + node.step.label" @click.stop="chooseTarget(node.step.id)">●</button>
             <button type="button" class="map-node" :data-step-id="node.step.id" :data-status="states.get(node.step.id)?.status" :class="{ 'drop-target': drag?.target === node.step.id }" :aria-pressed="selected === node.step.id" @click="select(node.step.id)">
@@ -100,7 +106,7 @@ watch(() => props.blueprint.steps.map(step => step.id).join('|'), cancel)
             </button>
             <button type="button" class="port output" :disabled="disabled" :aria-label="'Connect from ' + node.step.label" @pointerdown="begin($event, node.step.id, node.x + 214, node.y + 46)" @click="event => event.detail === 0 && begin(event, node.step.id, node.x + 214, node.y + 46)">●</button>
           </div>
-          <button v-for="edge in layout.edges" :key="edge.key" type="button" class="edge-settings" :class="{ timed: hasTiming(edge) }" :data-connection="edge.key" :style="{ left: edge.x + 'px', top: edge.y + 'px' }" :aria-label="'Configure connection ' + edge.fromLabel + ' → ' + edge.toLabel" :title="edge.fromLabel + ' → ' + edge.toLabel + (hasTiming(edge) ? ' · Delay / Wait for' : '')" @click="configure(edge, $event)">{{ hasTiming(edge) ? '◷' : '⚙' }}</button>
+          <button v-for="edge in layout.routed" :key="edge.key" type="button" class="edge-settings" :class="{ timed: hasTiming(edge) }" :data-connection="edge.key" :style="{ left: edge.x + 'px', top: edge.y + 'px' }" :aria-label="'Configure connection ' + edge.fromLabel + ' → ' + edge.toLabel" :title="edge.fromLabel + ' → ' + edge.toLabel + (hasTiming(edge) ? ' · Delay / Wait for' : '')" @click="configure(edge, $event)">{{ hasTiming(edge) ? '◷' : '⚙' }}</button>
         </div>
       </div>
     </div>
@@ -114,8 +120,9 @@ watch(() => props.blueprint.steps.map(step => step.id).join('|'), cancel)
 .scenario-map { position:relative; display:flex; flex-direction:column; min-width:0; min-height:22rem; background:var(--surface); border:1px solid var(--line); border-radius:.65rem; overflow:hidden; }
 header { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem .8rem; padding:.6rem .8rem; border-bottom:1px solid var(--line); font-size:.8rem; }header span { color:var(--muted); font-size:.7rem; }header label { margin-left:auto; display:flex; align-items:center; gap:.4rem; }header select { padding:.2rem; }
 .map-scroll { flex:1; overflow:auto; min-height:20rem; background:radial-gradient(var(--line) 1px,transparent 1px); background-size:18px 18px; }.map-canvas { position:relative; transform-origin:top left; }.map-canvas svg { position:absolute; inset:0; pointer-events:none; }
-.edge { fill:none; stroke:#849e91; stroke-width:2; stroke-dasharray:5 4; }.edge.data { stroke:var(--accent); stroke-dasharray:none; }.edge.timed { stroke:#96732e; }.ghost { stroke:#257f67; stroke-dasharray:4 4; }marker path { fill:var(--accent); }
-.node-wrap { position:absolute; width:214px; }.map-node { display:grid; gap:.35rem; width:214px; min-height:96px; padding:.65rem; border:1px solid #afc4b7; border-radius:.6rem; background:var(--surface); text-align:left; box-shadow:0 2px 6px #203b2810; }.map-node[aria-pressed=true] { outline:2px solid var(--accent); background:var(--accent-soft); }.map-node.drop-target { outline:3px solid #318d6c; }
+.route-notice { margin:.4rem .8rem; font-size:.72rem; color:var(--muted); }
+.edge { stroke-linejoin:round; fill:none; stroke:#849e91; stroke-width:2; stroke-dasharray:5 4; }.edge.data { stroke:var(--accent); stroke-dasharray:none; }.edge.timed { stroke:#96732e; }.ghost { stroke:#257f67; stroke-dasharray:4 4; }marker path { fill:var(--accent); }
+.node-wrap { position:absolute; width:214px; }.map-node { display:grid; gap:.35rem; width:214px; height:112px; min-height:112px; padding:.65rem; border:1px solid #afc4b7; border-radius:.6rem; background:var(--surface); text-align:left; box-shadow:0 2px 6px #203b2810; }.map-node[aria-pressed=true] { outline:2px solid var(--accent); background:var(--accent-soft); }.map-node.drop-target { outline:3px solid #318d6c; }
 .map-node[data-status=completed] { border-color:#2d8868; }.map-node[data-status=failed] { border-color:#b83d40; background:#fff0ef; }.map-node[data-status=needs-input] { border-color:#bb842c; background:#fff6df; }.map-node[data-status=retry-wait],.map-node[data-status=delaying] { border-color:#8c7a48; background:#fff9ec; }.map-node[data-status=running] { box-shadow:0 0 0 3px #318d6c33; }
 .node-top { display:flex; align-items:center; justify-content:space-between; gap:.3rem; }.node-state,.node-inputs { font-size:.65rem; color:var(--muted); }.map-node strong,.map-node code,.node-inputs { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }.map-node strong { font-size:.82rem; }.map-node code { font-size:.68rem; }
 .port { position:absolute; z-index:2; top:34px; width:24px; height:24px; padding:0; border:1px solid #afc4b7; border-radius:50%; background:var(--surface); color:var(--accent); touch-action:none; font-size:.8rem; }.input { left:-12px; }.output { right:-12px; }.port:hover { background:var(--accent); color:white; }.map-start { position:absolute; left:24px; width:84px; height:48px; display:grid; place-items:center; border:1px solid var(--line); border-radius:2rem; background:var(--accent-soft); font-size:.8rem; }.map-start .output { top:12px; }
