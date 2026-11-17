@@ -13,6 +13,6 @@ public sealed class FieldConstraintGeneratorTests
                 [property: System.ComponentModel.DataAnnotations.Range(1,100,MinimumIsExclusive=true)] int Count,
                 [property: System.Text.Json.Serialization.JsonIgnore, System.ComponentModel.DataAnnotations.Required] string Hidden);
             """);
-        var text=result.GeneratedTrees.Single().ToString();Assert.Contains("StringLengthAttribute",text);Assert.Contains(""RangeAttribute","1","100",true,false",text);Assert.DoesNotContain("\"Hidden\"",text);
+        var text=result.GeneratedTrees.Single().ToString();Assert.Contains("StringLengthAttribute",text);Assert.Contains(""" "RangeAttribute","1","100",true,false """.Trim(),text);Assert.DoesNotContain("\"Hidden\"",text);
     }
 }
