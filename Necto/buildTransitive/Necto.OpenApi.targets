@@ -1,0 +1,16 @@
+<Project>
+  <!-- Emitted generator files are inspection artifacts. Roslyn already adds
+       their live equivalents to the compilation. Limit removal to the two
+       known generator subtrees; never remove arbitrary user .cs files. -->
+  <Target Name="NectoExcludeEmittedGeneratorSources" BeforeTargets="CoreCompile"
+          Condition="'$(CompilerGeneratedFilesOutputPath)' != ''">
+    <PropertyGroup>
+      <_NectoEmittedSourceRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(CompilerGeneratedFilesOutputPath)'))</_NectoEmittedSourceRoot>
+    </PropertyGroup>
+    <ItemGroup>
+      <_NectoEmittedCompile Include="$(_NectoEmittedSourceRoot)Necto.Generator/**/*.cs;$(_NectoEmittedSourceRoot)Microsoft.AspNetCore.OpenApi.SourceGenerators/**/*.cs" />
+      <Compile Remove="@(_NectoEmittedCompile)" MatchOnMetadata="FullPath" MatchOnMetadataOptions="PathLike" />
+      <_NectoEmittedCompile Remove="@(_NectoEmittedCompile)" />
+    </ItemGroup>
+  </Target>
+</Project>
