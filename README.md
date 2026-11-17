@@ -161,6 +161,10 @@ At runtime, it uses the names of registered FastEndpoints routes as operation
 IDs. Call `app.UseNectoUI()` after `app.UseFastEndpoints()` and point Necto at
 the OpenAPI document for those routes.
 
+`app.UseNectoUI()` enables C# type names in the entity graph for FastEndpoints
+with `FastEndpoints.OpenApi` and for ASP.NET Core `AddOpenApi` documents.
+Necto uses those names for labels and OpenAPI schema keys for references.
+
 Mapping suggestions support nested response objects and arrays, the default web
 JSON naming policy, and `JsonPropertyName`. Minimal APIs support explicit
 `[FromBody]` models. FastEndpoints supports top-level JSON input fields and
