@@ -15,6 +15,10 @@ Turn the user's workflow into a reviewed `necto-scenarios/*.necto.json` file. Us
 4. Establish each operation's exact `apiId`, Necto `operationKey`, HTTP method and **OpenAPI path** (no ASP.NET `:int` constraints). MCP's `key` is the UI operation key; `operationId` is a separate identifier. External API keys are scoped. Prefer an existing Necto export/catalog for exact identities. Offline local keys follow `METHOD /openapi/path`; do not guess external API IDs or key prefixes.
 5. For every binding, verify the source response's status/media type, JSON property casing, array/envelope shape, target location, type and requiredness. Resolve references and serializer naming, not just CLR member names. Prefer applicable OpenAPI Links, then generated Necto relationships; user-required flows can connect endpoints absent from mappings when verified in code. Mappings are evidence, not proof that an arbitrary item or ID is the correct business record.
 
+## Missing Necto mappings
+
+When source code verifies a relationship that Necto did not discover, consult [the annotation guide](references/missing-mappings.md). Use an ordinary scenario response binding for the requested workflow. To expose the relationship in Necto, propose matching `[EndpointValue("LogicalKey")]` annotations on the response and request members. Apply them when the user asks to update API source, then verify the generated mapping. Keep uncertain relationships unresolved.
+
 ## Design the graph
 
 - Name steps by intent. Independent steps may run in parallel; joins must wait for every prerequisite. Set conservative concurrency (default 4, range 1–8).
