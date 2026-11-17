@@ -1,4 +1,5 @@
 <script setup>
+import { suggestInputs } from './inputSuggestions.js'
 import FolderSave from '../scenario-folder/FolderSave.vue'
 import FolderFeedback from '../scenario-folder/FolderFeedback.vue'
 import FolderLibrary from '../scenario-folder/FolderLibrary.vue'
@@ -20,7 +21,7 @@ import { waitOptions } from './waiting.js'
 import ScenarioBodyEditor from './ScenarioBodyEditor.vue'
 import ExpandedResponse from './ExpandedResponse.vue'
 
-const props = defineProps({ configuration: Object, operations: Array, scenarios: Array, context: Function, presetContext: Function, presetNames: { type: Array, default: () => [] }, activePresetNames: { type: Array, default: () => [] }, execute: Function, authentication: Object, busy: Boolean, folder:Object })
+const props = defineProps({ mappingLinks: { type: Array, default: () => [] }, configuration: Object, operations: Array, scenarios: Array, context: Function, presetContext: Function, presetNames: { type: Array, default: () => [] }, activePresetNames: { type: Array, default: () => [] }, execute: Function, authentication: Object, busy: Boolean, folder:Object })
 const emit = defineEmits(['back', 'pending', 'folder-settings'])
 const configurationRef = computed(() => props.configuration)
 const store = useBuilder(configurationRef)
@@ -37,6 +38,29 @@ const edgeOperation = computed(() => props.operations.find(operation => operatio
 const inbound = computed(() => selected.value ? allConnections(draft.value).filter(edge => edge.to === selected.value.id) : [])
 const selected = computed(() => draft.value.steps.find(step => step.id === selectedId.value))
 const operation = computed(() => props.operations.find(operation => operation.key === selected.value?.operationKey))
+const suggestionsOpen = ref(false)
+const suggestionProblem = ref('')
+const suggestions = computed(() => suggestionsOpen.value
+  ? suggestInputs(draft.value, selected.value, operation.value, props.mappingLinks)
+  : [])
+watch(selectedId, () => { suggestionsOpen.value = false; suggestionProblem.value = '' })
+function useSuggestion(option) {
+  if (pending.value) return
+  suggestionProblem.value = ''
+  try {
+    const producer = option.stepId ? null : newStep(option.from, props.context().createSession(option.from))
+    const input = { ...option.input, stepId: option.stepId ?? producer.id }
+    const steps = draft.value.steps.map(step => step.id === selectedId.value
+      ? { ...step, inputs: [...step.inputs, input] }
+      : step)
+    if (producer) {
+      if (option.expectedStatus) producer.request.assertions.push({ kind: 'status', expected: option.expectedStatus })
+      steps.push(producer)
+    }
+    validateBlueprint({ ...draft.value, steps })
+    draft.value.steps = steps
+  } catch (cause) { suggestionProblem.value = cause.message }
+}
 const runStep = computed(() => execution.steps.find(step => step.id === selectedId.value))
 const filtered = computed(() => props.operations.filter(operation => `${operation.method} ${operation.path} ${operation.name} ${operation.apiName}`.toLowerCase().includes(search.value.toLowerCase())).slice(0, 100))
 const validation = computed(() => { try { validateBlueprint(draft.value); return '' } catch (cause) { return cause.message } })
@@ -252,6 +276,21 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
           <div v-else class="inspector-content">
             <p v-if="!selected.operationKey" class="empty-request-note">Choose an endpoint for this request. Its connection is already in place.</p><p v-else-if="!operation" class="error">Endpoint unavailable. Enable its API connection before running.</p>
             <section class="incoming-links" aria-label="Incoming connections"><h4>Incoming connections</h4><button v-for="edge in inbound" :key="connectionKey(edge.from, edge.to)" type="button" class="secondary" @click="openConnection(edge, $event)">{{ connectionSummary(edge, draft.steps) }}<small v-if="edge.delayMs !== undefined || edge.waitFor"> · Delay / Wait for</small></button><p class="muted">Drag between handles on the map. Configure timing and response bindings using ⚙ on the line.</p></section>
+            <details v-if="operation" :key="selected.id" class="input-suggestions" @toggle="suggestionsOpen = $event.target.open">
+              <summary>Suggest inputs</summary>
+              <p v-if="!suggestions.length" class="muted">No available scalar or whole-value mappings for unbound inputs. Configure array selection in Dynamic inputs or the JSON builder.</p>
+              <div v-for="group in suggestions" :key="group.field">
+                <strong>{{ group.field }}</strong>
+                <ul><li v-for="(option, index) in group.options" :key="index">
+                  <button type="button" class="secondary" :disabled="pending" @click="useSuggestion(option)">
+                    {{ option.stepId ? draft.steps.find(step => step.id === option.stepId)?.label : 'Add ' + option.from.name }}
+                    · {{ option.input.responsePointer || 'whole response' }}
+                  </button>
+                  <small>{{ option.evidence }}<template v-if="option.expectedStatus"> · HTTP {{option.expectedStatus}}</template></small>
+                </li></ul>
+              </div>
+              <p v-if="suggestionProblem" class="error" role="alert">{{ suggestionProblem }}</p>
+            </details>
             <StepInputs v-if="operation?.parameters.some(parameter => ['path','query','header'].includes(parameter.in))" :parameters-only="true" :step="selected" :operation="operation" :steps="draft.steps" :variables="draft.variables" :operations="operations" :results="execution.steps" :disabled="pending" />
             <details class="static-request" open><summary>Request · static inputs</summary><fieldset :disabled="pending || !operation"><template v-if="operation"><label v-for="parameter in operation.parameters.filter(parameter => ['path', 'query', 'header'].includes(parameter.in))" :key="parameter.in + ':' + parameter.name">{{ parameter.in }} · {{ parameter.name }}<span v-if="dynamicTargets.has(parameter.in + ':' + parameter.name)" class="input-tag">Filled at run time</span><input v-model="selected.request.fields[parameter.in + ':' + parameter.name]" :disabled="dynamicTargets.has(parameter.in + ':' + parameter.name)" :placeholder="parameter.required || parameter.in === 'path' ? 'Required' : 'Optional'"></label></template></fieldset></details>
             <ScenarioBodyEditor v-if="operation?.requestBody" :key="selected.id" :step="selected" :operation="operation" :steps="draft.steps" :operations="operations" :variables="draft.variables" :results="execution.steps" :disabled="pending" />
@@ -280,6 +319,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
   </section>
 </template>
 <style scoped>
+.input-suggestions { font-size:.78rem; margin-block:.7rem; }.input-suggestions ul { margin:.35rem 0 .65rem; padding-left:1rem; }.input-suggestions li { margin-bottom:.25rem; }.input-suggestions small { margin-inline:.4rem; color:var(--muted); }
 .step-dialog { width:min(76rem,calc(100vw - 2rem)); height:min(90dvh,60rem); max-height:calc(100dvh - 2rem); padding:0; color:inherit; box-shadow:0 16px 65px #17342650; }
 .step-dialog::backdrop { background:#17342666; }
 .step-dialog-shell { display:flex; flex-direction:column; height:100%; min-height:0; }

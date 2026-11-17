@@ -1,5 +1,7 @@
 <script setup>
 import RandomSourceEditor from './RandomSourceEditor.vue'
+import { sensitiveName } from '../workbench/privacy.js'
+import { contractValues } from '../request-runner/contractValues.js'
 import ExpressionEditor from './ExpressionEditor.vue'
 import DescriptionHelp from '../workbench/DescriptionHelp.vue'
 import { computed, ref, watch, inject } from 'vue'
@@ -16,6 +18,14 @@ const variants=computed(()=>{const raw=props.operation.resolve(props.raw);return
 const variant=computed(()=>inferVariant(props.operation,props.raw,current(),props.step.request.bodyVariants?.[pointer(props.path)]))
 const error=ref(''),open=ref(props.depth<4),visible=ref(50),itemsVisible=ref(10)
 const schema=computed(()=>schemaView(props.operation,props.raw,variant.value))
+const examples = computed(() => schema.value.writeOnly || schema.value.format === 'password' ||
+  sensitiveName(props.name ?? '') || schema.value['x-necto-sensitive'] === true ||
+  props.operation.resolve(props.raw)?.oneOf || props.operation.resolve(props.raw)?.anyOf ||
+  props.operation.resolve(props.raw)?.allOf ? [] : contractValues(schema.value))
+function useExample(index, element) {
+  if (index !== '') set(examples.value[Number(index)].value)
+  element.value = ''
+}
 const type=computed(()=>{const t=schema.value.type;return Array.isArray(t)?t.find(t=>t!=='null'):t??(Object.keys(schema.value.properties??{}).length?'object':schema.value.items?'array':current()!==undefined?(Array.isArray(current())?'array':current()===null?'null':typeof current()):'string')})
 const nullable=computed(()=>schema.value.nullable||schema.value.type?.includes?.('null'))
 const value=computed(current),binding=computed(()=>bindingAt(props.step,props.path)),source=computed(()=>binding.value?.source??'static')
@@ -48,6 +58,7 @@ function changeVariant(index,element){attempt(()=>{if(!window.confirm('Replace t
     <select v-else-if="type==='boolean'" :value="value===undefined?'':JSON.stringify(value)" :aria-label="'Value for '+name" @change="set(JSON.parse($event.target.value))"><option value="" disabled>Not set</option><option value="true">true</option><option value="false">false</option><option v-if="nullable" value="null">null</option></select>
     <input v-else-if="type==='number'||type==='integer'" :value="step.request.bodyFieldEdits?.[pointer(path)]??value??''" type="number" :step="type==='integer'?1:'any'" :aria-label="'Value for '+name" @input="attempt(()=>editBodyNumber(step,operation,path,$event.target.value,type==='integer'))">
     <input v-else-if="type==='string'" :value="value??''" :type="schema.writeOnly||schema.format==='password'?'password':'text'" :aria-label="'Value for '+name" @input="set($event.target.value)">
+    <select v-if="examples.length" :aria-label="'Contract examples for '+name" value="" @change="useExample($event.target.value,$event.target)"><option value="">Contract examples…</option><option v-for="(example, index) in examples" :key="index" :value="index">{{example.label}} · {{JSON.stringify(example.value).slice(0,48)}}</option></select>
     <button v-if="['object','array'].includes(type)&&value===null" type="button" class="secondary" @click="attempt(()=>set(schemaTemplate(operation,schema)))">Create {{type}}</button><button v-if="nullable&&value!==null" type="button" class="secondary" @click="set(null)">Set null</button>
    </template>
    <template v-else-if="source==='response'"><label>Source step<select v-model="binding.stepId" :aria-label="'Response step for '+name"><option value="" disabled>Choose request</option><option v-for="other in steps.filter(other=>other.id!==step.id)" :key="other.id" :value="other.id">{{other.label}}</option></select></label><label>Response field<input v-model="binding.responsePointer" :list="'schema-path-'+binding.stepId+'-'+pointer(path)" :aria-label="'Response field for '+name" placeholder="/id"></label><datalist :id="'schema-path-'+binding.stepId+'-'+pointer(path)"><option v-for="hint in hints()" :key="hint" :value="hint" /></datalist></template>

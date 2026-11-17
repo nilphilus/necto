@@ -1,0 +1,34 @@
+require('./qa-fixture.cjs').run(async ({ p, assert, builder, add, save, saved, execute, calls }) => {
+  await p.route('**/openapi.json', async route => {
+    const response = await route.fetch()
+    const spec = await response.json()
+    const invoice = spec.paths['/invoices'].post.requestBody.content['application/json'].schema
+    invoice.properties.amount.minimum = 10
+    invoice.properties.amount.maximum = 20
+    await route.fulfill({ response, json: spec })
+  })
+  await p.route('**/mappings', route => route.fulfill({ json: [
+    { source: { operationId: 'Customer', property: 'id' }, target: { operationId: 'Create', location: 'body', name: 'customerId' }, match: 'name' },
+    { source: { operationId: 'Rows', objectPath: [0], property: 'name' }, target: { operationId: 'Create', location: 'body', name: 'name' }, match: 'name' }
+  ] }))
+  await p.reload()
+  await builder()
+  await add('Create invoice')
+  await p.getByText('Suggest inputs', { exact: true }).click()
+  await p.getByRole('button', { name: 'Add Find customer · /id', exact: true }).click()
+  await p.getByRole('button', { name: 'Add Invoice rows · /0/name', exact: true }).click()
+  await p.getByLabel('Contract examples for amount', { exact: true }).selectOption({ label: 'Upper boundary · 20' })
+  await save()
+  const definition = await saved()
+  assert.equal(calls.length, 0)
+  assert.equal(definition.steps.length, 3)
+  assert.equal(new Set(definition.steps[0].inputs.map(input => input.stepId)).size, 2)
+  assert.equal(JSON.parse(definition.steps[0].request.body).amount, 20)
+  await execute(3)
+  assert.deepEqual(calls.slice(0, 2).map(call => call.path).sort(), ['/customer', '/rows'])
+  const request = calls.at(-1)
+  assert.equal(request.path, '/invoices')
+  assert.equal(request.body.customerId, 42)
+  assert.equal(request.body.name, 'Invoice 0')
+  assert.equal(request.body.amount, 20)
+})

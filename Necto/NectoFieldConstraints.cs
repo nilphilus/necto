@@ -4,7 +4,18 @@ using System.Text.Json.Serialization.Metadata;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 namespace Necto;
-public sealed record NectoFieldConstraint(string ClrName,string Property,string Kind,string? Value,string? Other);
+public sealed record NectoFieldConstraint(string ClrName,string Property,string Kind,string? Value,string? Other)
+{
+    public bool MinimumIsExclusive { get; init; }
+    public bool MaximumIsExclusive { get; init; }
+
+    public NectoFieldConstraint(string clrName, string property, string kind, string? value, string? other,
+        bool minimumIsExclusive, bool maximumIsExclusive) : this(clrName, property, kind, value, other)
+    {
+        MinimumIsExclusive = minimumIsExclusive;
+        MaximumIsExclusive = maximumIsExclusive;
+    }
+}
 public static class NectoFieldConstraints
 {
     public static OpenApiOptions Add(OpenApiOptions options,IReadOnlyList<NectoFieldConstraint> constraints)
@@ -31,8 +42,18 @@ public static class NectoFieldConstraints
                 case "MinLengthAttribute":if(field.Type?.HasFlag(JsonSchemaType.Array)==true)field.MinItems??=Number(entry.Value);else field.MinLength??=Number(entry.Value);break;
                 case "MaxLengthAttribute":if(field.Type?.HasFlag(JsonSchemaType.Array)==true)field.MaxItems??=Number(entry.Value);else field.MaxLength??=Number(entry.Value);break;
                 case "RangeAttribute":
-                    if(decimal.TryParse(entry.Value,NumberStyles.Float,CultureInfo.InvariantCulture,out _))field.Minimum??=entry.Value;
-                    if(decimal.TryParse(entry.Other,NumberStyles.Float,CultureInfo.InvariantCulture,out _))field.Maximum??=entry.Other;
+                    if (decimal.TryParse(entry.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out _) &&
+                        field.Minimum is null && field.ExclusiveMinimum is null)
+                    {
+                        if (entry.MinimumIsExclusive) field.ExclusiveMinimum = entry.Value;
+                        else field.Minimum = entry.Value;
+                    }
+                    if (decimal.TryParse(entry.Other, NumberStyles.Float, CultureInfo.InvariantCulture, out _) &&
+                        field.Maximum is null && field.ExclusiveMaximum is null)
+                    {
+                        if (entry.MaximumIsExclusive) field.ExclusiveMaximum = entry.Other;
+                        else field.Maximum = entry.Other;
+                    }
                     break;
                 case "EmailAddressAttribute":field.Format??="email";break;
                 case "UrlAttribute":field.Format??="uri";break;
