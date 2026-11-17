@@ -29,10 +29,11 @@ function readEntityGraph(spec, operations) {
       ['allOf', 'anyOf', 'oneOf'].some(key => schema[key]?.some(child => objectSchema(child, seen))))
   }
   function addNode(id, name, schema) {
+    const clrName = typeof schema['x-necto-clr-name'] === 'string' ? schema['x-necto-clr-name'].trim() : ''
     const title = typeof schema.title === 'string' ? schema.title.trim() : ''
     const schemaKey = id.startsWith('schema:') ? name : undefined
     const label = title || schemaKey
-    if (!nodes.has(id)) nodes.set(id, { id, name: label ? schemaLabel(label) : name,
+    if (!nodes.has(id)) nodes.set(id, { id, name: clrName || (label ? schemaLabel(label) : name),
       schemaKey, schema, endpoints: new Map() })
     return id
   }

@@ -34,6 +34,7 @@ public static class NectoUIApplicationExtensions
             application.GetCustomAttribute<NectoMappingsAttribute>()?.Map(app);
         }
         var ui = app.MapNectoUI(routePrefix, openApiPath, endpointMappingsPath, agentPath);
+        NectoEntityNames.Register(app, openApiPath);
         if (metadataAttribute is not null)
         {
             ui.WithMetadata(metadataAttribute);

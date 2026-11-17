@@ -61,6 +61,21 @@ test('schema titles are display names and references still use the original keys
   assert.equal(result.nodes.find(node => node.id === 'schema:Line').name, 'Line')
 })
 
+test('CLR names take precedence over schema titles and keys without changing references', () => {
+  const key = 'BillingInvoiceResponse'
+  const className = 'InvoiceWithAnUnusuallyLongClrName'
+  const spec = { components: { schemas: {
+    [key]: { title: 'Invoice response', 'x-necto-clr-name': className, properties: { line: ref('Line') } },
+    Line: { type: 'object' },
+  } } }
+  const { nodes, edges } = buildEntityGraph(spec, [operation('GetInvoice', ref(key))])
+  const invoice = nodes.find(node => node.id === `schema:${key}`)
+  assert.equal(invoice.name, className)
+  assert.equal(invoice.schemaKey, key)
+  assert.equal(invoice.endpoints[0].operation.id, 'GetInvoice')
+  assert.ok(edges.some(edge => edge.from === invoice.id && edge.to === 'schema:Line'))
+})
+
 test('qualified and flattened schema keys have short labels while references retain their identity', () => {
   const invoiceKey = 'Company.Product.Billing.Contracts.Invoice'
   const lineKey = 'CompanyProductBillingContractsInvoiceLine'

@@ -14,9 +14,17 @@ public sealed class TenantBillingTests(WebApplicationFactory<TenantRequest> app)
     {
         using var client = app.CreateClient();
         var document = (await client.GetFromJsonAsync<JsonObject>("/openapi/v1.json"))!;
+        var schemas = document["components"]!["schemas"]!.AsObject();
+        Assert.Contains(schemas, schema => (string?)schema.Value?["x-necto-clr-name"]
+            == nameof(BillingSample::SampleApi.FastEndpoints.Invoices.Invoice));
         var operations = document["paths"]!.AsObject().SelectMany(path => path.Value!.AsObject())
             .ToDictionary(entry => (string?)entry.Value!["operationId"] ?? "", entry => entry.Value!);
         Assert.NotEmpty(operations);
+        var lineRequest = operations["CreateInvoiceLine"]["requestBody"]!["content"]!["application/json"]!["schema"]!;
+        if ((string?)lineRequest["$ref"] is { } requestRef)
+            lineRequest = schemas[requestRef.Split('/').Last()]!;
+        Assert.Equal(nameof(BillingSample::SampleApi.FastEndpoints.Invoices.CreateInvoiceLineRequest),
+            (string?)lineRequest["x-necto-clr-name"]);
         foreach (var operation in operations.Values)
         {
             Assert.Contains(operation["parameters"]!.AsArray(), parameter =>
