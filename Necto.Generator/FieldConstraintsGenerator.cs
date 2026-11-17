@@ -20,11 +20,11 @@ public sealed class FieldConstraintsGenerator : IIncrementalGenerator
                 var kind=attribute.AttributeClass.Name;
                 if(kind is not ("RequiredAttribute" or "RangeAttribute" or "StringLengthAttribute" or "MinLengthAttribute" or "MaxLengthAttribute" or "EmailAddressAttribute" or "UrlAttribute" or "RegularExpressionAttribute"))continue;
                 string? Value(int index)=>attribute.ConstructorArguments.Length>index?Convert.ToString(attribute.ConstructorArguments[index].Value,CultureInfo.InvariantCulture):null;
-                if(kind=="RangeAttribute" && attribute.NamedArguments.Any(item=>item.Key is "MinimumIsExclusive" or "MaximumIsExclusive" && item.Value.Value is true))continue;
+                bool Flag(string name) => attribute.NamedArguments.Any(item => item.Key == name && item.Value.Value is true);
                 var first=Value(0);var second=Value(1);
                 if(kind=="RangeAttribute"&&attribute.ConstructorArguments.Length==3){first=Value(1);second=Value(2);}
                 if(kind=="StringLengthAttribute")second=Convert.ToString(attribute.NamedArguments.FirstOrDefault(item=>item.Key=="MinimumLength").Value.Value,CultureInfo.InvariantCulture);
-                code.AppendLine($"new({ContractSymbols.Literal(ContractSymbols.ClrName(type))},{ContractSymbols.Literal(property.Name)},{ContractSymbols.Literal(kind)},{ContractSymbols.Literal(first)},{ContractSymbols.Literal(second)}),");
+                code.AppendLine($"new({ContractSymbols.Literal(ContractSymbols.ClrName(type))},{ContractSymbols.Literal(property.Name)},{ContractSymbols.Literal(kind)},{ContractSymbols.Literal(first)},{ContractSymbols.Literal(second)},{(Flag("MinimumIsExclusive") ? "true" : "false")},{(Flag("MaximumIsExclusive") ? "true" : "false")}),");
             }
             code.AppendLine("}); }");ctx.AddSource("NectoFieldConstraints.g.cs",GeneratedScope.Isolate(code.ToString(),data.Right));
         });
