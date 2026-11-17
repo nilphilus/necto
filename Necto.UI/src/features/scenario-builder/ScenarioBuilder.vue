@@ -26,6 +26,8 @@ const configurationRef = computed(() => props.configuration)
 const store = useBuilder(configurationRef)
 const { draft, saved, dirty, error, notice, execution, pending, questions } = store
 const pickingStepId = ref(''), removedStep = ref(null)
+const stepDialog = ref(null)
+async function showStep() { await nextTick(); if(selected.value && !stepDialog.value.open) stepDialog.value.showModal() }
 const selectedId = ref(''), tab = ref('configure'), search = ref(''), addDialog = ref(null), runDialog = ref(null), fileInput = ref(null)
 const selectedPresets = ref([])
 const review = ref([]), allowHuman = ref(true), runProblem = ref(''), picker = ref(''), quick = ref('')
@@ -41,7 +43,7 @@ const validation = computed(() => { try { validateBlueprint(draft.value); return
 const dynamicTargets = computed(() => new Set(selected.value?.inputs.filter(input => input.location !== 'body').map(input => input.location + ':' + input.name)))
 const definitionChanged = () => { if (execution.status !== 'idle' && !pending.value) execution.stale = true }
 watch(()=>[draft.value.name,draft.value.steps,draft.value.variables,draft.value.connections,draft.value.concurrency], definitionChanged, { deep: true })
-watch(() => draft.value.id, () => { removedStep.value = null; edgeDialog.value?.close(); edgeEdit.value = null; picker.value = saved.value.some(item => item.id === draft.value.id) ? draft.value.id : ''; selectedId.value = draft.value.steps[0]?.id ?? ''; tab.value = 'configure' })
+watch(() => draft.value.id, () => { removedStep.value = null; stepDialog.value?.close(); edgeDialog.value?.close(); edgeEdit.value = null; picker.value = saved.value.some(item => item.id === draft.value.id) ? draft.value.id : ''; selectedId.value = draft.value.steps[0]?.id ?? ''; tab.value = 'configure' })
 watch(pending, value => { if(value) removedStep.value=null; emit('pending', value) }, { immediate: true })
 onScopeDispose(() => emit('pending', false))
 if (props.authentication) onScopeDispose(props.authentication.onChange(ids => store.invalidate(ids)))
@@ -62,6 +64,7 @@ async function createNext({from, position}) {
   draft.value.steps.push(step)
   if (from !== null) draft.value.connections.push({from,to:step.id})
   selectedId.value = step.id; tab.value = 'configure'
+  await showStep()
   await nextTick()
   const card = [...document.querySelectorAll('.map-node')].find(card => card.dataset.stepId === step.id)
   card?.scrollIntoView({block:'nearest',inline:'nearest'})
@@ -74,10 +77,10 @@ function add(operation) {
     const old = draft.value.steps[index], previous = props.operations.find(item => item.key === old.operationKey)
     if (old.operationKey && !window.confirm('Changing the endpoint resets this request’s inputs and body. Keep the connections and continue?')) return
     draft.value.steps[index] = configureEndpoint(old, operation, props.context().createSession(operation), previous?.name)
-    selectedId.value = old.id; tab.value = 'configure'; addDialog.value.close(); return
+    selectedId.value = old.id; tab.value = 'configure'; addDialog.value.close(); void showStep(); return
   }
   if (draft.value.steps.length >= 100) { error.value = 'A scenario supports at most 100 steps.'; addDialog.value.close(); return }
-  const step = newStep(operation, props.context().createSession(operation)); draft.value.steps.push(step); selectedId.value = step.id; tab.value = 'configure'; addDialog.value.close()
+  const step = newStep(operation, props.context().createSession(operation)); draft.value.steps.push(step); selectedId.value = step.id; tab.value = 'configure'; addDialog.value.close(); void showStep()
 }
 function removeStep() {
   const id = selected.value.id
@@ -86,11 +89,11 @@ function removeStep() {
   if (draft.value.steps.some(step => dependencies(step, draft.value).includes(id)) && !window.confirm('Remove this step and all connections that use its response?')) return
   const removed = removeStepDraft(draft.value,id)
   draft.value = removed.next; removedStep.value = removed.snapshot
-  selectedId.value = draft.value.steps[0]?.id ?? ''
+  selectedId.value = draft.value.steps[0]?.id ?? ''; stepDialog.value.close()
 }
 function undoRemoveStep() {
  if(pending.value||!removedStep.value)return
- attempt(()=>{const id=removedStep.value.step.id;draft.value=restoreStepDraft(draft.value,removedStep.value);removedStep.value=null;selectedId.value=id;tab.value='configure'})
+ attempt(()=>{const id=removedStep.value.step.id;draft.value=restoreStepDraft(draft.value,removedStep.value);removedStep.value=null;selectedId.value=id;tab.value='configure';void showStep()})
 
 }
 function candidateConnection(edge, inputs) {
@@ -166,7 +169,7 @@ async function startRun() {
     if (runDialog.value.open) runDialog.value.close()
   } catch (cause) { runProblem.value = cause.message; if (!runDialog.value.open) error.value = cause.message }
 }
-function select(id) { selectedId.value = id; if (pending.value || execution.steps.length) tab.value = 'response' }
+function select(id) { selectedId.value = id; if (pending.value || execution.steps.length) tab.value = 'response'; void showStep() }
 function exportDefinition() {
   attempt(() => {
     const data = savedBlueprint(draft.value)
@@ -238,7 +241,10 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
     </section>
     <div class="builder-layout">
       <ScenarioMap :blueprint="draft" :selected="selectedId" :steps="execution.stale ? [] : execution.steps" :disabled="pending" @select="select" @connect="connect" @configure="openConnection" @create-next="createNext" />
-      <aside class="builder-inspector" aria-label="Step details">
+    </div>
+    <dialog ref="stepDialog" class="builder-inspector step-dialog" aria-labelledby="step-dialog-title" @click="event => event.target === stepDialog && stepDialog.close()">
+      <div class="step-dialog-shell">
+        <header class="step-dialog-title"><h3 id="step-dialog-title">{{tab==='response'?'Step response':'Edit step'}}</h3><button type="button" class="secondary" aria-label="Close step editor" @click="stepDialog.close()">×</button></header>
         <template v-if="selected">
           <header class="inspector-header"><label>Step name<input v-model="selected.label" :disabled="pending" maxlength="200" aria-label="Step name"></label><div class="request-endpoint-actions"><button type="button" class="secondary" :disabled="pending" @click="openAdd(selected.id)">{{ selected.operationKey ? 'Change endpoint' : 'Choose endpoint…' }}</button><button type="button" class="secondary" :disabled="pending || draft.steps.length >= 100" @click="createNext({from:selected.id})">+ Next request</button></div><code><span class="method" :data-method="selected.method">{{ selected.method }}</span> {{ selected.path }}</code></header>
           <div class="inspector-tabs" role="group" aria-label="Step view"><button type="button" :aria-pressed="tab === 'configure'" @click="tab = 'configure'">Configure</button><button type="button" :aria-pressed="tab === 'response'" @click="tab = 'response'">Response<span v-if="runStep?.httpStatus"> · {{ runStep.httpStatus }}</span></button></div>
@@ -255,8 +261,9 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
           </div>
         </template>
         <div v-else class="inspector-empty"><strong>Build your API workflow</strong><p>Add any endpoint, name its step and choose where its inputs come from.</p><p>A → B + C → D: connect B and C to A, then D to both. Parallel branches are shown side by side.</p><button type="button" class="primary" :disabled="pending" @click="openAdd">Add first request</button></div>
-      </aside>
-    </div>
+        <footer class="step-dialog-footer"><small>Edits update the current draft. Save the scenario to keep them in this browser.</small><button type="button" class="secondary" :disabled="pending||!!validation" @click="save">Save scenario</button><button type="button" class="primary" @click="stepDialog.close()">Done</button></footer>
+      </div>
+    </dialog>
     <dialog ref="edgeDialog" @close="edgeEdit = null; mappingEdit = null" class="connection-popover" :style="popupPosition" aria-labelledby="connection-title" @click="event => event.target === edgeDialog && edgeDialog.close()">
       <form v-if="edgeEdit && edgeTarget" @submit.prevent="saveConnection"><header><div><h3 id="connection-title">{{ connectionSummary(edgeEdit, draft.steps) }}</h3><p>Connection settings · target request</p></div><button type="button" class="secondary" aria-label="Close connection settings" @click="edgeDialog.close()">×</button></header>
         <div class="connection-content"><p class="connection-explanation">Delay happens before {{ edgeTarget.label }}. Wait for checks and repeats <strong>{{ edgeTarget.method }} {{ edgeTarget.path }}</strong>, keeping the source response unchanged.</p>
@@ -273,15 +280,25 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
   </section>
 </template>
 <style scoped>
+.step-dialog { width:min(76rem,calc(100vw - 2rem)); height:min(90dvh,60rem); max-height:calc(100dvh - 2rem); padding:0; color:inherit; box-shadow:0 16px 65px #17342650; }
+.step-dialog::backdrop { background:#17342666; }
+.step-dialog-shell { display:flex; flex-direction:column; height:100%; min-height:0; }
+.step-dialog-title,.step-dialog-footer { flex:none; display:flex; gap:.6rem; align-items:center; padding:.65rem 1rem; }
+.step-dialog-title { justify-content:space-between; border-bottom:1px solid var(--line); }
+.step-dialog-title h3 { margin:0; font-size:1rem; }
+.step-dialog-footer { border-top:1px solid var(--line); }
+.step-dialog-footer small { flex:1; color:var(--muted); font-size:.72rem; }
+@media(max-width:760px) { .step-dialog { width:calc(100vw - 1rem); height:calc(100dvh - 1rem); max-height:calc(100dvh - 1rem); }.step-dialog-footer { flex-wrap:wrap; }.step-dialog-footer small { flex-basis:100%; } }
+
 .connection-popover { position:fixed; margin:0; width:min(420px,calc(100vw - 24px)); max-height:min(680px,calc(100dvh - 24px)); overflow:hidden; padding:0; border:1px solid var(--line); border-radius:.7rem; background:var(--surface); color:inherit; box-shadow:0 12px 45px #163c293d; font-size:.78rem; }.connection-popover::backdrop { background:#17342618; }.connection-popover form { display:flex; flex-direction:column; max-height:min(680px,calc(100dvh - 26px)); }.connection-content { overflow:auto; min-height:0; padding:.1rem .9rem; }.connection-popover header { flex:none; padding:.85rem .9rem; border-bottom:1px solid var(--line); display:flex; align-items:start; justify-content:space-between; gap:.5rem; margin:0; }.connection-popover h3 { margin:0; font-size:.95rem; overflow-wrap:anywhere; }.connection-popover p { line-height:1.5; }.connection-popover header p { color:var(--muted); margin:.25rem 0 0; font-size:.7rem; }.connection-popover footer { flex:none; padding:.65rem .9rem; background:var(--surface); display:flex; justify-content:flex-end; gap:.4rem; flex-wrap:wrap; margin-top:0; border-top:1px solid var(--line); }.connection-popover footer button { font-size:.72rem; }.connection-popover footer .error { margin-right:auto; }.incoming-links { margin-bottom:1rem; display:grid; gap:.4rem; }.incoming-links h4 { margin:0; font-size:.8rem; }.incoming-links button { text-align:left; font-size:.75rem; }.incoming-links p { font-size:.7rem; margin:.2rem 0; }.request-endpoint-actions { display:flex; gap:.4rem; flex-wrap:wrap; font-size:.72rem; }.empty-request-note { padding:.7rem; background:var(--accent-soft); font-size:.8rem; line-height:1.5; }.builder { flex:1; display:flex; flex-direction:column; min-height:0; min-width:0; background:var(--canvas); padding:.8rem; gap:.65rem; }
 .builder-header,.builder-actions,.builder-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.45rem .65rem; }.builder-header h2 { font-size:1rem; margin:0; }.builder-header { font-size:.78rem; }.builder-actions { margin-left:auto; }.save-state { font-size:.68rem; color:var(--muted); }
 .builder-toolbar { font-size:.75rem; }.builder-toolbar label { display:flex; gap:.4rem; align-items:center; }.builder-toolbar input,.builder-toolbar select { min-width:0; padding:.35rem; max-width:15rem; }.scenario-name { flex:1; }.scenario-name input { flex:1; }.builder-more { position:relative; }.builder-more summary { cursor:pointer; padding:.4rem; }.builder-more > div { position:absolute; right:0; top:100%; z-index:2; display:grid; gap:.5rem; width:18rem; padding:.8rem; background:var(--surface); border:1px solid var(--line); border-radius:.5rem; box-shadow:0 5px 18px #203b2820; }.builder-more p { font-size:.7rem; line-height:1.5; margin:0; }.builder-more label { display:grid; }
-.builder-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(21rem,31%); gap:.7rem; flex:1; min-height:0; }.builder-inspector { display:flex; flex-direction:column; min-height:0; min-width:0; border:1px solid var(--line); border-radius:.65rem; background:var(--surface); overflow:hidden; }.inspector-header { padding:.75rem; display:grid; gap:.5rem; border-bottom:1px solid var(--line); }.inspector-header label { display:grid; gap:.25rem; font-size:.7rem; color:var(--muted); }.inspector-header input { width:100%; min-width:0; font-weight:650; color:var(--accent); }.inspector-header code { font-size:.72rem; overflow-wrap:anywhere; }.inspector-tabs { display:flex; border-bottom:1px solid var(--line); font-size:.78rem; }.inspector-tabs button { flex:1; padding:.6rem; border-radius:0; }.inspector-tabs [aria-pressed=true] { background:var(--accent-soft); color:var(--accent); font-weight:650; }.inspector-content { overflow:auto; padding:.75rem; min-height:0; flex:1; }.inspector-empty { padding:1.2rem; color:var(--muted); font-size:.85rem; line-height:1.6; }
+.builder-layout { display:grid; grid-template-columns:minmax(0,1fr); gap:.7rem; flex:1; min-height:0; }.builder-inspector { flex-direction:column; min-height:0; min-width:0; border:1px solid var(--line); border-radius:.65rem; background:var(--surface); overflow:hidden; }.inspector-header { padding:.75rem; display:grid; gap:.5rem; border-bottom:1px solid var(--line); }.inspector-header label { display:grid; gap:.25rem; font-size:.7rem; color:var(--muted); }.inspector-header input { width:100%; min-width:0; font-weight:650; color:var(--accent); }.inspector-header code { font-size:.72rem; overflow-wrap:anywhere; }.inspector-tabs { display:flex; border-bottom:1px solid var(--line); font-size:.78rem; }.inspector-tabs button { flex:1; padding:.6rem; border-radius:0; }.inspector-tabs [aria-pressed=true] { background:var(--accent-soft); color:var(--accent); font-weight:650; }.inspector-content { overflow:auto; padding:.75rem; min-height:0; flex:1; }.inspector-empty { padding:1.2rem; color:var(--muted); font-size:.85rem; line-height:1.6; }
 .dependencies { margin:0 0 1rem; border:1px solid var(--line); border-radius:.5rem; padding:.55rem; max-height:12rem; overflow:auto; }.dependencies legend { font-size:.78rem; font-weight:600; }.dependencies label { display:flex; flex-wrap:wrap; gap:.3rem; align-items:center; font-size:.75rem; padding:.15rem; }.dependencies p { font-size:.7rem; margin:.4rem 0 0; }.dependencies small { color:var(--muted); font-size:.65rem; }
 .static-request,.request-limits { font-size:.78rem; margin-top:.8rem; border-top:1px solid var(--line); padding-top:.7rem; }summary { cursor:pointer; }.static-request fieldset,.request-limits fieldset { padding:0; border:0; min-width:0; display:grid; gap:.6rem; margin:.7rem 0; }.static-request label,.request-limits label { display:grid; gap:.3rem; font-size:.75rem; }.static-request input { width:100%; min-width:0; }.input-tag { font-size:.65rem; color:var(--accent); }.remove-step { margin-top:.8rem; font-size:.75rem; }.response-content { font-size:.78rem; }.attempt-progress { padding:.5rem; background:var(--accent-soft); border-radius:.35rem; font-size:.75rem; }.attempt-history { margin:.5rem 0; font-size:.72rem; }.response-content :deep(.json-preview) { min-height:15rem; }
 .builder-message { margin:0; font-size:.78rem; }.builder-run-status { display:flex; gap:.5rem 1rem; flex-wrap:wrap; font-size:.78rem; padding:.5rem .7rem; background:var(--accent-soft); border-radius:.4rem; }
 .human-queue { display:flex; flex-wrap:wrap; gap:.6rem; max-height:38vh; overflow:auto; }.human-card { flex:1 1 22rem; padding:.75rem; border:1px solid #cdad63; border-radius:.6rem; background:#fff8e6; display:grid; gap:.6rem; }.human-card header { display:flex; justify-content:space-between; gap:.5rem; font-size:.8rem; }.human-card label { display:grid; gap:.25rem; font-size:.78rem; }.human-card small { color:var(--muted); font-size:.68rem; }.human-card > div { display:flex; align-items:center; flex-wrap:wrap; gap:.5rem; }.human-card p { margin:0; font-size:.78rem; }
 .builder-dialog { width:min(42rem,calc(100% - 2rem)); max-height:85dvh; overflow:auto; padding:1rem; border:1px solid var(--line); border-radius:.7rem; background:var(--surface); color:inherit; }.builder-dialog::backdrop { background:#172b2466; }.builder-dialog header { display:flex; justify-content:space-between; align-items:center; gap:.5rem; margin-bottom:.7rem; }.builder-dialog h3 { font-size:1rem; margin:0; }.builder-dialog p { font-size:.8rem; line-height:1.5; }.builder-dialog > input { width:100%; }.endpoint-options { padding:0; list-style:none; max-height:50vh; overflow:auto; }.endpoint-options button { width:100%; padding:.6rem; border-bottom:1px solid var(--line); text-align:left; display:grid; grid-template-columns:auto 1fr; gap:.3rem .6rem; align-items:start; }.endpoint-options strong { font-size:.82rem; }.endpoint-options code,.endpoint-options small { grid-column:2; color:var(--muted); font-size:.72rem; overflow-wrap:anywhere; }.run-presets { margin:.8rem 0; padding:.6rem; border:1px solid var(--line); border-radius:.45rem; font-size:.78rem; }.run-presets label { display:inline-flex; align-items:center; gap:.3rem; margin:.2rem .7rem .2rem 0; }.run-presets p { margin:.35rem 0; }.run-presets small { color:var(--muted); }.parallel-limit { display:flex; gap:.7rem; align-items:center; font-size:.8rem; }.parallel-limit input { width:5rem; }.human-toggle { display:flex; gap:.5rem; align-items:center; font-size:.8rem; margin:.8rem 0; }.review-targets { padding-left:1.2rem; max-height:35vh; overflow:auto; }.review-targets li { padding:.4rem 0; font-size:.8rem; }.review-targets code,.review-targets span,.review-targets small { display:block; margin-top:.2rem; overflow-wrap:anywhere; color:var(--muted); }.run-actions { display:flex; justify-content:flex-end; gap:.5rem; }
-@media(max-width:1050px) { .builder-layout { grid-template-columns:minmax(0,1fr) 21rem; } }
-@media(max-width:760px) { .builder { overflow:visible; padding:.65rem; }.builder-layout { grid-template-columns:minmax(0,1fr); }.builder-inspector { min-height:25rem; }.inspector-content { max-height:none; }.builder-actions { margin-left:0; }.builder-toolbar > label { width:100%; }.builder-toolbar select,.builder-toolbar input { max-width:none; flex:1; }.human-queue { max-height:none; }.builder-more > div { right:auto; left:0; }.builder-dialog button { min-height:40px; } }
+
+@media(max-width:760px) { .builder { overflow:visible; padding:.65rem; }.builder-layout { grid-template-columns:minmax(0,1fr); }.inspector-content { max-height:none; }.builder-actions { margin-left:0; }.builder-toolbar > label { width:100%; }.builder-toolbar select,.builder-toolbar input { max-width:none; flex:1; }.human-queue { max-height:none; }.builder-more > div { right:auto; left:0; }.builder-dialog button { min-height:40px; } }
 </style>
