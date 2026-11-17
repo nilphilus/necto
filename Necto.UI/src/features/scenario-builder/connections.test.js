@@ -30,7 +30,7 @@ test('migrates v2 timing to one incoming connection, preserving joins, roots, le
  const legacy=blueprint('a','b','join','leaf');legacy.version=2;delete legacy.connections
  legacy.steps[2].dependsOn=['a','b'];legacy.steps[2].delayMs=300;legacy.steps[2].waitFor=condition();legacy.steps[3].delayMs=400
  const migrated=upgradeBlueprint(legacy);validateBlueprint(migrated)
- assert.equal(migrated.version,6);assert.deepEqual(dependencies(migrated.steps[2],migrated).sort(),['a','b']);assert.equal(migrated.connections.filter(edge=>edge.to==='join'&&edge.waitFor).length,1);assert.equal(migrated.connections.find(edge=>edge.to==='leaf').from,null)
+ assert.equal(migrated.version,7);assert.deepEqual(dependencies(migrated.steps[2],migrated).sort(),['a','b']);assert.equal(migrated.connections.filter(edge=>edge.to==='join'&&edge.waitFor).length,1);assert.equal(migrated.connections.find(edge=>edge.to==='leaf').from,null)
  assert.equal(migrated.steps[2].waitFor,undefined);assert.equal(legacy.steps[2].delayMs,300)
  const plan=prepareBlueprint(legacy,ctx(legacy)),calls=[],sleeps=[];let polls=0
  const result=await executeBlueprint(plan,{signal:new AbortController().signal,sleep:async ms=>sleeps.push(ms),execute:async operation=>{calls.push(operation.key);return ok({state:operation.key==='join'&&++polls<2?'Pending':'Ready'})}})
@@ -55,7 +55,7 @@ test('join policies share one target request: largest delay, all conditions on t
 })
 test('v3 persistence stores policies only on connections, omits runtime state, and round-trips via import',()=>{
  const data=blueprint('a','b');data.connections=[{from:'a',to:'b',delayMs:800,waitFor:condition(),attempt:3,response:ok({secret:'runtime'})}]
- const saved=savedBlueprint(data);assert.equal(saved.version,6);assert.equal(saved.steps[1].delayMs,undefined);assert.equal(saved.connections[0].delayMs,800);assert.equal(saved.connections[0].attempt,undefined);assert.ok(!JSON.stringify(saved).includes('runtime'))
+ const saved=savedBlueprint(data);assert.equal(saved.version,7);assert.equal(saved.steps[1].delayMs,undefined);assert.equal(saved.connections[0].delayMs,800);assert.equal(saved.connections[0].attempt,undefined);assert.ok(!JSON.stringify(saved).includes('runtime'))
  assert.deepEqual(parseBlueprint(JSON.stringify(saved)),saved)
  data.steps[1].delayMs=10;assert.throws(()=>validateBlueprint(data),/belong to connections/)
  const invalid=blueprint('a');invalid.version=2;invalid.connections=[{from:null,to:'a'}];assert.throws(()=>validateBlueprint(invalid),/version 3/)

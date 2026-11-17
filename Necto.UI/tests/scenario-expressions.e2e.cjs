@@ -8,7 +8,7 @@ run(async({p,assert,builder,add,save,saved,execute,review,calls,shot})=>{
  await editor.getByRole('button',{name:'Add expression input',exact:true}).click()
  await editor.getByRole('textbox',{name:'Expression input name',exact:true}).fill('customer')
  await editor.getByRole('combobox',{name:'Expression source step',exact:true}).selectOption({label:'Find customer'})
- await save();const definition=await saved();assert.equal(definition.version,6);assert.equal(definition.steps[1].inputs[0].source,'expression');assert.equal(calls.length,0)
+ await save();const definition=await saved();assert.equal(definition.version,7);assert.equal(definition.steps[1].inputs[0].source,'expression');assert.equal(calls.length,0)
  await shot();await execute(2);assert.equal(calls[0].path,'/customer');assert.equal(calls[1].body.customerId,42)
  // Reopen the saved definition after reload: expression source and code survive.
  await p.reload();await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:definition.name})

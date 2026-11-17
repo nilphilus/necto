@@ -14,7 +14,7 @@ Select the invoice response as input `invoice`. Prefer a narrower JSON Pointer f
 
 Errors stop the consumer before its request; already completed requests cannot be undone. Review & run checks syntax and graph dependencies without evaluating code or sending requests. There is no global context or automatic response access. This feature calculates values; it does not skip scenario steps.
 
-Saved Builder definitions use **version 6**. Versions 1–5 remain readable and are upgraded when saved. Older Necto clients reject version 6 rather than silently ignoring expressions. Shared folder import/export and the [authoring skill](../../skills/README.md) support the same format. Code is saved verbatim: keep secrets out of literals. Folder export refuses expressions targeting sensitive fields.
+Saved Builder definitions use **version 7** (expressions were introduced in version 6). Versions 1–6 remain readable and are upgraded when saved. Older Necto clients reject unsupported format versions rather than silently ignoring expressions. Shared folder import/export and the [authoring skill](../../skills/README.md) support the same format. Code is saved verbatim: keep secrets out of literals. Folder export refuses expressions targeting sensitive fields.
 
 ![Expression editor beside a JSON body field](images/expression-editor.png)
 

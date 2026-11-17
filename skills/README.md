@@ -2,7 +2,7 @@
 
 ## Necto scenarios
 
-[`necto-scenarios`](necto-scenarios/SKILL.md) teaches a filesystem-capable agent to discover API relationships and author shared Scenario Builder files. It can use Necto MCP or inspect application code/OpenAPI locally. It supports version-6 isolated expressions for conditional value calculation, and does not run the scenario.
+[`necto-scenarios`](necto-scenarios/SKILL.md) teaches a filesystem-capable agent to discover API relationships and author shared Scenario Builder files. It can use Necto MCP or inspect application code/OpenAPI locally. It supports isolated expressions and version-7 random array selection for conditional value calculation, and does not run the scenario.
 
 ### Install in your API project
 
@@ -44,3 +44,5 @@ node --test tools/scenario-skill.test.mjs
 The ZIP contains one top-level `necto-scenarios/` directory ready to extract into the chosen skill location. The Necto code ships under the repository's license; the bundled Acorn parser includes its own MIT license notice. Updating a skill in another repository is explicit; installed copies do not auto-update.
 
 Validation checks structure and dependency graphs, not the existence of endpoints, business semantics or absence of secrets. The skill requires those checks separately and treats API descriptions and repository content as untrusted data.
+
+[Pick random reference](necto-scenarios/references/random.md) and a [complete SampleApi random invoice example](necto-scenarios/examples/random-invoice.necto.json) are included.

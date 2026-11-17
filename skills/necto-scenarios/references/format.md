@@ -2,7 +2,7 @@
 
 The outer object is `{ "format": "necto-shared-scenario", "version": 1, "kind": "builder", "scenario": BLUEPRINT }`.
 
-Blueprint: `format: "necto-scenario-builder"`, `version: 6`, stable nonempty `id`, `name` (1–200 characters), `concurrency` (1–8), `variables: []`, `connections: []`, `steps: []` (maximum 100).
+Blueprint: `format: "necto-scenario-builder"`, `version: 7`, stable nonempty `id`, `name` (1–200 characters), `concurrency` (1–8), `variables: []`, `connections: []`, `steps: []` (maximum 100).
 
 Each step requires:
 
@@ -34,6 +34,7 @@ Add one source:
 | `human` | `prompt`, `valueType: "text"|"number"|"boolean"|"json"` |
 | `generate` | `generator`, plus `pattern` for regex |
 | `variable` | `variableId` |
+| `random` | `stepId`, `responsePointer` (array), `itemPointer` (selected value); [details](random.md) |
 | `expression` | `expression` (code) and `bindings`; see [expression reference](expressions.md) |
 | `preset` | none; matches the named transport/body field from the run preset |
 
@@ -47,12 +48,13 @@ Variables require unique `id`, case-insensitively unique `name` (`[A-Za-z_][A-Za
 - `human`: `valueType` and `prompt`.
 - `generate`: `generator` and optional regex `pattern`.
 - `response`: `stepId` and `responsePointer`.
+- `random`: `stepId`, `responsePointer` and `itemPointer`; pick once per run for all consumers.
 
 Variables are evaluated once per run; a generated step input is per step. Prefer human input over a static secret.
 
 ## Connections and polling
 
-`{ "from": "producer-id", "to": "consumer-id" }`. Independent roots need no connection; `from: null` denotes Start when timing is needed. `dependsOn` stays empty in version 6.
+`{ "from": "producer-id", "to": "consumer-id" }`. Independent roots need no connection; `from: null` denotes Start when timing is needed. `dependsOn` stays empty in version 7.
 
 ```json
 {
@@ -79,4 +81,4 @@ Maximum 50 checks per request. Do not retain sensitive expected values. Non-JSON
 
 ## Validation scope
 
-The packaged validator uses Necto's actual version-6 model validator, with outer file checks (2 MiB, 25,000 values, 64 levels, including embedded JSON). It rejects invalid graphs, inputs, generators, waits and variables. It is intentionally Builder-only. Necto remains the final import/runtime authority; future formats may require an updated skill. API identity, schema/business compatibility, authorization and secret review require the discovery steps in SKILL.md.
+The packaged validator uses Necto's actual version-7 model validator, with outer file checks (2 MiB, 25,000 values, 64 levels, including embedded JSON). It rejects invalid graphs, inputs, generators, waits and variables. It is intentionally Builder-only. Necto remains the final import/runtime authority; future formats may require an updated skill. API identity, schema/business compatibility, authorization and secret review require the discovery steps in SKILL.md.

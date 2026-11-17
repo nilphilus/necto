@@ -22,7 +22,7 @@ test('portable validator and production import reject cycles, broken bindings an
   const value=mutate(edit);assert.throws(()=>validateText(value));assert.throws(()=>parseShared(value))
  }
 })
-test('version-6 shared variables, generated JSON body and polling are accepted by both validators',()=>{
+test('version-7 shared variables, generated JSON body and polling are accepted by both validators',()=>{
  const value=mutate(b=>{
   b.variables=[{id:'reference',name:'reference',source:'human',prompt:'Reference?',valueType:'text'}]
   b.steps[0].inputs=[{location:'query',name:'invoiceReference',source:'variable',variableId:'reference'}]
@@ -57,4 +57,11 @@ test('installed skill validates expressions and runs its bundled interpreter off
  assert.equal(evaluateExpression('switch(invoice.status){case "draft":return "review";default:return "send";}',{invoice:{status:'draft'}}),'review')
  assert.throws(()=>evaluateExpression('return fetch("https://evil.invalid");',{}))
  assert.throws(()=>validateText(mutate(b=>b.steps[0].inputs=[{location:'query',name:'invoiceReference',source:'expression',expression:'return import("fs");',bindings:[]}])) )
+})
+
+test('portable v7 random example matches production import and adds the source dependency',async()=>{
+ const randomText=await readFile(new URL('../skills/necto-scenarios/examples/random-invoice.necto.json',import.meta.url),'utf8')
+ const b=validateText(randomText);assert.equal(b.version,7);assert.equal(b.steps[2].inputs[0].source,'random');assert.equal(b.steps[2].inputs[0].itemPointer,'/id')
+ assert.deepEqual(JSON.parse(JSON.stringify(savedBlueprint(b))),JSON.parse(JSON.stringify(parseShared(randomText).scenario)))
+ assert.deepEqual(layers(b).map(items=>items.map(item=>item.id)),[['invoice','weather'],['lines']])
 })

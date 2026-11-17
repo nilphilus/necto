@@ -55,7 +55,7 @@ test('expression responses and response variables form a join; missing reference
 })
 test('save/shared import retains only expression definitions and rejects old version opt-in',()=>{
  const b=make();b.steps[2].inputs=[{...input('return x.id;',[binding('x','a')]),runtime:'PRIVATE_RUN'}]
- const saved=savedBlueprint(b);assert.equal(saved.version,6);assert.ok(!JSON.stringify(saved).includes('PRIVATE_RUN'))
+ const saved=savedBlueprint(b);assert.equal(saved.version,7);assert.ok(!JSON.stringify(saved).includes('PRIVATE_RUN'))
  assert.deepEqual(parseShared(serializeShared('builder',b)).scenario,saved)
  const old={...b,version:5};assert.throws(()=>validateBlueprint(old),/version 6/)
  const sensitive=op('join');sensitive.parameters[0].name='apiKey';b.steps[2].inputs[0].name='apiKey'

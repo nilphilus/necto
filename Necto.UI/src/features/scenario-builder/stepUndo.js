@@ -1,5 +1,5 @@
 import { inputSources } from './variables.js'
-const usesStep=(input,id)=>inputSources(input).some(source=>source.source==='response'&&source.stepId===id)
+const usesStep=(input,id)=>inputSources(input).some(source=>['response','random'].includes(source.source)&&source.stepId===id)
 import { validateBlueprint } from './model.js'
 const clone=value=>value instanceof Blob?value:Array.isArray(value)?value.map(clone):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).map(([key,item])=>[key,clone(item)])):value
 const validationMessage=blueprint=>{try{validateBlueprint(blueprint);return ''}catch(cause){return cause.message}}

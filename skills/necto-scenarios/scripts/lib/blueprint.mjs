@@ -1,3 +1,24 @@
+// Necto.UI/src/features/scenario-builder/pointers.js
+var forbidden$1 = /* @__PURE__ */ new Set([
+	"__proto__",
+	"prototype",
+	"constructor"
+]);
+function pointerParts(pointer) {
+	if (typeof pointer !== "string" || pointer.length > 2048 || pointer !== "" && !pointer.startsWith("/")) throw new Error("Use a JSON Pointer such as /items/0/id. Leave empty for the whole value.");
+	const parts = pointer === "" ? [] : pointer.slice(1).split("/").map((part) => {
+		if (/~(?:[^01]|$)/.test(part)) throw new Error("Escape ~ as ~0 and / as ~1 in JSON Pointers.");
+		return part.replaceAll("~1", "/").replaceAll("~0", "~");
+	});
+	if (parts.length > 32 || parts.some((part) => forbidden$1.has(part))) throw new Error("This JSON Pointer is not supported.");
+	return parts;
+}
+// Necto.UI/src/features/scenario-builder/random.js
+function validateRandom(source) {
+	if (typeof source.stepId !== "string" || !source.stepId) throw new Error("Pick random needs a source step.");
+	pointerParts(source.responsePointer);
+	pointerParts(source.itemPointer);
+}
 // Necto.UI/node_modules/.pnpm/acorn@8.19.0/node_modules/acorn/dist/acorn.mjs
 var astralIdentifierCodes = [
 	509,
@@ -5209,12 +5230,12 @@ var EXPRESSION_LIMITS = Object.freeze({
 	outputBytes: 65536,
 	values: 1e4
 });
-var forbidden$1 = /* @__PURE__ */ new Set([
+var forbidden = /* @__PURE__ */ new Set([
 	"__proto__",
 	"prototype",
 	"constructor"
 ]);
-var identifier = (name) => typeof name === "string" && /^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(name) && !forbidden$1.has(name);
+var identifier = (name) => typeof name === "string" && /^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(name) && !forbidden.has(name);
 var binary = /* @__PURE__ */ new Set([
 	"+",
 	"-",
@@ -5343,7 +5364,7 @@ function jsonCopy(value, budget, depth = 0) {
 	if (array && value.length !== keys.length) fail();
 	spend(2);
 	for (const key of keys) {
-		if (forbidden$1.has(key)) fail();
+		if (forbidden.has(key)) fail();
 		const descriptor = Object.getOwnPropertyDescriptor(value, key);
 		if (!descriptor || !Object.hasOwn(descriptor, "value")) fail();
 		spend(key.length * 3 + 4);
@@ -5394,14 +5415,14 @@ function evaluateExpression(code, values) {
 					const out = Object.create(null);
 					for (const property of node.properties) {
 						const key = property.key.type === "Identifier" ? property.key.name : property.key.value;
-						if (typeof key !== "string" && typeof key !== "number" || forbidden$1.has(String(key))) fail();
+						if (typeof key !== "string" && typeof key !== "number" || forbidden.has(String(key))) fail();
 						out[key] = expr(property.value, scope);
 					}
 					return out;
 				}
 				case "MemberExpression": {
 					const object = expr(node.object, scope), key = node.computed ? expr(node.property, scope) : node.property.name;
-					if (typeof key !== "string" && typeof key !== "number" || forbidden$1.has(String(key))) fail();
+					if (typeof key !== "string" && typeof key !== "number" || forbidden.has(String(key))) fail();
 					if ((Array.isArray(object) || typeof object === "string") && key === "length") return object.length;
 					if (!object || typeof object !== "object") fail();
 					return Object.hasOwn(object, key) ? object[key] : void 0;
@@ -5624,21 +5645,6 @@ function validateGenerator(input) {
 	if (!known.has(input.generator)) throw new Error("Choose a supported data generator.");
 	if (input.generator === "regex") patternTokens(input.pattern);
 }
-// Necto.UI/src/features/scenario-builder/pointers.js
-var forbidden = /* @__PURE__ */ new Set([
-	"__proto__",
-	"prototype",
-	"constructor"
-]);
-function pointerParts(pointer) {
-	if (typeof pointer !== "string" || pointer.length > 2048 || pointer !== "" && !pointer.startsWith("/")) throw new Error("Use a JSON Pointer such as /items/0/id. Leave empty for the whole value.");
-	const parts = pointer === "" ? [] : pointer.slice(1).split("/").map((part) => {
-		if (/~(?:[^01]|$)/.test(part)) throw new Error("Escape ~ as ~0 and / as ~1 in JSON Pointers.");
-		return part.replaceAll("~1", "/").replaceAll("~0", "~");
-	});
-	if (parts.length > 32 || parts.some((part) => forbidden.has(part))) throw new Error("This JSON Pointer is not supported.");
-	return parts;
-}
 // Necto.UI/src/features/scenario-builder/waiting.js
 function expectedValue(condition) {
 	if (typeof condition.value !== "string" || condition.value.length > 16384) throw new Error("Expected values are limited to 16 KiB.");
@@ -5683,7 +5689,7 @@ function validateWaiting(step) {
 	}
 }
 // Necto.UI/src/features/scenario-builder/variables.js
-var variableProducer = (input, blueprint) => input.source === "response" ? input.stepId : input.source === "variable" ? blueprint.variables?.find((variable) => variable.id === input.variableId && variable.source === "response")?.stepId : void 0;
+var variableProducer = (input, blueprint) => ["response", "random"].includes(input.source) ? input.stepId : input.source === "variable" ? blueprint.variables?.find((variable) => variable.id === input.variableId && ["response", "random"].includes(variable.source))?.stepId : void 0;
 var staticVariableValue = (variable) => expectedValue(variable);
 var inputSources = (input) => input.source === "expression" ? input.bindings : [input];
 var inputProducers = (input, blueprint) => inputSources(input).map((source) => variableProducer(source, blueprint)).filter(Boolean);
@@ -5696,7 +5702,8 @@ function validateVariables(blueprint) {
 			"static",
 			"generate",
 			"human",
-			"response"
+			"response",
+			"random"
 		].includes(variable.source)) throw new Error("Variables need unique IDs and names (letters, digits and underscore; start with a letter or underscore).");
 		ids.add(variable.id);
 		names.add(variable.name.toLowerCase());
@@ -5708,6 +5715,11 @@ function validateVariables(blueprint) {
 			"boolean",
 			"json"
 		].includes(variable.valueType))) throw new Error(`Enter a question and type for ${variable.name}.`);
+		if (variable.source === "random") {
+			if (blueprint.version < 7) throw new Error("Pick random requires Scenario Builder version 7.");
+			validateRandom(variable);
+			if (!stepIds.has(variable.stepId)) throw new Error("Choose an existing random source step.");
+		}
 		if (variable.source === "response") {
 			if (!stepIds.has(variable.stepId)) throw new Error(`Choose an existing source step for ${variable.name}.`);
 			pointerParts(variable.responsePointer);
@@ -5762,7 +5774,8 @@ function validateBlueprint(blueprint) {
 		3,
 		4,
 		5,
-		6
+		6,
+		7
 	].includes(blueprint.version) || typeof blueprint.id !== "string" || !blueprint.id || typeof blueprint.name !== "string" || !blueprint.name.trim() || blueprint.name.length > 200 || !Array.isArray(blueprint.steps) || blueprint.steps.length > 100 || !Number.isInteger(blueprint.concurrency) || blueprint.concurrency < 1 || blueprint.concurrency > 8) throw new Error("Invalid Scenario Builder definition (maximum 100 steps; parallelism 1–8).");
 	if (blueprint.version < 3 && blueprint.connections !== void 0 && (!Array.isArray(blueprint.connections) || blueprint.connections.length)) throw new Error("Connections require Scenario Builder version 3.");
 	const ids = /* @__PURE__ */ new Set();
@@ -5792,7 +5805,8 @@ function validateBlueprint(blueprint) {
 				"generate",
 				"variable",
 				"preset",
-				"expression"
+				"expression",
+				"random"
 			].includes(input.source) || input.location !== "body" && (typeof input.name !== "string" || !input.name || /[\r\n]/.test(input.name))) throw new Error(`Invalid input in ${step.label}.`);
 			const path = input.location === "body" ? pointerParts(input.pointer) : [input.location === "header" ? input.name.toLowerCase() : input.name];
 			if (targets.some((target) => target.location === input.location && (input.location !== "body" ? target.path[0] === path[0] : path.slice(0, Math.min(path.length, target.path.length)).every((part, index) => part === target.path[index])))) throw new Error(`Overlapping input targets in ${step.label}.`);
@@ -5813,6 +5827,10 @@ function validateBlueprint(blueprint) {
 				expressionBindings += input.bindings?.length ?? 0;
 				if (expressionCount > 100 || expressionChars > 65536 || expressionBindings > 256) throw new Error("Scenario expression budget exceeded (100 expressions, 64 KiB source characters, 256 bindings).");
 				validateExpression(input);
+			}
+			if (input.source === "random") {
+				if (blueprint.version < 7) throw new Error("Pick random requires Scenario Builder version 7.");
+				validateRandom(input);
 			}
 			if (input.source === "generate") validateGenerator(input);
 			if (input.source === "human" && (typeof input.prompt !== "string" || !input.prompt.trim() || ![

@@ -1,0 +1,100 @@
+{
+  "format": "necto-shared-scenario",
+  "version": 1,
+  "kind": "builder",
+  "scenario": {
+    "format": "necto-scenario-builder",
+    "version": 7,
+    "id": "example-random-invoice",
+    "name": "Inspect a random invoice",
+    "concurrency": 2,
+    "variables": [],
+    "connections": [
+      {
+        "from": "invoice",
+        "to": "lines"
+      }
+    ],
+    "steps": [
+      {
+        "id": "invoice",
+        "label": "List invoices",
+        "operationKey": "GET /invoices",
+        "apiId": "local",
+        "method": "GET",
+        "path": "/invoices",
+        "dependsOn": [],
+        "inputs": [],
+        "request": {
+          "fields": {},
+          "body": "",
+          "assertions": [
+            {
+              "kind": "status",
+              "expected": "200"
+            },
+            {
+              "kind": "nonempty",
+              "path": ""
+            }
+          ],
+          "timeout": 30000,
+          "responseLimitMiB": 32
+        }
+      },
+      {
+        "id": "weather",
+        "label": "Read weather independently",
+        "operationKey": "GET /weatherforecast",
+        "apiId": "local",
+        "method": "GET",
+        "path": "/weatherforecast",
+        "dependsOn": [],
+        "inputs": [],
+        "request": {
+          "fields": {},
+          "body": "",
+          "assertions": [
+            {
+              "kind": "status",
+              "expected": "200"
+            }
+          ],
+          "timeout": 30000,
+          "responseLimitMiB": 32
+        }
+      },
+      {
+        "id": "lines",
+        "label": "Read lines of the selected invoice",
+        "operationKey": "GET /invoices/{invoiceId}/lines",
+        "apiId": "local",
+        "method": "GET",
+        "path": "/invoices/{invoiceId}/lines",
+        "dependsOn": [],
+        "inputs": [
+          {
+            "location": "path",
+            "name": "invoiceId",
+            "source": "random",
+            "stepId": "invoice",
+            "responsePointer": "",
+            "itemPointer": "/id"
+          }
+        ],
+        "request": {
+          "fields": {},
+          "body": "",
+          "assertions": [
+            {
+              "kind": "status",
+              "expected": "200"
+            }
+          ],
+          "timeout": 30000,
+          "responseLimitMiB": 32
+        }
+      }
+    ]
+  }
+}
