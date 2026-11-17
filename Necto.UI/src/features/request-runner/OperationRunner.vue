@@ -238,7 +238,7 @@ function parameterHint(parameter) {
         <div v-for="({ parameter, key, source }, index) in parameterFields" :key="fieldKey(parameter)" class="field">
           <div class="parameter-heading">
             <label class="field-label" :for="`${parameterIdPrefix}-${index}`">
-              <code>{{ parameter.name }}</code>
+              <code>{{ parameter.name }}</code>{{ ' ' }}
               <small>{{ parameter.in }}<template v-if="parameter.required || parameter.in === 'path'"> · required</template></small>
             </label>
             <DescriptionHelp :label="'About parameter ' + parameter.name" :description="parameter.description" />
