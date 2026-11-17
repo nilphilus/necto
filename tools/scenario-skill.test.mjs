@@ -22,7 +22,7 @@ test('portable validator and production import reject cycles, broken bindings an
   const value=mutate(edit);assert.throws(()=>validateText(value));assert.throws(()=>parseShared(value))
  }
 })
-test('version-5 shared variables, generated JSON body and polling are accepted by both validators',()=>{
+test('version-6 shared variables, generated JSON body and polling are accepted by both validators',()=>{
  const value=mutate(b=>{
   b.variables=[{id:'reference',name:'reference',source:'human',prompt:'Reference?',valueType:'text'}]
   b.steps[0].inputs=[{location:'query',name:'invoiceReference',source:'variable',variableId:'reference'}]
@@ -48,4 +48,13 @@ test('archive works extracted outside Necto without dependencies',async()=>{
   const result=spawnSync(process.execPath,[join(dir,'necto-scenarios/scripts/validate.mjs'),join(dir,'necto-scenarios/examples/invoice-inspection.necto.json')],{cwd:dir,encoding:'utf8'})
   assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/Valid shared Builder/)
  }finally{await rm(dir,{recursive:true,force:true})}
+})
+
+test('installed skill validates expressions and runs its bundled interpreter offline',async()=>{
+ const {evaluateExpression}=await import('../skills/necto-scenarios/scripts/lib/blueprint.mjs')
+ const value=mutate(b=>b.steps[2].inputs=[{location:'path',name:'invoiceId',source:'expression',expression:'return invoice.id;',bindings:[{name:'invoice',source:'response',stepId:'invoice',responsePointer:''}]}])
+ assert.doesNotThrow(()=>validateText(value));assert.doesNotThrow(()=>parseShared(value))
+ assert.equal(evaluateExpression('switch(invoice.status){case "draft":return "review";default:return "send";}',{invoice:{status:'draft'}}),'review')
+ assert.throws(()=>evaluateExpression('return fetch("https://evil.invalid");',{}))
+ assert.throws(()=>validateText(mutate(b=>b.steps[0].inputs=[{location:'query',name:'invoiceReference',source:'expression',expression:'return import("fs");',bindings:[]}])) )
 })
