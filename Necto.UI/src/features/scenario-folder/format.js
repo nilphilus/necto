@@ -12,10 +12,6 @@ export const FOLDER_NAME = 'necto-scenarios'
 export const FILE_SUFFIX = '.necto.json'
 export function canonicalScenario(kind, scenario) {
   if (!['builder', 'chain'].includes(kind)) throw new Error('Unsupported scenario kind.')
-  if (typeof scenario?.name !== 'string' || scenario.name.length > 200 ||
-      typeof scenario?.id !== 'string' || scenario.id.length > 2000) {
-    throw new Error('Shared scenarios need a name of up to 200 characters and a bounded ID.')
-  }
   return kind === 'builder' ? sharedBlueprint(scenario) : sharedChain(scenario)
 }
 function clean(value,depth=0,budget={left:25000}) {

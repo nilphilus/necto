@@ -1,3 +1,4 @@
+import { validateSharedIdentity } from '../scenario-definitions/sharedIdentity.js'
 import { teamCollection } from '../scenario-definitions/teamCollection.js'
 import { validateScenario } from './scenario.js'
 import { payloadSnapshot } from '../workbench/body.js'
@@ -7,6 +8,7 @@ import { requestDefinition } from '../scenario-definitions/requestDefinition.js'
 const clone = (value) => JSON.parse(JSON.stringify(value))
 
 export function sharedChain(scenario) {
+  validateSharedIdentity(scenario)
   validateScenario(scenario)
   const definition = clone({
     version: 1,

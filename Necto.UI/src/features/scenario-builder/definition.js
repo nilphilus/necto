@@ -1,3 +1,4 @@
+import { validateSharedIdentity } from '../scenario-definitions/sharedIdentity.js'
 import { teamCollection } from '../scenario-definitions/teamCollection.js'
 import { randomSnapshot } from './random.js'
 import { expressionSnapshot } from './expression.js'
@@ -68,6 +69,7 @@ export function savedBlueprint(draft) {
   return saved
 }
 export function sharedBlueprint(scenario) {
+  validateSharedIdentity(scenario)
   const definition = savedBlueprint(scenario)
   for (const step of definition.steps) requestDefinition(step.request)
   return definition
