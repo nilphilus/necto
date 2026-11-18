@@ -22,7 +22,7 @@ The interactive invoice example is explicitly labeled sample data and never call
 
 ## Live demo
 
-The demo uses the FastEndpoints sample's OpenAPI document, generated endpoint mappings and seeded tenants. From the repository root, with .NET 10, Node.js, pnpm and Python 3 installed:
+The fake API demo simulates the .NET FastEndpoints API in the browser. It uses the sample's OpenAPI document, generated endpoint mappings and seeded tenants. From the repository root, with .NET 10, Node.js, pnpm and Python 3 installed:
 
 ```sh
 dotnet build SampleApi.FastEndpoints/SampleApi.FastEndpoints.csproj -c Release

@@ -848,7 +848,7 @@ function removeScenario(id) {
     </header>
 
     <p v-if="liveDemo" class="demo-notice">
-      <strong>Live demo</strong> · Create an invoice and follow its ID to the details. Demo data resets on refresh.
+      <strong>Fake API demo</strong> · Runs in your browser and simulates the .NET FastEndpoints API. Demo data resets on refresh.
     </p>
 
     <AuthorizationDialog
