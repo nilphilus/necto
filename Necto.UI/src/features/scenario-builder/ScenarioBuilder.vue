@@ -1,5 +1,6 @@
 <script setup>
 import ScenarioRunReview from './ScenarioRunReview.vue'
+import { parseBuilderImport } from './definitionImport.js'
 import { suggestInputs } from './inputSuggestions.js'
 import FolderSave from '../scenario-folder/FolderSave.vue'
 import FolderFeedback from '../scenario-folder/FolderFeedback.vue'
@@ -19,7 +20,6 @@ import {
   newBlueprint,
   newId,
   newStep,
-  parseBlueprint,
   validateBlueprint,
 } from './model.js'
 import { emptyStep, configureEndpoint } from './stepDraft.js'
@@ -533,9 +533,7 @@ async function importDefinition(event) {
   event.target.value = ''
   if (!file || !mayDiscard()) return
   try {
-    if (file.size > 2 * 1024 * 1024) throw new Error('Imports are limited to 2 MB.')
-    const data = parseBlueprint(await file.text())
-    data.id = newId()
+    const data = await parseBuilderImport(file)
     store.open(data)
     notice.value = 'Imported as a new draft. Review targets and inputs before running.'
   } catch (cause) {

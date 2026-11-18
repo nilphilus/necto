@@ -1,6 +1,10 @@
 import { FILE_LIMIT,FOLDER_NAME,FILE_SUFFIX,parseShared,scenarioKey } from './format.js'
 const missing=error=>error?.name==='NotFoundError'
+export function scenarioFolderPath(root) {
+ return root.name===FOLDER_NAME ? FOLDER_NAME : `${root.name}/${FOLDER_NAME}`
+}
 export async function scenarioDirectory(root,create=false) {
+ if(root.name===FOLDER_NAME)return root
  try{return await root.getDirectoryHandle(FOLDER_NAME,{create})}catch(error){if(!create&&missing(error))return null;throw error}
 }
 export function managedFileName(name) {
