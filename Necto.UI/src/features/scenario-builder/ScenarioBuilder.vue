@@ -39,7 +39,15 @@ const inbound = computed(() => selected.value ? allConnections(draft.value).filt
 const selected = computed(() => draft.value.steps.find(step => step.id === selectedId.value))
 const operation = computed(() => props.operations.find(operation => operation.key === selected.value?.operationKey))
 const suggestionsOpen = ref(false)
+const suggestionSummary = ref(null)
 const suggestionProblem = ref('')
+const appliedSuggestions = ref(new Map())
+const appliedToSelected = computed(() => {
+  const inputs = selected.value?.inputs ?? []
+  return (appliedSuggestions.value.get(selectedId.value) ?? []).filter(item => inputs.some(input =>
+    ['source', 'location', 'name', 'pointer', 'stepId', 'responsePointer'].every(key => input[key] === item.input[key])))
+})
+watch(() => draft.value.id, () => appliedSuggestions.value.clear())
 const suggestions = computed(() => suggestionsOpen.value
   ? suggestInputs(draft.value, selected.value, operation.value, props.mappingLinks)
   : [])
@@ -59,6 +67,9 @@ function useSuggestion(option) {
     }
     validateBlueprint({ ...draft.value, steps })
     draft.value.steps = steps
+    const applied = appliedSuggestions.value.get(selectedId.value) ?? []
+    appliedSuggestions.value.set(selectedId.value, [...applied, { input, added: !!producer }])
+    void nextTick(() => suggestionSummary.value?.focus())
   } catch (cause) { suggestionProblem.value = cause.message }
 }
 const runStep = computed(() => execution.steps.find(step => step.id === selectedId.value))
@@ -193,7 +204,18 @@ async function startRun() {
     if (runDialog.value.open) runDialog.value.close()
   } catch (cause) { runProblem.value = cause.message; if (!runDialog.value.open) error.value = cause.message }
 }
-function select(id) { selectedId.value = id; if (pending.value || execution.steps.length) tab.value = 'response'; void showStep() }
+let preferredStepTab
+function chooseStepTab(value) {
+  preferredStepTab = value
+  tab.value = value
+}
+watch(() => draft.value.id, () => { preferredStepTab = undefined })
+function select(id, showResult = false) {
+  selectedId.value = id
+  const hasResult = execution.steps.some(step => step.id === id)
+  tab.value = hasResult ? (showResult ? 'response' : preferredStepTab ?? 'response') : 'configure'
+  void showStep()
+}
 function exportDefinition() {
   attempt(() => {
     const data = savedBlueprint(draft.value)
@@ -258,7 +280,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
     <div v-if="execution.status !== 'idle'" class="builder-run-status" role="status"><strong>{{ execution.stale ? 'Previous run · ' : '' }}{{ execution.status }}</strong><span v-if="execution.presetNames?.length">Presets: {{ execution.presetNames.join(' → ') }}</span><span>{{ execution.steps.filter(step => step.status === 'completed').length }} / {{ execution.steps.length }} completed</span><span v-if="questions.size">{{ questions.size }} awaiting your input</span><span class="error">{{ execution.error }}</span></div>
     <section v-if="questions.size" class="human-queue" aria-label="Human input required">
       <form v-for="[id, question] in questions" :key="id" class="human-card" @submit.prevent="question.submit()">
-        <header><strong>{{ question.step.label }} · Your input is needed</strong><button v-if="!question.step.sharedVariable" type="button" @click="select(id)">Show step</button><span v-else>Shared across requests</span></header>
+        <header><strong>{{ question.step.label }} · Your input is needed</strong><button v-if="!question.step.sharedVariable" type="button" @click="select(id, true)">Show step</button><span v-else>Shared across requests</span></header>
         <label v-for="(input, index) in question.inputs" :key="index">{{ input.prompt }}<small>{{ input.location }} · {{ input.location === 'body' ? input.pointer || 'whole body' : input.name }} · {{ input.valueType }}</small><textarea :aria-label="input.prompt" v-if="input.valueType === 'json'" v-model="question.values[index]" rows="2" required autocomplete="off" /><input :aria-label="input.prompt" v-else v-model="question.values[index]" :type="input.valueType === 'number' ? 'number' : 'text'" step="any" required autocomplete="off" :placeholder="input.valueType === 'boolean' ? 'true or false' : ''"></label>
         <p v-if="question.error" class="error" role="alert">{{ question.error }}</p><div><button type="submit" class="primary">Continue {{ question.step.label }}</button><small>{{ question.step.sharedVariable ? 'Requests using this variable are paused. Independent branches can continue.' : 'Only this step is paused. Independent branches can continue.' }}</small></div>
       </form>
@@ -271,14 +293,22 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         <header class="step-dialog-title"><h3 id="step-dialog-title">{{tab==='response'?'Step response':'Edit step'}}</h3><button type="button" class="secondary" aria-label="Close step editor" @click="stepDialog.close()">×</button></header>
         <template v-if="selected">
           <header class="inspector-header"><label>Step name<input v-model="selected.label" :disabled="pending" maxlength="200" aria-label="Step name"></label><div class="request-endpoint-actions"><button type="button" class="secondary" :disabled="pending" @click="openAdd(selected.id)">{{ selected.operationKey ? 'Change endpoint' : 'Choose endpoint…' }}</button><button type="button" class="secondary" :disabled="pending || draft.steps.length >= 100" @click="createNext({from:selected.id})">+ Next request</button></div><code><span class="method" :data-method="selected.method">{{ selected.method }}</span> {{ selected.path }}</code></header>
-          <div class="inspector-tabs" role="group" aria-label="Step view"><button type="button" :aria-pressed="tab === 'configure'" @click="tab = 'configure'">Configure</button><button type="button" :aria-pressed="tab === 'response'" @click="tab = 'response'">Response<span v-if="runStep?.httpStatus"> · {{ runStep.httpStatus }}</span></button></div>
+          <div class="inspector-tabs" role="group" aria-label="Step view"><button type="button" :aria-pressed="tab === 'configure'" @click="chooseStepTab('configure')">Configure</button><button type="button" :aria-pressed="tab === 'response'" @click="chooseStepTab('response')">Response<span v-if="runStep?.httpStatus"> · {{ runStep.httpStatus }}</span></button></div>
           <div v-if="tab === 'response'" class="inspector-content response-content"><p v-if="runStep?.status === 'delaying'" class="attempt-progress" role="status">Delaying until {{ new Date(runStep.nextAttemptAt).toLocaleTimeString() }}</p><p v-if="runStep?.attempt" class="attempt-progress" role="status">Attempt {{ runStep.attempt }} / {{ runStep.maxAttempts }} · {{ runStep.status }}<span v-if="runStep.nextAttemptAt"> · Next attempt at {{ new Date(runStep.nextAttemptAt).toLocaleTimeString() }}</span></p><details v-if="runStep?.attempts?.length > 1" class="attempt-history"><summary>Attempt history ({{ runStep.attempts.length }})</summary><ol><li v-for="attempt in runStep.attempts" :key="attempt.attempt">{{ attempt.attempt }} · HTTP {{ attempt.status ?? '—' }} · {{ attempt.elapsed ?? '—' }} ms · {{ attempt.matched ? 'value matched' : 'not matched' }}</li></ol></details><p v-if="execution.stale" class="muted">Result from the previous run. Run again to use the updated definition.</p><p v-if="runStep?.error" class="error">{{ runStep.error }}</p><SentRequest v-if="runStep?.request" :key="selectedId+':request'" :request="runStep.request" :attempt="runStep.attempt" /><ExpandedResponse v-if="runStep?.response" :key="selectedId" :result="runStep.response" :operation="runStep.operation" :pending="pending" :stale="execution.stale" /><p v-else class="muted">{{ runStep ? runStep.status : 'Run the scenario to see this response.' }}</p></div>
           <div v-else class="inspector-content">
             <p v-if="!selected.operationKey" class="empty-request-note">Choose an endpoint for this request. Its connection is already in place.</p><p v-else-if="!operation" class="error">Endpoint unavailable. Enable its API connection before running.</p>
             <section class="incoming-links" aria-label="Incoming connections"><h4>Incoming connections</h4><button v-for="edge in inbound" :key="connectionKey(edge.from, edge.to)" type="button" class="secondary" @click="openConnection(edge, $event)">{{ connectionSummary(edge, draft.steps) }}<small v-if="edge.delayMs !== undefined || edge.waitFor"> · Delay / Wait for</small></button><p class="muted">Drag between handles on the map. Configure timing and response bindings using ⚙ on the line.</p></section>
             <details v-if="operation" :key="selected.id" class="input-suggestions" @toggle="suggestionsOpen = $event.target.open">
               <summary>Suggest inputs</summary>
-              <p v-if="!suggestions.length" class="muted">No available scalar or whole-value mappings for unbound inputs. Configure array selection in Dynamic inputs or the JSON builder.</p>
+              <div v-if="appliedToSelected.length" ref="suggestionSummary" tabindex="-1" role="status" class="applied-suggestions">
+                <strong>Applied suggestions</strong>
+                <ul><li v-for="{input, added} in appliedToSelected" :key="input.pointer ?? input.location + ':' + input.name">
+                  {{ input.pointer || input.name || 'Whole body' }} ← {{ draft.steps.find(step => step.id === input.stepId)?.label }}
+                  · {{ input.responsePointer || 'whole response' }} · {{ added ? 'Step added' : 'Existing step' }}
+                </li></ul>
+              </div>
+              <p v-if="!suggestions.length && appliedToSelected.length" class="muted">No further suggestions for unbound fields.</p>
+              <p v-else-if="!suggestions.length" class="muted">No available scalar or whole-value mappings for unbound inputs. Configure array selection in Dynamic inputs or the JSON builder.</p>
               <div v-for="group in suggestions" :key="group.field">
                 <strong>{{ group.field }}</strong>
                 <ul><li v-for="(option, index) in group.options" :key="index">
@@ -321,6 +351,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 </template>
 <style scoped>
 .step-editor-error { margin:0; padding:.5rem 1rem; font-size:.78rem; max-height:5rem; overflow:auto; overflow-wrap:anywhere; }
+.applied-suggestions { background:var(--accent-soft); border-radius:.4rem; padding:.45rem .65rem; margin:.5rem 0; overflow-wrap:anywhere; }
 .input-suggestions { font-size:.78rem; margin-block:.7rem; }.input-suggestions ul { margin:.35rem 0 .65rem; padding-left:1rem; }.input-suggestions li { margin-bottom:.25rem; }.input-suggestions small { margin-inline:.4rem; color:var(--muted); }
 .step-dialog { width:min(76rem,calc(100vw - 2rem)); height:min(90dvh,60rem); max-height:calc(100dvh - 2rem); padding:0; color:inherit; box-shadow:0 16px 65px #17342650; }
 .step-dialog::backdrop { background:#17342666; }
