@@ -158,6 +158,9 @@ const validation = computed(() => {
     return cause.message
   }
 })
+const requestParameters = computed(() => (operation.value?.parameters ?? []).filter(
+  parameter => ['path', 'query', 'header'].includes(parameter.in)
+))
 const dynamicTargets = computed(
   () =>
     new Set(
@@ -969,88 +972,93 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
               class="input-suggestions"
               @toggle="suggestionsOpen = $event.target.open"
             >
-              <summary>Suggest inputs</summary>
-              <div
-                v-if="appliedToSelected.length"
-                ref="suggestionSummary"
-                tabindex="-1"
-                role="status"
-                class="applied-suggestions"
-              >
-                <strong>Applied suggestions</strong>
-                <ul>
-                  <li
-                    v-for="{ input, added } in appliedToSelected"
-                    :key="input.pointer ?? input.location + ':' + input.name"
-                  >
-                    {{ input.pointer || input.name || 'Whole body' }} ←
-                    {{ draft.steps.find((step) => step.id === input.stepId)?.label }} ·
-                    {{ input.responsePointer || 'whole response' }} ·
-                    {{ added ? 'Step added' : 'Existing step' }}
-                  </li>
-                </ul>
-              </div>
-              <p v-if="!suggestions.length && appliedToSelected.length" class="muted">
-                No further suggestions for unbound fields.
-              </p>
-              <p v-else-if="!suggestions.length" class="muted">
-                No available scalar or whole-value mappings for unbound inputs. Configure array
-                selection in Dynamic inputs or the JSON builder.
-              </p>
-              <div v-for="group in suggestions" :key="group.field">
-                <strong>{{ group.field }}</strong>
-                <ul>
-                  <li v-for="(option, index) in group.options" :key="index">
-                    <button
-                      type="button"
-                      class="secondary"
-                      :disabled="pending"
-                      @click="useSuggestion(option)"
+              <summary>Suggested inputs</summary>
+              <div class="suggestion-content">
+                <p class="suggestion-hint">Choose a suggestion to add a response binding to this request.</p>
+                <div
+                  v-if="appliedToSelected.length"
+                  ref="suggestionSummary"
+                  tabindex="-1"
+                  role="status"
+                  class="applied-suggestions"
+                >
+                  <strong>Applied suggestions</strong>
+                  <ul>
+                    <li
+                      v-for="{ input, added } in appliedToSelected"
+                      :key="input.pointer ?? input.location + ':' + input.name"
                     >
-                      {{
-                        option.stepId
-                          ? draft.steps.find((step) => step.id === option.stepId)?.label
-                          : 'Add ' + option.from.name
-                      }}
-                      · {{ option.input.responsePointer || 'whole response' }}
-                    </button>
-                    <small
-                      >{{ option.evidence
-                      }}<template v-if="option.expectedStatus">
-                        · HTTP {{ option.expectedStatus }}</template
-                      ></small
-                    >
-                  </li>
-                </ul>
+                      {{ input.pointer || input.name || 'Whole body' }} ←
+                      {{ draft.steps.find((step) => step.id === input.stepId)?.label }} ·
+                      {{ input.responsePointer || 'whole response' }} ·
+                      {{ added ? 'Step added' : 'Existing step' }}
+                    </li>
+                  </ul>
+                </div>
+                <p v-if="!suggestions.length && appliedToSelected.length" class="muted">
+                  No further suggestions for unbound fields.
+                </p>
+                <p v-else-if="!suggestions.length" class="muted">
+                  No available scalar or whole-value mappings for unbound inputs. Set array selection in Request inputs.
+                </p>
+                <div v-for="group in suggestions" :key="group.field">
+                  <strong>{{ group.field }}</strong>
+                  <ul>
+                    <li v-for="(option, index) in group.options" :key="index">
+                      <button
+                        type="button"
+                        class="secondary"
+                        :disabled="pending"
+                        @click="useSuggestion(option)"
+                      >
+                        {{
+                          option.stepId
+                            ? draft.steps.find((step) => step.id === option.stepId)?.label
+                            : 'Add ' + option.from.name
+                        }}
+                        · {{ option.input.responsePointer || 'whole response' }}
+                      </button>
+                      <small
+                        >{{ option.evidence
+                        }}<template v-if="option.expectedStatus">
+                          · HTTP {{ option.expectedStatus }}</template
+                        ></small
+                      >
+                    </li>
+                  </ul>
+                </div>
+                <p v-if="suggestionProblem" class="error" role="alert">{{ suggestionProblem }}</p>
               </div>
-              <p v-if="suggestionProblem" class="error" role="alert">{{ suggestionProblem }}</p>
             </details>
-            <section v-if="operation" class="request-parameters" aria-label="Request parameters">
-              <div v-for="parameter in operation.parameters.filter(item => ['path', 'query', 'header'].includes(item.in))"
-                :key="parameter.in + ':' + parameter.name" class="request-parameter" :data-parameter="parameter.in + ':' + parameter.name">
-                <label class="parameter-label">
-                  <span><small>{{ parameter.in }}</small> <strong>{{ parameter.name }}</strong></span>
-                  <input v-if="!dynamicTargets.has(parameter.in + ':' + parameter.name)"
-                    v-model="selected.request.fields[parameter.in + ':' + parameter.name]"
-                    :disabled="pending"
-                    :placeholder="parameter.required || parameter.in === 'path' ? 'Required' : 'Optional'">
-                </label>
-                <StepInputs :parameter="parameter" :parameters-only="true" :step="selected"
-                  :operation="operation" :steps="draft.steps" :variables="draft.variables"
-                  :operations="operations" :results="execution.steps" :disabled="pending" />
+            <section v-if="requestParameters.length || operation?.requestBody" class="request-inputs" aria-label="Request inputs">
+              <h4>Request inputs</h4>
+              <div v-if="requestParameters.length" class="request-parameters">
+                <div v-for="parameter in requestParameters"
+                  :key="parameter.in + ':' + parameter.name" class="request-parameter" :data-parameter="parameter.in + ':' + parameter.name">
+                  <label class="parameter-label">
+                    <span><small>{{ parameter.in }}</small> <strong>{{ parameter.name }}</strong></span>
+                    <input v-if="!dynamicTargets.has(parameter.in + ':' + parameter.name)"
+                      v-model="selected.request.fields[parameter.in + ':' + parameter.name]"
+                      :disabled="pending"
+                      :placeholder="parameter.required || parameter.in === 'path' ? 'Required' : 'Optional'">
+                  </label>
+                  <StepInputs :parameter="parameter" :parameters-only="true" :step="selected"
+                    :operation="operation" :steps="draft.steps" :variables="draft.variables"
+                    :operations="operations" :results="execution.steps" :disabled="pending" />
+                </div>
               </div>
+              <ScenarioBodyEditor
+                v-if="operation?.requestBody"
+                :key="selected.id"
+                :step="selected"
+                :operation="operation"
+                :steps="draft.steps"
+                :operations="operations"
+                :variables="draft.variables"
+                :results="execution.steps"
+                :disabled="pending"
+              />
             </section>
-            <ScenarioBodyEditor
-              v-if="operation?.requestBody"
-              :key="selected.id"
-              :step="selected"
-              :operation="operation"
-              :steps="draft.steps"
-              :operations="operations"
-              :variables="draft.variables"
-              :results="execution.steps"
-              :disabled="pending"
-            />
             <details class="step-checks">
               <summary>Response checks ({{ selected.request.assertions?.length ?? 0 }})</summary>
               <ResponseChecksEditor :session="selected.request" :disabled="pending" />
@@ -1294,6 +1302,8 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
   </section>
 </template>
 <style scoped>
+.request-inputs { border-top: 1px solid var(--line); padding-block-start: .7rem; }
+.request-inputs > h4 { margin: 0 0 .55rem; font-size: .9rem; }
 .request-parameters { display: grid; gap: .45rem; }
 .request-parameter { padding: .55rem; border: 1px solid var(--line); border-radius: .45rem; }
 .parameter-label { display: grid; gap: .25rem; font-size: .8rem; margin-bottom: .25rem; }
@@ -1336,7 +1346,8 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
   overflow-wrap: anywhere;
 }
 .applied-suggestions {
-  background: var(--accent-soft);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 0.4rem;
   padding: 0.45rem 0.65rem;
   margin: 0.5rem 0;
@@ -1344,8 +1355,16 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 }
 .input-suggestions {
   font-size: 0.78rem;
-  margin-block: 0.7rem;
+  margin-block: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: 0.45rem;
+  background: var(--accent-soft);
 }
+.input-suggestions > summary { padding: .5rem .65rem; font-weight: 600; }
+.input-suggestions[open] > summary { border-bottom: 1px solid var(--line); }
+.suggestion-content { padding: .5rem .65rem; overflow-wrap: anywhere; }
+.suggestion-hint { margin: 0 0 .5rem; color: var(--muted); }
 .input-suggestions ul {
   margin: 0.35rem 0 0.65rem;
   padding-left: 1rem;
