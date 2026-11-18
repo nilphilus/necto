@@ -1,4 +1,5 @@
 <script setup>
+import ScenarioRunReview from './ScenarioRunReview.vue'
 import { suggestInputs } from './inputSuggestions.js'
 import FolderSave from '../scenario-folder/FolderSave.vue'
 import FolderFeedback from '../scenario-folder/FolderFeedback.vue'
@@ -10,7 +11,7 @@ import ResponseChecksEditor from '../workbench/ResponseChecksEditor.vue'
 import ScenarioMap from './ScenarioMap.vue'
 import StepInputs from './StepInputs.vue'
 import SharedVariables from './SharedVariables.vue'
-import { variableProducer, inputSources, inputProducers } from './variables.js'
+import { variableProducer, inputProducers } from './variables.js'
 import StepWaiting from './StepWaiting.vue'
 import { useBuilder, savedBlueprint } from './useBuilder.js'
 import {
@@ -467,19 +468,19 @@ function reviewRun() {
   runDialog.value.showModal()
 }
 watch(allowHuman, () => {
-  if (runDialog.value?.open) refreshReview()
+  if (runDialog.value?.isOpen()) refreshReview()
 })
 watch(
   selectedPresets,
   () => {
-    if (runDialog.value?.open) refreshReview()
+    if (runDialog.value?.isOpen()) refreshReview()
   },
   { deep: true }
 )
 watch(
   () => props.presetNames,
   () => {
-    if (runDialog.value?.open) refreshReview()
+    if (runDialog.value?.isOpen()) refreshReview()
   }
 )
 async function startRun() {
@@ -489,10 +490,10 @@ async function startRun() {
     // run() is async; initial errors are reported by awaiting below.
     if (pending.value) runDialog.value.close()
     await promise
-    if (runDialog.value.open) runDialog.value.close()
+    if (runDialog.value.isOpen()) runDialog.value.close()
   } catch (cause) {
     runProblem.value = cause.message
-    if (!runDialog.value.open) error.value = cause.message
+    if (!runDialog.value.isOpen()) error.value = cause.message
   }
 }
 let preferredStepTab
@@ -1256,105 +1257,21 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       <p v-if="!filtered.length">No matching endpoints.</p>
       <small v-if="filtered.length === 100">First 100 matches. Narrow the search for more.</small>
     </dialog>
-    <dialog ref="runDialog" class="builder-dialog" aria-labelledby="run-builder-title">
-      <form @submit.prevent="startRun">
-        <header>
-          <h3 id="run-builder-title">Review scenario run</h3>
-          <button
-            type="button"
-            class="secondary"
-            aria-label="Close run review"
-            @click="runDialog.close()"
-          >
-            ×
-          </button>
-        </header>
-        <p>{{ draft.name }} · {{ draft.steps.length }} steps</p>
-        <p class="muted">
-          Sends real requests, including writes. A failure stops new steps and cancels in-flight
-          requests where possible; completed server changes cannot be rolled back.
-        </p>
-        <fieldset v-if="presetNames.length" class="run-presets">
-          <legend>Presets for this run</legend>
-          <label v-for="name in presetNames" :key="name"
-            ><input v-model="selectedPresets" type="checkbox" :value="name" />{{ name }}</label
-          >
-          <p>Presets override matching static and dynamic fields. Last selected wins.</p>
-          <small v-if="selectedPresets.length"
-            >Applied in order: {{ selectedPresets.join(' → ') }}</small
-          ><small v-else>No presets. Use the scenario's own inputs.</small>
-        </fieldset>
-        <p v-else class="muted">No saved presets. Configure them in Settings → Presets.</p>
-        <label class="parallel-limit"
-          >Maximum parallel requests<input
-            v-model.number="draft.concurrency"
-            type="number"
-            min="1"
-            max="8"
-            required /></label
-        ><label class="human-toggle"
-          ><input v-model="allowHuman" type="checkbox" />Human in the loop · pause for missing
-          run-time inputs</label
-        >
-        <details v-if="draft.variables.length">
-          <summary>Shared variables ({{ draft.variables.length }})</summary>
-          <ul>
-            <li v-for="variable in draft.variables" :key="variable.id">
-              {{ variable.name }} · {{ variable.source }} · resolved once if used
-            </li>
-          </ul>
-        </details>
-        <ol class="review-targets">
-          <li v-for="step in review" :key="step.id">
-            <strong>{{ step.label }}</strong
-            ><code>{{ step.operation.method }} {{ step.operation.path }}</code
-            ><span>{{ step.target.api }} · {{ step.target.label }}</span
-            ><small v-if="selectedPresets.length">{{
-              step.presetOverrides.length
-                ? 'Preset fields: ' + step.presetOverrides.join(', ')
-                : 'No matching preset fields (or shared presets disabled for this API).'
-            }}</small
-            ><small
-              >{{
-                step.inputs
-                  .flatMap(inputSources)
-                  .filter(
-                    (input) =>
-                      input.source === 'human' ||
-                      (input.source === 'variable' &&
-                        draft.variables.find((variable) => variable.id === input.variableId)
-                          ?.source === 'human')
-                  ).length
-              }}
-              human inputs · {{ step.dependencies.length }} dependencies</small
-            ><small
-              v-for="policy in step.entryPolicies.filter(
-                (policy) => policy.delayMs !== undefined || policy.waitFor
-              )"
-              :key="connectionKey(policy.from, policy.to)"
-              >{{ policy.label
-              }}<span v-if="policy.delayMs !== undefined"> · Delay {{ policy.delayMs }} ms</span
-              ><span v-if="policy.waitFor">
-                · Wait for {{ policy.waitFor.pointer || '(root)' }} = {{ policy.waitFor.value }} ·
-                Up to {{ policy.waitFor.retryCount + 1 }} {{ step.operation.method }} calls ·
-                {{ policy.waitFor.intervalMs }} ms between retries</span
-              ></small
-            >
-          </li>
-        </ol>
-        <p v-if="runProblem" class="error" role="alert">{{ runProblem }}</p>
-        <div class="run-actions">
-          <button type="button" class="secondary" @click="runDialog.close()">Cancel</button
-          ><button
-            type="submit"
-            class="primary"
-            :disabled="pending || !!validation || !!runProblem || !review.length"
-          >
-            Run scenario
-          </button>
-        </div>
-      </form>
-    </dialog>
+    <ScenarioRunReview
+      ref="runDialog"
+      v-model:selected-presets="selectedPresets"
+      v-model:concurrency.number="draft.concurrency"
+      v-model:allow-human="allowHuman"
+      :name="draft.name"
+      :step-count="draft.steps.length"
+      :variables="draft.variables"
+      :preset-names="presetNames"
+      :pending="pending"
+      :validation="validation"
+      :run-problem="runProblem"
+      :review="review"
+      @start="startRun"
+    />
   </section>
 </template>
 <style scoped>
@@ -1893,64 +1810,6 @@ summary {
   font-size: 0.72rem;
   overflow-wrap: anywhere;
 }
-.run-presets {
-  margin: 0.8rem 0;
-  padding: 0.6rem;
-  border: 1px solid var(--line);
-  border-radius: 0.45rem;
-  font-size: 0.78rem;
-}
-.run-presets label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  margin: 0.2rem 0.7rem 0.2rem 0;
-}
-.run-presets p {
-  margin: 0.35rem 0;
-}
-.run-presets small {
-  color: var(--muted);
-}
-.parallel-limit {
-  display: flex;
-  gap: 0.7rem;
-  align-items: center;
-  font-size: 0.8rem;
-}
-.parallel-limit input {
-  width: 5rem;
-}
-.human-toggle {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  font-size: 0.8rem;
-  margin: 0.8rem 0;
-}
-.review-targets {
-  padding-left: 1.2rem;
-  max-height: 35vh;
-  overflow: auto;
-}
-.review-targets li {
-  padding: 0.4rem 0;
-  font-size: 0.8rem;
-}
-.review-targets code,
-.review-targets span,
-.review-targets small {
-  display: block;
-  margin-top: 0.2rem;
-  overflow-wrap: anywhere;
-  color: var(--muted);
-}
-.run-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
 @media (max-width: 760px) {
   .builder {
     overflow: visible;
