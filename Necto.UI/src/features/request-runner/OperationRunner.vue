@@ -11,6 +11,7 @@ import BodyEditor from '../workbench/BodyEditor.vue'
 import ExpandedBodyEditor from '../workbench/ExpandedBodyEditor.vue'
 import RequestTools from '../workbench/RequestToolsMenu.vue'
 import ResponsePreview from './ResponsePreview.vue'
+import ParameterInput from './ParameterInput.vue'
 import RequestSendIcon from './RequestSendIcon.vue'
 import NextRequestsPanel from './NextRequestsPanel.vue'
 import { applyBodyPresets, contextKey, fieldKey, jsonContent, presetSource, supportedParameters, requestUrl, buildRequest } from './request.js'
@@ -28,9 +29,10 @@ const props = defineProps({
   prepare: Function,
   configuration: Object,
   history: Object,
+  parameterChoices: Function,
 })
 
-const emit = defineEmits(['edit-preset'])
+const emit = defineEmits(['edit-preset', 'choose-parameter'])
 const target = computed(() => { try { return effectiveTarget(props.operation, props.configuration, props.session, props.values) } catch { return null } })
 const responseStale = computed(() => {
   if (!props.session.result) return false
@@ -44,9 +46,21 @@ const previewPreferences = computed(() => props.session.previewPreferences ??= {
 const parameters = computed(() => supportedParameters(props.operation))
 const parameterFields = computed(() => parameters.value.map(parameter => {
   const key = contextKey(parameter)
-  return { parameter, key, source: presetSource(props.values, key) }
+  const schema = props.operation.resolve(parameter.schema)
+  const types = Array.isArray(schema?.type)
+    ? schema.type.filter((type) => type !== 'null')
+    : [schema?.type]
+  return {
+    parameter,
+    key,
+    source: presetSource(props.values, key),
+    type: types.length === 1 ? types[0] : undefined,
+    format: schema?.format,
+  }
 }))
 const parameterIdPrefix = useId()
+const parameterSession = ref(0)
+watch(() => props.session, () => { parameterSession.value++ }, { flush: 'sync' })
 const content = computed(() => jsonContent(props.operation, props.session.mediaType))
 const bodyPresetResult = computed(() => applyBodyPresets(props.operation, props.session.body, props.values, props.session.mediaType))
 const effectiveBody = computed(() => bodyPresetResult.value.body)
@@ -203,10 +217,6 @@ function sendShortcut(event) {
   if (!event.repeat && !props.session.pending) form.value.requestSubmit()
 }
 
-function parameterHint(parameter) {
-  const type = props.operation.resolve(parameter.schema)?.type
-  return type === 'array' || type === 'object' ? `JSON ${type}` : undefined
-}
 </script>
 
 <template>
@@ -235,12 +245,16 @@ function parameterHint(parameter) {
         <ImportedInputs :session="session" />
         <p v-if="!parameters.length && !operation.requestBody" class="muted empty">Ready to send. This endpoint has no inputs.</p>
 
-        <div v-for="({ parameter, key, source }, index) in parameterFields" :key="fieldKey(parameter)" class="field">
+        <div v-for="({ parameter, key, source, type, format }, index) in parameterFields" :key="fieldKey(parameter)" class="field">
           <div class="parameter-heading">
-            <label class="field-label" :for="`${parameterIdPrefix}-${index}`">
+            <component
+              :is="type === 'boolean' && !values.has(key) ? 'span' : 'label'"
+              class="field-label"
+              :for="type === 'boolean' && !values.has(key) ? undefined : `${parameterIdPrefix}-${index}`"
+            >
               <code>{{ parameter.name }}</code>{{ ' ' }}
               <small>{{ parameter.in }}<template v-if="parameter.required || parameter.in === 'path'"> · required</template></small>
-            </label>
+            </component>
             <DescriptionHelp :label="'About parameter ' + parameter.name" :description="parameter.description" />
           </div>
           <div v-if="values.has(key)" class="preset-field"
@@ -260,10 +274,17 @@ function parameterHint(parameter) {
             <span v-else class="preset-stamp" :id="`${parameterIdPrefix}-${index}-preset`">Preset</span>
           </div>
           <template v-else>
-            <slot name="parameter-input" :parameter="parameter" :hint="parameterHint(parameter)" :id="`${parameterIdPrefix}-${index}`">
-              <input :id="`${parameterIdPrefix}-${index}`" v-model="session.fields[fieldKey(parameter)]"
-                :required="parameter.required || parameter.in === 'path'" :placeholder="parameterHint(parameter)" spellcheck="false">
-            </slot>
+            <ParameterInput
+              :key="parameterSession"
+              :id="`${parameterIdPrefix}-${index}`"
+              v-model="session.fields[fieldKey(parameter)]"
+              :label="parameter.name"
+              :type="type"
+              :format="format"
+              :choices="parameterChoices?.(parameter)"
+              :required="parameter.required || parameter.in === 'path'"
+              @choose="emit('choose-parameter', parameter.in, $event)"
+            />
             <slot name="choices" :location="parameter.in" :parameter-name="parameter.name" />
           </template>
         </div>
