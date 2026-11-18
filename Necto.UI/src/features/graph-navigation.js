@@ -1,4 +1,4 @@
-import { nextTick, onMounted, onScopeDispose, reactive, watch } from 'vue'
+import { nextTick, onMounted, onScopeDispose, reactive, ref, watch } from 'vue'
 export const MIN_ZOOM = .02, MAX_ZOOM = 3
 export function wheelScale(scale, delta, mode, height) {
   const pixels = delta * (mode === 1 ? 16 : mode === 2 ? height : 1)
@@ -7,6 +7,8 @@ export function wheelScale(scale, delta, mode, height) {
 export function zoomScroll(scroll, cursor, before, after) { return (scroll + cursor) / before * after - cursor }
 export function useGraphNavigation(canvas, width, height, zoom, autoFit) {
   const view = reactive({ x:0, y:0, width:0, height:0 })
+  const isPanning = ref(false)
+  let pan
   let observer, revision = 0
   function sync() {
     const el = canvas.value
@@ -34,8 +36,30 @@ export function useGraphNavigation(canvas, width, height, zoom, autoFit) {
     autoFit.value = false
     el.scrollTo(Math.max(0,point.x*zoom.value-el.clientWidth/2),Math.max(0,point.y*zoom.value-el.clientHeight/2)); sync()
   }
+  function startPan(event) {
+    if (event.pointerType !== 'mouse' || event.button !== 0 || event.target.closest('button')) return
+    const el = canvas.value
+    const rect = el.getBoundingClientRect()
+    if (event.clientX >= rect.left + el.clientLeft + el.clientWidth ||
+        event.clientY >= rect.top + el.clientTop + el.clientHeight) return
+    el.setPointerCapture(event.pointerId)
+    pan = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+    isPanning.value = true
+  }
+  function movePan(event) {
+    if (pan?.pointerId !== event.pointerId) return
+    const el = canvas.value
+    el.scrollBy(pan.x - event.clientX, pan.y - event.clientY)
+    pan.x = event.clientX
+    pan.y = event.clientY
+  }
+  function stopPan(event) {
+    if (pan?.pointerId !== event.pointerId) return
+    pan = undefined
+    isPanning.value = false
+  }
   watch([zoom,width,height],async()=>{await nextTick();sync()})
   onMounted(()=>{observer=new ResizeObserver(sync);observer.observe(canvas.value);sync()})
   onScopeDispose(()=>observer?.disconnect())
-  return {view,sync,zoomAt,wheel,navigate}
+  return { view, sync, zoomAt, wheel, navigate, isPanning, startPan, movePan, stopPan }
 }
