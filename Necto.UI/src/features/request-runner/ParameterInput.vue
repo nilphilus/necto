@@ -1,7 +1,8 @@
 <script setup>
 import { computed, ref, watchPostEffect } from 'vue'
-import { numericError } from './numericParameter.js'
 import ArrayParameterEditor from './ArrayParameterEditor.vue'
+import { uuidPattern } from './uuidParameter.js'
+import { numericError } from './numericParameter.js'
 import ValueInput from '../related-endpoints/ValueInput.vue'
 
 const props = defineProps({
@@ -57,11 +58,19 @@ watchPostEffect(() => {
 const numericHint = computed(() => numeric.value && props.numberRules?.map(([operator, limit]) => `${operator} ${limit}`).join(' · '))
 
 const format = computed(() => props.type === 'string' ? props.format : undefined)
+const uuid = computed(() => format.value === 'uuid')
+const canGenerateUuid = typeof globalThis.crypto?.randomUUID === 'function'
+
+function generateUuid() {
+  model.value = globalThis.crypto.randomUUID()
+}
+
 const hasDate = computed(() => ['date', 'date-time'].includes(format.value))
 const hasTime = computed(() => ['time', 'date-time'].includes(format.value))
 const placeholder = computed(() => {
   if (format.value === 'date-time') return 'YYYY-MM-DDTHH:mm:ssZ'
   if (format.value === 'date') return 'YYYY-MM-DD'
+  if (uuid.value) return 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
   if (format.value === 'time') return 'HH:mm:ssZ'
   if (props.type === 'array' || props.type === 'object') return `JSON ${props.type}`
   return undefined
@@ -130,11 +139,14 @@ function applyPicker() {
         :choices="longEnum ? enumChoices : choices"
         :required="required"
         :placeholder="placeholder"
+        :pattern="uuid ? uuidPattern.source.replaceAll('[0-9a-f]', '[0-9a-fA-F]') : undefined"
         :inputmode="numeric ? 'decimal' : undefined"
         :aria-describedby="numericHint ? id + '-bounds' : undefined"
         @update:model-value="model = $event; pickerOpen = false"
         @choose="choice => { if (!longEnum || choices?.includes(choice)) emit('choose', choice) }"
       />
+      <button v-if="uuid && canGenerateUuid" type="button" class="secondary"
+        @click="generateUuid">Generate UUID</button>
       <button v-if="hasDate || hasTime" ref="pickerButton" type="button" class="secondary"
         :aria-expanded="pickerOpen" :aria-controls="pickerOpen ? id + '-picker' : undefined"
         @click="togglePicker">

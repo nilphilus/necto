@@ -20,6 +20,11 @@ const document = {
           query('from', string('date-time')),
           query('day', string('date')),
           query('clock', string('time')),
+          query('state', { type: 'string', enum: ['ready', 'done'] }),
+          query('region', { type: 'string', enum: Array.from({ length: 12 }, (_, index) => 'Region ' + index) }),
+          query('limit', { type: 'integer', minimum: 2, maximum: 10, multipleOf: 2 }),
+          query('tags', { type: 'array', items: { type: 'string' } }),
+          query('requestId', string('uuid')),
         ],
         responses: { 200: { description: 'Echo' } },
       },
@@ -43,7 +48,11 @@ async function main() {
     })
     if (url.pathname === '/openapi.json') return json(document)
     if (url.pathname === '/mappings') return json([])
-    if (url.pathname === '/check') return json(Object.fromEntries(url.searchParams))
+    if (url.pathname === '/check') {
+      const values = Object.fromEntries(url.searchParams)
+      if (values.tags !== undefined) values.tags = url.searchParams.getAll('tags')
+      return json(values)
+    }
     const file = url.pathname.startsWith('/assets/') ? url.pathname.slice(1) : 'index.html'
     res.setHeader('content-type', file.endsWith('.js') ? 'application/javascript'
       : file.endsWith('.css') ? 'text/css' : 'text/html')
@@ -105,6 +114,40 @@ async function main() {
     })
     await from.clear()
     assert.equal(Object.hasOwn(await submit(), 'from'), false)
+    await page.getByRole('combobox', { name: 'state query' }).selectOption('done')
+    const region = page.getByRole('combobox', { name: 'region query' })
+    const listId = await region.getAttribute('list')
+    assert.equal(await page.locator(`[id="${listId}"] option`).count(), 12)
+    await region.fill('Region 11')
+
+    const limit = page.getByRole('textbox', { name: 'limit query' })
+    await limit.fill('3')
+    assert.equal(await limit.evaluate((input) => input.validationMessage), 'limit must be a multiple of 2.')
+    await limit.fill('4')
+
+    await page.getByRole('button', { name: 'Edit items', exact: true }).click()
+    const add = page.getByRole('button', { name: 'Add item', exact: true })
+    await add.click()
+    await page.getByLabel('Item 1', { exact: true }).fill('draft')
+    await add.click()
+    await page.getByLabel('Item 2', { exact: true }).fill('ready')
+    await add.click()
+    await page.getByLabel('Item 3', { exact: true }).fill('done')
+    await page.getByRole('button', { name: 'Remove item 1', exact: true }).click()
+    await page.getByRole('button', { name: 'Apply items', exact: true }).click()
+
+    const uuid = page.getByRole('textbox', { name: 'requestId query' })
+    await uuid.fill('invalid')
+    assert.equal(await uuid.evaluate((input) => input.checkValidity()), false)
+    await page.getByRole('button', { name: 'Generate UUID', exact: true }).click()
+    const generated = await uuid.inputValue()
+    assert.match(generated, /^[0-9a-f-]{36}$/)
+    const result = await submit()
+    assert.deepEqual(result.tags, ['ready', 'done'])
+    assert.equal(result.limit, '4')
+    assert.equal(result.state, 'done')
+    assert.equal(result.region, 'Region 11')
+    assert.equal(result.requestId, generated)
     assert.deepEqual(errors, [])
     console.log('PASS: schema parameter controls and serialized request values')
   } finally {
