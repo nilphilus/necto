@@ -1,3 +1,4 @@
+import { validatePresetCollection } from '../presets/presetCollection.js'
 import { executionOptions } from './executionOptions.js'
 import { validateBlueprint } from '../scenario-builder/model.js'
 import { validateScenario } from '../scenarios/scenario.js'
@@ -130,25 +131,7 @@ export function inspectWorkspace(text, storage) {
         throw new Error('Invalid API connections.')
       value.connections.forEach(normalizeConnection)
     } else if (entry.key.startsWith('necto:environments:')) {
-      if (
-        ![1, 2, undefined].includes(value.version) ||
-        !Array.isArray(value.presets ?? value.environments)
-      )
-        throw new Error('Invalid presets.')
-      for (const pair of value.presets ?? value.environments)
-        if (
-          !Array.isArray(pair) ||
-          pair.length !== 2 ||
-          typeof pair[0] !== 'string' ||
-          !Array.isArray(pair[1]) ||
-          pair[1].some(
-            (item) =>
-              !Array.isArray(item) ||
-              item.length !== 2 ||
-              typeof item[0] !== 'string'
-          )
-        )
-          throw new Error('Invalid preset values.')
+      validatePresetCollection(value)
     } else if (
       Object.values(value).some(
         (server) =>
