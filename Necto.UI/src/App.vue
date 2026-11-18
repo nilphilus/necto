@@ -1240,6 +1240,10 @@ function removeScenario(id) {
                 <RequestSamples :key="sampleStorageKey(current.operation)" ref="requestSamples" :storage-key="sampleStorageKey(current.operation)"
                   :operation="current.operation" :session="current.session" :values="requestValues" />
               </template>
+              <template #openapi-examples>
+                <button v-if="requestSamples?.hasExamples" type="button" class="secondary"
+                  aria-haspopup="dialog" @click="requestSamples.openExamples()">OpenAPI examples</button>
+              </template>
               <template #choices="{ location, parameterName }">
                 <RelatedChoices v-if="location === 'body'"
                   :choices="choicesFor(current.operation, location, parameterName, relatedResults)"
