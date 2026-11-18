@@ -11,6 +11,7 @@ import BodyEditor from '../workbench/BodyEditor.vue'
 import ExpandedBodyEditor from '../workbench/ExpandedBodyEditor.vue'
 import RequestTools from '../workbench/RequestToolsMenu.vue'
 import ResponsePreview from './ResponsePreview.vue'
+import { numericRules } from './numericParameter.js'
 import ParameterInput from './ParameterInput.vue'
 import RequestSendIcon from './RequestSendIcon.vue'
 import NextRequestsPanel from './NextRequestsPanel.vue'
@@ -57,6 +58,7 @@ const parameterFields = computed(() => parameters.value.map(parameter => {
     type: types.length === 1 ? types[0] : undefined,
     format: schema?.format,
     enumValues: schema?.enum,
+    numberRules: numericRules(schema),
   }
 }))
 const parameterIdPrefix = useId()
@@ -246,7 +248,7 @@ function sendShortcut(event) {
         <ImportedInputs :session="session" />
         <p v-if="!parameters.length && !operation.requestBody" class="muted empty">Ready to send. This endpoint has no inputs.</p>
 
-        <div v-for="({ parameter, key, source, type, format, enumValues }, index) in parameterFields" :key="fieldKey(parameter)" class="field">
+        <div v-for="({ parameter, key, source, type, format, enumValues, numberRules }, index) in parameterFields" :key="fieldKey(parameter)" class="field">
           <div class="parameter-heading">
             <component
               :is="type === 'boolean' && !values.has(key) ? 'span' : 'label'"
@@ -283,6 +285,7 @@ function sendShortcut(event) {
               :type="type"
               :format="format"
               :enum-values="enumValues"
+              :number-rules="numberRules"
               :choices="parameterChoices?.(parameter)"
               :required="parameter.required || parameter.in === 'path'"
               @choose="emit('choose-parameter', parameter.in, $event)"
