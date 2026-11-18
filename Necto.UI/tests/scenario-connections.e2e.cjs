@@ -1,59 +1,337 @@
-const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright')
-const http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict')
-let browser,server,page,base,polls=0;const calls=[],errors=[],root=path.resolve(__dirname,'../dist'),output=process.env.NECTO_CONNECTION_SCREENSHOTS
-const response={description:'Success',content:{'application/json':{schema:{type:'object',properties:{id:{type:'integer'},state:{type:'string'},reportId:{type:'integer'}}}}}}
-const operation=(name,parameters=[])=>({summary:name,operationId:name,tags:['Jobs'],parameters,responses:{200:response}})
-const parameter={in:'path',name:'id',required:true,schema:{type:'integer'}}
-const document={openapi:'3.1.0',info:{title:'Report jobs API',version:'1'},paths:{'/jobs':{post:operation('Create job')},'/jobs/{id}':{get:operation('Poll status',[parameter])},'/reports/{id}':{get:operation('Read report',[parameter])}}}
-;(async()=>{
- server=http.createServer(async(req,res)=>{
-  const url=new URL(req.url,'http://localhost');const json=value=>{res.setHeader('content-type','application/json');res.end(JSON.stringify(value))}
-  if(url.pathname==='/configuration')return json({openApiUrl:base+'/openapi.json',apiBaseUrl:base,endpointMappingsUrl:base+'/mappings'})
-  if(url.pathname==='/openapi.json')return json(document)
-  if(url.pathname==='/mappings')return json([])
-  if(['/jobs','/jobs/7','/reports/99'].includes(url.pathname)){calls.push({path:url.pathname,method:req.method,at:Date.now()});return json(url.pathname==='/jobs'?{id:7}:url.pathname==='/jobs/7'?{state:++polls===1?'Pending':'Done',reportId:99}:{ok:true})}
-  try{const file=url.pathname.startsWith('/assets/')?url.pathname.slice(1):'index.html';res.setHeader('content-type',file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(await fs.readFile(path.join(root,file)))}catch{res.writeHead(404);res.end()}
- });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));base=`http://127.0.0.1:${server.address().port}`
- browser=await chromium.launch({headless:true,args:['--no-sandbox']});const p=page=await browser.newPage({viewport:{width:1540,height:1000}});p.setDefaultTimeout(12000);p.on('pageerror',error=>errors.push(error.message));p.on('dialog',dialog=>dialog.accept())
- if(output)await fs.mkdir(output,{recursive:true});const shot=async name=>{if(output)await p.screenshot({path:path.join(output,name+'.png')})}
- await p.goto(base);await p.getByRole('button',{name:'Scenarios',exact:true}).click();await p.getByRole('button',{name:'Scenario Builder →'}).click();await p.getByRole('textbox',{name:'Scenario name',exact:true}).fill('Drag, connect and wait for a report')
- const add=async name=>{await p.getByRole('button',{name:'+ Add request',exact:true}).click();await p.getByRole('searchbox',{name:'Find endpoint',exact:true}).fill(name);await p.locator('.endpoint-options button').filter({hasText:name}).click()}
- const drag=async(from,to)=>{
-  const source=p.getByRole('button',{name:'Connect from '+from,exact:true}),target=p.getByRole('button',{name:'Connect to '+to,exact:true})
-  await source.scrollIntoViewIfNeeded();await target.scrollIntoViewIfNeeded();const a=await source.boundingBox(),b=await target.boundingBox()
-  await p.mouse.move(a.x+a.width/2,a.y+a.height/2);await p.mouse.down();await p.mouse.move(b.x+b.width/2,b.y+b.height/2,{steps:12});await p.mouse.up()
- }
- const popup=p.getByRole('dialog',{name:/→/}),apply=()=>p.getByRole('button',{name:'Apply connection',exact:true}).click()
- const mapping=async pointer=>{await popup.getByRole('button',{name:'Add input',exact:true}).click();await popup.getByLabel('Response JSON Pointer',{exact:true}).last().fill(pointer)}
- const configure=async(from,to)=>p.getByRole('button',{name:'Configure connection '+from+' → '+to,exact:true}).click()
- await add('Create job');await add('Poll status');await drag('Create job','Poll status');await popup.waitFor();await popup.getByRole('heading',{name:'Create job → Poll status',exact:true}).waitFor()
- const icon=await p.getByRole('button',{name:'Configure connection Create job → Poll status',exact:true}).boundingBox(),box=await popup.boundingBox();assert.ok(Math.min(Math.abs(box.x-icon.x-icon.width),Math.abs(box.x+box.width-icon.x))<=16,'popup should be anchored beside the connection')
- await popup.getByRole('checkbox',{name:'Delay',exact:true}).check();await popup.getByRole('spinbutton',{name:'Delay milliseconds',exact:true}).fill('120');await popup.getByRole('checkbox',{name:'Wait for response value',exact:true}).check();await popup.getByLabel('Wait for response field',{exact:true}).fill('/state');await popup.getByRole('textbox',{name:'Expected response value',exact:true}).fill('Done');await popup.getByRole('spinbutton',{name:'Response retry count',exact:true}).fill('2');await popup.getByRole('spinbutton',{name:'Response retry interval milliseconds',exact:true}).fill('100');await mapping('/id');await popup.getByRole('heading',{level:3}).click();await popup.locator('.connection-content').evaluate(element=>element.scrollTop=0);await shot('connection-popup');await apply()
- assert.equal(await p.getByRole('checkbox',{name:'Delay',exact:true}).count(),0,'timing should not be configured on the request inspector')
- await add('Read report');await drag('Poll status','Read report');await popup.waitFor();await mapping('/reportId');await apply();assert.equal(await p.locator('.edge-settings').count(),3)
- // A canceled edit changes no connection settings; a duplicate drag edits rather than duplicates.
- await drag('Create job','Poll status');await popup.waitFor();await popup.getByRole('spinbutton',{name:'Delay milliseconds',exact:true}).fill('999');await popup.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(await p.locator('.edge-settings').count(),3)
- await configure('Create job','Poll status');assert.equal(await popup.getByRole('spinbutton',{name:'Delay milliseconds',exact:true}).inputValue(),'120');await popup.getByRole('button',{name:'Cancel',exact:true}).click()
- await drag('Poll status','Poll status');await p.getByRole('alert').filter({hasText:/self connection/}).waitFor();assert.equal(await p.locator('.edge-settings').count(),3)
- await drag('Read report','Create job');await p.getByRole('alert').filter({hasText:/cycle/}).waitFor();assert.equal(await p.locator('.edge-settings').count(),3)
- await p.getByRole('button',{name:'Connect from Create job',exact:true}).focus();await p.keyboard.press('Enter');await p.locator('.connect-hint').waitFor();await p.keyboard.press('Escape');await p.locator('.connect-hint').waitFor({state:'hidden'});assert.equal(await p.locator('.edge-settings').count(),3)
- // Correct coordinates at non-default zoom; remove the new ordering-only connection.
- await p.getByLabel('Zoom',{exact:false}).selectOption('0.65');await drag('Create job','Read report');await popup.waitFor();await popup.getByRole('button',{name:'Remove connection',exact:true}).click();assert.equal(await p.locator('.edge-settings').count(),3)
- // Keyboard-only connection via the list form, followed by Escape discarding edits.
- await p.locator('.map-connections summary').click();await p.getByLabel('Connection from',{exact:true}).selectOption({label:'Create job'});await p.getByLabel('Connection to',{exact:true}).selectOption({label:'Read report'});await p.getByRole('button',{name:'Connect',exact:true}).focus();await p.keyboard.press('Enter');await popup.waitFor();await p.keyboard.press('Escape');await configure('Create job','Read report');await popup.getByRole('button',{name:'Remove connection',exact:true}).click();assert.equal(await p.locator('.edge-settings').count(),3)
- await p.getByLabel('Zoom',{exact:false}).selectOption('1');await p.locator('.map-connections summary').click();await p.getByRole('button',{name:'Save',exact:true}).click();await shot('connected-map')
- const saved=await p.evaluate(()=>JSON.parse(Object.entries(localStorage).find(([key])=>key.startsWith('necto:scenario-builder:'))[1]).blueprints[0]);assert.equal(saved.version,7);assert.ok(saved.steps.every(step=>step.delayMs===undefined&&step.waitFor===undefined));assert.equal(saved.connections.find(edge=>edge.waitFor).delayMs,120)
- await p.getByRole('button',{name:'Review & run',exact:true}).click();await p.getByText(/Up to 3 GET calls/).waitFor();assert.equal(calls.length,0);await p.getByRole('button',{name:'Run scenario',exact:true}).click();await p.locator('.builder-run-status').filter({hasText:'3 / 3 completed'}).waitFor();assert.equal(calls.filter(call=>call.method==='POST').length,1);assert.equal(calls.filter(call=>call.path==='/jobs/7').length,2);assert.equal(calls.at(-1).path,'/reports/99');assert.ok(calls[1].at-calls[0].at>=100);await shot('connection-run')
- await p.reload();await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:'Drag, connect and wait for a report'});await configure('Create job','Poll status');assert.equal(await popup.getByRole('spinbutton',{name:'Delay milliseconds',exact:true}).inputValue(),'120');await popup.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(calls.length,4)
- // Load an actual v2 definition, verify its moved settings, then save as v3 without sending requests.
- const legacy=JSON.parse(JSON.stringify(saved));legacy.version=2;legacy.name+=' · migrated v2'
- for(const step of legacy.steps){const incoming=legacy.connections.filter(edge=>edge.to===step.id);step.dependsOn=incoming.filter(edge=>edge.from!==null).map(edge=>edge.from);for(const edge of incoming){if(edge.delayMs!==undefined)step.delayMs=edge.delayMs;if(edge.waitFor)step.waitFor=edge.waitFor}}
- delete legacy.connections
- await p.evaluate(({key,legacy})=>localStorage.setItem(key,JSON.stringify({version:1,blueprints:[legacy]})),{key:'necto:scenario-builder:'+base+'/openapi.json',legacy});await p.reload();await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:legacy.name});await configure('Create job','Poll status');assert.equal(await popup.getByRole('spinbutton',{name:'Delay milliseconds',exact:true}).inputValue(),'120');assert.equal(await popup.getByRole('textbox',{name:'Expected response value',exact:true}).inputValue(),'Done');await popup.getByRole('button',{name:'Cancel',exact:true}).click();await p.getByRole('button',{name:'Save',exact:true}).click();assert.equal(await p.evaluate(()=>JSON.parse(Object.entries(localStorage).find(([key])=>key.startsWith('necto:scenario-builder:'))[1]).blueprints[0].version),7);assert.equal(calls.length,4)
- await p.setViewportSize({width:390,height:844});await configure('Create job','Poll status');const mobile=await popup.boundingBox();assert.ok(mobile.x>=0&&mobile.x+mobile.width<=390);assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await shot('connection-popup-mobile');await popup.getByRole('button',{name:'Cancel',exact:true}).click();assert.deepEqual(errors,[])
- const touch=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true})
- await touch.addInitScript(({key,saved})=>localStorage.setItem(key,JSON.stringify({version:1,blueprints:[saved]})),{key:'necto:scenario-builder:'+base+'/openapi.json',saved})
- const phone=await touch.newPage();phone.on('pageerror',error=>errors.push(error.message));phone.setDefaultTimeout(12000);await phone.goto(base+'/builder');await phone.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:saved.name})
- await phone.getByRole('button',{name:'Connect from Create job',exact:true}).tap();await phone.getByRole('button',{name:'Connect to Read report',exact:true}).tap();await phone.getByRole('dialog',{name:'Create job → Read report',exact:true}).waitFor();assert.equal(calls.length,4);await touch.close();assert.deepEqual(errors,[])
- console.log('PASS: real mouse drags, anchored popup, edge-bound Delay/polling and response mappings, zoom, duplicate/self/cycle handling, transactional cancel/Escape, keyboard fallback, v4 persistence/reload, actual target polling without repeating source POST, mobile popup.')
-})().catch(async error=>{console.error(error);if(page){console.error(await page.locator('.builder').innerText());await page.screenshot({path:'/tmp/necto-connections-failure.png'})}process.exitCode=1}).finally(async()=>{if(browser)await browser.close();if(server)server.close()})
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright')
+const http = require('node:http'),
+  fs = require('node:fs/promises'),
+  path = require('node:path'),
+  assert = require('node:assert/strict')
+let browser,
+  server,
+  page,
+  base,
+  polls = 0
+const calls = [],
+  errors = [],
+  root = path.resolve(__dirname, '../dist'),
+  output = process.env.NECTO_CONNECTION_SCREENSHOTS
+const response = {
+  description: 'Success',
+  content: {
+    'application/json': {
+      schema: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          state: { type: 'string' },
+          reportId: { type: 'integer' },
+        },
+      },
+    },
+  },
+}
+const operation = (name, parameters = []) => ({
+  summary: name,
+  operationId: name,
+  tags: ['Jobs'],
+  parameters,
+  responses: { 200: response },
+})
+const parameter = { in: 'path', name: 'id', required: true, schema: { type: 'integer' } }
+const document = {
+  openapi: '3.1.0',
+  info: { title: 'Report jobs API', version: '1' },
+  paths: {
+    '/jobs': { post: operation('Create job') },
+    '/jobs/{id}': { get: operation('Poll status', [parameter]) },
+    '/reports/{id}': { get: operation('Read report', [parameter]) },
+  },
+}
+;(async () => {
+  server = http.createServer(async (req, res) => {
+    const url = new URL(req.url, 'http://localhost')
+    const json = (value) => {
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify(value))
+    }
+    if (url.pathname === '/configuration')
+      return json({
+        openApiUrl: base + '/openapi.json',
+        apiBaseUrl: base,
+        endpointMappingsUrl: base + '/mappings',
+      })
+    if (url.pathname === '/openapi.json') return json(document)
+    if (url.pathname === '/mappings') return json([])
+    if (['/jobs', '/jobs/7', '/reports/99'].includes(url.pathname)) {
+      calls.push({ path: url.pathname, method: req.method, at: Date.now() })
+      return json(
+        url.pathname === '/jobs'
+          ? { id: 7 }
+          : url.pathname === '/jobs/7'
+            ? { state: ++polls === 1 ? 'Pending' : 'Done', reportId: 99 }
+            : { ok: true }
+      )
+    }
+    try {
+      const file = url.pathname.startsWith('/assets/') ? url.pathname.slice(1) : 'index.html'
+      res.setHeader(
+        'content-type',
+        file.endsWith('.js')
+          ? 'application/javascript'
+          : file.endsWith('.css')
+            ? 'text/css'
+            : 'text/html'
+      )
+      res.end(await fs.readFile(path.join(root, file)))
+    } catch {
+      res.writeHead(404)
+      res.end()
+    }
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  base = `http://127.0.0.1:${server.address().port}`
+  browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
+  const p = (page = await browser.newPage({ viewport: { width: 1540, height: 1000 } }))
+  p.setDefaultTimeout(12000)
+  p.on('pageerror', (error) => errors.push(error.message))
+  p.on('dialog', (dialog) => dialog.accept())
+  if (output) await fs.mkdir(output, { recursive: true })
+  const shot = async (name) => {
+    if (output) await p.screenshot({ path: path.join(output, name + '.png') })
+  }
+  await p.goto(base)
+  await p.getByRole('button', { name: 'Scenarios', exact: true }).click()
+  await p.getByRole('button', { name: 'Scenario Builder →' }).click()
+  await p
+    .getByRole('textbox', { name: 'Scenario name', exact: true })
+    .fill('Drag, connect and wait for a report')
+  const add = async (name) => {
+    await p.getByRole('button', { name: '+ Add request', exact: true }).click()
+    await p.getByRole('searchbox', { name: 'Find endpoint', exact: true }).fill(name)
+    await p.locator('.endpoint-options button').filter({ hasText: name }).click()
+  }
+  const drag = async (from, to) => {
+    const source = p.getByRole('button', { name: 'Connect from ' + from, exact: true }),
+      target = p.getByRole('button', { name: 'Connect to ' + to, exact: true })
+    await source.scrollIntoViewIfNeeded()
+    await target.scrollIntoViewIfNeeded()
+    const a = await source.boundingBox(),
+      b = await target.boundingBox()
+    await p.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
+    await p.mouse.down()
+    await p.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 })
+    await p.mouse.up()
+  }
+  const popup = p.getByRole('dialog', { name: /→/ }),
+    apply = () => p.getByRole('button', { name: 'Apply connection', exact: true }).click()
+  const mapping = async (pointer) => {
+    await popup.getByRole('button', { name: 'Add input', exact: true }).click()
+    await popup.getByLabel('Response JSON Pointer', { exact: true }).last().fill(pointer)
+  }
+  const configure = async (from, to) =>
+    p
+      .getByRole('button', { name: 'Configure connection ' + from + ' → ' + to, exact: true })
+      .click()
+  await add('Create job')
+  await add('Poll status')
+  await drag('Create job', 'Poll status')
+  await popup.waitFor()
+  await popup.getByRole('heading', { name: 'Create job → Poll status', exact: true }).waitFor()
+  const icon = await p
+      .getByRole('button', { name: 'Configure connection Create job → Poll status', exact: true })
+      .boundingBox(),
+    box = await popup.boundingBox()
+  assert.ok(
+    Math.min(Math.abs(box.x - icon.x - icon.width), Math.abs(box.x + box.width - icon.x)) <= 16,
+    'popup should be anchored beside the connection'
+  )
+  await popup.getByRole('checkbox', { name: 'Delay', exact: true }).check()
+  await popup.getByRole('spinbutton', { name: 'Delay milliseconds', exact: true }).fill('120')
+  await popup.getByRole('checkbox', { name: 'Wait for response value', exact: true }).check()
+  await popup.getByLabel('Wait for response field', { exact: true }).fill('/state')
+  await popup.getByRole('textbox', { name: 'Expected response value', exact: true }).fill('Done')
+  await popup.getByRole('spinbutton', { name: 'Response retry count', exact: true }).fill('2')
+  await popup
+    .getByRole('spinbutton', { name: 'Response retry interval milliseconds', exact: true })
+    .fill('100')
+  await mapping('/id')
+  await popup.getByRole('heading', { level: 3 }).click()
+  await popup.locator('.connection-content').evaluate((element) => (element.scrollTop = 0))
+  await shot('connection-popup')
+  await apply()
+  assert.equal(
+    await p.getByRole('checkbox', { name: 'Delay', exact: true }).count(),
+    0,
+    'timing should not be configured on the request inspector'
+  )
+  await add('Read report')
+  await drag('Poll status', 'Read report')
+  await popup.waitFor()
+  await mapping('/reportId')
+  await apply()
+  assert.equal(await p.locator('.edge-settings').count(), 3)
+  // A canceled edit changes no connection settings; a duplicate drag edits rather than duplicates.
+  await drag('Create job', 'Poll status')
+  await popup.waitFor()
+  await popup.getByRole('spinbutton', { name: 'Delay milliseconds', exact: true }).fill('999')
+  await popup.getByRole('button', { name: 'Cancel', exact: true }).click()
+  assert.equal(await p.locator('.edge-settings').count(), 3)
+  await configure('Create job', 'Poll status')
+  assert.equal(
+    await popup.getByRole('spinbutton', { name: 'Delay milliseconds', exact: true }).inputValue(),
+    '120'
+  )
+  await popup.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await drag('Poll status', 'Poll status')
+  await p
+    .getByRole('alert')
+    .filter({ hasText: /self connection/ })
+    .waitFor()
+  assert.equal(await p.locator('.edge-settings').count(), 3)
+  await drag('Read report', 'Create job')
+  await p.getByRole('alert').filter({ hasText: /cycle/ }).waitFor()
+  assert.equal(await p.locator('.edge-settings').count(), 3)
+  await p.getByRole('button', { name: 'Connect from Create job', exact: true }).focus()
+  await p.keyboard.press('Enter')
+  await p.locator('.connect-hint').waitFor()
+  await p.keyboard.press('Escape')
+  await p.locator('.connect-hint').waitFor({ state: 'hidden' })
+  assert.equal(await p.locator('.edge-settings').count(), 3)
+  // Correct coordinates at non-default zoom; remove the new ordering-only connection.
+  await p.getByLabel('Zoom', { exact: false }).selectOption('0.65')
+  await drag('Create job', 'Read report')
+  await popup.waitFor()
+  await popup.getByRole('button', { name: 'Remove connection', exact: true }).click()
+  assert.equal(await p.locator('.edge-settings').count(), 3)
+  // Keyboard-only connection via the list form, followed by Escape discarding edits.
+  await p.locator('.map-connections summary').click()
+  await p.getByLabel('Connection from', { exact: true }).selectOption({ label: 'Create job' })
+  await p.getByLabel('Connection to', { exact: true }).selectOption({ label: 'Read report' })
+  await p.getByRole('button', { name: 'Connect', exact: true }).focus()
+  await p.keyboard.press('Enter')
+  await popup.waitFor()
+  await p.keyboard.press('Escape')
+  await configure('Create job', 'Read report')
+  await popup.getByRole('button', { name: 'Remove connection', exact: true }).click()
+  assert.equal(await p.locator('.edge-settings').count(), 3)
+  await p.getByLabel('Zoom', { exact: false }).selectOption('1')
+  await p.locator('.map-connections summary').click()
+  await p.getByRole('button', { name: 'Save', exact: true }).click()
+  await shot('connected-map')
+  const saved = await p.evaluate(
+    () =>
+      JSON.parse(
+        Object.entries(localStorage).find(([key]) => key.startsWith('necto:scenario-builder:'))[1]
+      ).blueprints[0]
+  )
+  assert.equal(saved.version, 7)
+  assert.ok(saved.steps.every((step) => step.delayMs === undefined && step.waitFor === undefined))
+  assert.equal(saved.connections.find((edge) => edge.waitFor).delayMs, 120)
+  await p.getByRole('button', { name: 'Review & run', exact: true }).click()
+  await p.getByText(/Up to 3 GET calls/).waitFor()
+  assert.equal(calls.length, 0)
+  await p.getByRole('button', { name: 'Run scenario', exact: true }).click()
+  await p.locator('.builder-run-status').filter({ hasText: '3 / 3 completed' }).waitFor()
+  assert.equal(calls.filter((call) => call.method === 'POST').length, 1)
+  assert.equal(calls.filter((call) => call.path === '/jobs/7').length, 2)
+  assert.equal(calls.at(-1).path, '/reports/99')
+  assert.ok(calls[1].at - calls[0].at >= 100)
+  await shot('connection-run')
+  await p.reload()
+  await p
+    .getByLabel('Saved builder scenarios', { exact: true })
+    .selectOption({ label: 'Drag, connect and wait for a report' })
+  await configure('Create job', 'Poll status')
+  assert.equal(
+    await popup.getByRole('spinbutton', { name: 'Delay milliseconds', exact: true }).inputValue(),
+    '120'
+  )
+  await popup.getByRole('button', { name: 'Cancel', exact: true }).click()
+  assert.equal(calls.length, 4)
+  // Load an actual v2 definition, verify its moved settings, then save as v3 without sending requests.
+  const legacy = JSON.parse(JSON.stringify(saved))
+  legacy.version = 2
+  legacy.name += ' · migrated v2'
+  for (const step of legacy.steps) {
+    const incoming = legacy.connections.filter((edge) => edge.to === step.id)
+    step.dependsOn = incoming.filter((edge) => edge.from !== null).map((edge) => edge.from)
+    for (const edge of incoming) {
+      if (edge.delayMs !== undefined) step.delayMs = edge.delayMs
+      if (edge.waitFor) step.waitFor = edge.waitFor
+    }
+  }
+  delete legacy.connections
+  await p.evaluate(
+    ({ key, legacy }) =>
+      localStorage.setItem(key, JSON.stringify({ version: 1, blueprints: [legacy] })),
+    { key: 'necto:scenario-builder:' + base + '/openapi.json', legacy }
+  )
+  await p.reload()
+  await p
+    .getByLabel('Saved builder scenarios', { exact: true })
+    .selectOption({ label: legacy.name })
+  await configure('Create job', 'Poll status')
+  assert.equal(
+    await popup.getByRole('spinbutton', { name: 'Delay milliseconds', exact: true }).inputValue(),
+    '120'
+  )
+  assert.equal(
+    await popup.getByRole('textbox', { name: 'Expected response value', exact: true }).inputValue(),
+    'Done'
+  )
+  await popup.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await p.getByRole('button', { name: 'Save', exact: true }).click()
+  assert.equal(
+    await p.evaluate(
+      () =>
+        JSON.parse(
+          Object.entries(localStorage).find(([key]) => key.startsWith('necto:scenario-builder:'))[1]
+        ).blueprints[0].version
+    ),
+    7
+  )
+  assert.equal(calls.length, 4)
+  await p.setViewportSize({ width: 390, height: 844 })
+  await configure('Create job', 'Poll status')
+  const mobile = await popup.boundingBox()
+  assert.ok(mobile.x >= 0 && mobile.x + mobile.width <= 390)
+  assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+  await shot('connection-popup-mobile')
+  await popup.getByRole('button', { name: 'Cancel', exact: true }).click()
+  assert.deepEqual(errors, [])
+  const touch = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  })
+  await touch.addInitScript(
+    ({ key, saved }) =>
+      localStorage.setItem(key, JSON.stringify({ version: 1, blueprints: [saved] })),
+    { key: 'necto:scenario-builder:' + base + '/openapi.json', saved }
+  )
+  const phone = await touch.newPage()
+  phone.on('pageerror', (error) => errors.push(error.message))
+  phone.setDefaultTimeout(12000)
+  await phone.goto(base + '/builder')
+  await phone
+    .getByLabel('Saved builder scenarios', { exact: true })
+    .selectOption({ label: saved.name })
+  await phone.getByRole('button', { name: 'Connect from Create job', exact: true }).tap()
+  await phone.getByRole('button', { name: 'Connect to Read report', exact: true }).tap()
+  await phone.getByRole('dialog', { name: 'Create job → Read report', exact: true }).waitFor()
+  assert.equal(calls.length, 4)
+  await touch.close()
+  assert.deepEqual(errors, [])
+  console.log(
+    'PASS: real mouse drags, anchored popup, edge-bound Delay/polling and response mappings, zoom, duplicate/self/cycle handling, transactional cancel/Escape, keyboard fallback, v4 persistence/reload, actual target polling without repeating source POST, mobile popup.'
+  )
+})()
+  .catch(async (error) => {
+    console.error(error)
+    if (page) {
+      console.error(await page.locator('.builder').innerText())
+      await page.screenshot({ path: '/tmp/necto-connections-failure.png' })
+    }
+    process.exitCode = 1
+  })
+  .finally(async () => {
+    if (browser) await browser.close()
+    if (server) server.close()
+  })
