@@ -43,7 +43,7 @@ const names = computed(() => new Map(graph.value.nodes.map(node => [node.id, nod
 const width = computed(() => Math.max(620, ...positions.value.map(node => node.x + 305)))
 const height = computed(() => Math.max(380, ...positions.value.map(node => node.y + 125)))
 const { autoFit, fit, center } = useGraphViewport(canvas, width, height, zoom)
-const { view, sync, zoomAt, wheel, navigate } = useGraphNavigation(canvas, width, height, zoom, autoFit)
+const { view, sync, zoomAt, wheel, navigate, isPanning, startPan, movePan, stopPan } = useGraphNavigation(canvas, width, height, zoom, autoFit)
 const miniEdges = computed(() => connections.value.map(edge => ({ ...edge, from:byId.value.get(edge.from), to:byId.value.get(edge.to) })).filter(edge=>edge.from&&edge.to))
 watch(() => props.initialOperationKey, key => { selectedId.value = graph.value.nodes.find(node => node.endpoints.some(entry => entry.operation.key === key))?.id ?? '' }, { immediate: true })
 watch(selected, value => { if (!value) focused.value = false })
@@ -85,13 +85,16 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
         <button type="button" class="secondary" :disabled="zoom >= MAX_ZOOM" aria-label="Zoom in" @click="zoomAt(Math.min(MAX_ZOOM, zoom * 1.35))">+</button>
       </div>
     </div>
-    <p class="legend"><span class="schema-key">— Schema reference</span><span class="mapping-key">┄ Value flow</span><span class="muted">Scroll to zoom · Use the overview to navigate. Models come from OpenAPI; value flows come from Necto mappings.</span></p>
+    <p class="legend"><span class="schema-key">— Schema reference</span><span class="mapping-key">┄ Value flow</span><span class="muted">Ctrl + scroll to zoom · Left-click and drag the background to pan · Use the overview to navigate. Models come from OpenAPI; value flows come from Necto mappings.</span></p>
     <p v-if="mappingError" class="muted" role="status">{{ mappingError }} Schema references are still available.</p>
     <p v-else-if="!mappings.length" class="muted">No value mappings loaded. Schema references are available independently.</p>
     <p v-if="visibleNodes.length > 100" class="muted" role="status">Showing 100 of {{ visibleNodes.length }} entities. {{ focused ? 'All direct connections are listed in the details.' : 'Refine the search to see others.' }}</p>
     <div class="graph-workspace">
       <div class="graph-stage">
-      <div ref="canvas" @scroll="sync" @wheel="positions.length && wheel($event)" class="graph-canvas" tabindex="0" aria-label="Scrollable entity graph">
+      <div ref="canvas" class="graph-canvas" :class="{ pannable: positions.length, panning: isPanning }"
+        tabindex="0" aria-label="Scrollable entity graph" @scroll="sync" @wheel="positions.length && $event.ctrlKey && wheel($event)"
+        @pointerdown="positions.length && startPan($event)" @pointermove="movePan"
+        @pointerup="stopPan" @pointercancel="stopPan" @lostpointercapture="stopPan">
         <svg v-if="positions.length" :width="width * zoom" :height="height * zoom" :viewBox="`0 0 ${width} ${height}`" role="group" aria-label="Entity relationships">
           <defs><marker :id="markerId" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" /></marker></defs>
           <path v-for="edge in connections" :key="edge.id" :d="connectionPath(edge, byId.get(edge.from), byId.get(edge.to))" fill="none" :stroke="edge.kind === 'mapping' ? '#ad7923' : '#57806d'" :stroke-dasharray="edge.kind === 'mapping' ? '6 5' : undefined" :stroke-width="selected && connected(edge) ? 2.5 : 1.5" :opacity="connected(edge) ? .9 : .15" :marker-start="edge.reverse ? `url(#${markerId})` : undefined" :marker-end="edge.forward ? `url(#${markerId})` : undefined">
@@ -155,6 +158,9 @@ header p { margin: .4rem 0 1rem; font-size: .9rem; }
 .graph-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 21rem); border: 1px solid var(--line); border-radius: .75rem; overflow: hidden; background: var(--surface); }
 .graph-stage { position:relative; min-width:0; overflow:hidden; }
 .graph-canvas { min-width: 0; height: 65vh; min-height: 26rem; overflow: auto; background-color: #f6f9f7; background-image: radial-gradient(#d4ded8 1px, transparent 1px); background-size: 18px 18px; }
+.graph-canvas.pannable { cursor: grab; user-select: none; }
+.graph-canvas.panning, .graph-canvas.panning .entity-node { cursor: grabbing; }
+.entity-node { cursor: pointer; }
 svg { display: block; }
 .entity-node { width: 100%; height: 76px; display: flex; flex-direction: column; justify-content: center; align-items: start; padding: .8rem 1rem; border: 1px solid #a5bdae; border-radius: .65rem; background: var(--surface); box-shadow: 0 3px 9px #1c4b3210; text-align: left; }
 .entity-node:hover { border-color: var(--accent); background: var(--accent-soft); }
