@@ -103,6 +103,13 @@ function placeholder(operation, binding) {
   return type === 'array' ? [] : type === 'object' ? {} : 'scenario-value'
 }
 
+export function responseBindingsFor(step) {
+    const { matches } = applyBodyPresets(step.operation, step.session.body, step.values)
+    return step.bindings.filter(binding => binding.location === 'body'
+      ? !matches.has(binding.name)
+      : !step.values.has(contextKey({ in: binding.location, name: binding.name })))
+}
+
 export function prepareScenario(scenario, { operations, links, configuration, createSession, valuesFor, authorize, validateRequests = true }) {
   validateScenario(scenario)
   const byKey = new Map(operations.map(operation => [operation.key, operation]))
@@ -120,10 +127,7 @@ export function prepareScenario(scenario, { operations, links, configuration, cr
   })
   if (!validateRequests) return plan
   for (const [index, step] of plan.entries()) {
-    const { matches } = applyBodyPresets(step.operation, step.session.body, step.values)
-    step.bindings = step.bindings.filter(binding => binding.location === 'body'
-      ? !matches.has(binding.name)
-      : !step.values.has(contextKey({ in: binding.location, name: binding.name })))
+    step.bindings = responseBindingsFor(step)
     const draft = { ...step.session, fields: { ...step.session.fields }, body: step.session.body }
     try {
       for (const binding of step.bindings) {

@@ -246,10 +246,26 @@ export function requestUrl(operation, configuration) {
   return url
 }
 
+export function resolveRequestTarget(operation, configuration, draft) {
+  const selected = draft.serverIndex >= 0 ? operation.servers?.[draft.serverIndex] : undefined
+  const profile = configuration.serverProfiles?.[operation.apiId ?? 'local']
+  const scopedOperation = selected
+    ? { ...operation, requestServer: { ...selected, values: draft.serverValues ?? {} } }
+    : operation
+  const scopedConfiguration = operation.configuration
+    ? { ...operation.configuration, serverProfiles: configuration.serverProfiles }
+    : configuration
+
+  return {
+    url: requestUrl(scopedOperation, scopedConfiguration),
+    server: scopedOperation.requestServer ?? profile ??
+      (scopedConfiguration.overrideServer ? undefined : operation.server),
+    source: selected ? 'This request' : profile ? 'API default' : 'API configuration',
+  }
+}
+
 export function buildRequest(operation, configuration, draft, values = new Map()) {
-  if (draft.serverIndex >= 0 && operation.servers?.[draft.serverIndex]) operation = { ...operation, requestServer: { ...operation.servers[draft.serverIndex], values: draft.serverValues ?? {} } }
-  configuration = operation.configuration ? { ...operation.configuration, serverProfiles: configuration.serverProfiles } : configuration
-  const url = requestUrl(operation, configuration)
+  const { url } = resolveRequestTarget(operation, configuration, draft)
   const headers = new Headers(draft.extraHeaders ?? {})
   for (const [name, value] of draft.extraQuery ?? []) url.searchParams.append(name, value)
   const parameters = supportedParameters(operation)

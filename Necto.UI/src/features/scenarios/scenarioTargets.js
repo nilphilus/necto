@@ -1,4 +1,4 @@
-import { prepareScenario } from './scenario.js'
+import { prepareScenario, responseBindingsFor } from './scenario.js'
 import { effectiveTarget } from '../workbench/target.js'
 // Preview current server resolution without credentials or request execution.
 export function scenarioTargets(scenario, context) {
@@ -8,6 +8,7 @@ export function scenarioTargets(scenario, context) {
       target: effectiveTarget(step.operation, context.configuration, step.session, step.values)
         .label,
       api: step.operation.apiName ?? 'Local API',
+      responseInputs: responseBindingsFor(step).length,
     }))
   } catch {
     return [
