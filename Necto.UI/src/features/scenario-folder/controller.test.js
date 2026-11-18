@@ -9,11 +9,11 @@ import { newBlueprint,newStep } from '../scenario-builder/model.js'
 const operation={key:'GET /one',apiId:'local',method:'GET',path:'/one',name:'Read',parameters:[],resolve:value=>value}
 const draft=()=>({...newBlueprint(),name:'Team workflow',steps:[newStep(operation,{fields:{},body:''})]})
 const settle=()=>new Promise(resolve=>setImmediate(resolve))
-async function fixture({remembered,permission='granted',supported=true}={}){
+async function fixture({remembered,permission='granted',supported=true,secure=true}={}){
  const root=remembered??memoryFolder();root.permission=permission
  const storage=memoryStorage(),catalog=ref([operation]),configuration=ref({openApiUrl:'https://api.test/openapi.json'}),locked=ref(false),scope=effectScope();let picked=root,confirmations=0
  const handles={async get(){return remembered},async set(){},async remove(){}}
- const platform={isSecureContext:true,localStorage:storage,confirm(){confirmations++;return true},...(supported?{showDirectoryPicker:async()=>picked}:{})}
+ const platform={isSecureContext:secure,localStorage:storage,confirm(){confirmations++;return true},...(supported?{showDirectoryPicker:async()=>picked}:{})}
  const folder=scope.run(()=>useScenarioFolder(configuration,catalog,locked,{platform,handles,storage}));await settle()
  return {folder,scope,root,storage,catalog,configuration,locked,get confirmations(){return confirmations},pick:value=>picked=value}
 }
@@ -42,6 +42,18 @@ test('unsupported browsers can import single files; runs and workspace changes g
  f.locked.value=true;assert.equal(await f.folder.importFile(new Blob([serializeShared('builder',source)])),null);assert.match(f.folder.error,/active requests/)
  }finally{f.scope.stop()}
  const g=await fixture();try{await g.folder.choose();const old=g.catalog.value;g.root.getDirectoryHandle=async()=>{g.configuration.value={openApiUrl:'https://other.test/openapi.json'};await settle();throw new DOMException('Gone','NotFoundError')};await g.folder.save('builder',draft());assert.equal(g.folder.connected,false);assert.equal(g.storage.entries.size,0)}finally{g.scope.stop()}
+})
+test('single-file import works without secure-context provenance', async () => {
+ const f=await fixture({supported:false,secure:false})
+ try {
+  const source=draft()
+  const imported=await f.folder.importFile(new File([serializeShared('builder',source)],'download.json'))
+  assert.equal(imported.scenario.id,source.id)
+  assert.equal(imported.scenario._sharedSource,undefined)
+  assert.equal(f.folder.error,'')
+  const saved=JSON.parse(f.storage.getItem('necto:scenario-builder:https://api.test/openapi.json'))
+  assert.equal(saved.blueprints[0].id,source.id)
+ } finally {f.scope.stop()}
 })
 test('folder disconnection still works if remembering handles is unavailable',async()=>{
  const storage=memoryStorage(),root=memoryFolder(),scope=effectScope(),folder=scope.run(()=>useScenarioFolder(ref({openApiUrl:'https://api.test/spec'}),ref([operation]),ref(false),{platform:{isSecureContext:true,showDirectoryPicker:async()=>root,confirm:()=>true},storage,handles:{async get(){},async set(){throw new Error('Database denied')},async remove(){throw new Error('Database denied')}}}));await settle()

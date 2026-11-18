@@ -6,9 +6,9 @@ async function importFile(folder,event){const file=event.target.files?.[0];event
 </script>
 <template>
  <section v-if="folder" class="scenario-folder" aria-label="Scenario folder">
-  <h3>Scenario folder</h3><p>Choose your team's local Git checkout. Definitions are stored as individual JSON files in <code>necto-scenarios/</code>. Use Git outside Necto to share changes.</p>
+  <h3>Scenario folder</h3><p>Choose your team's local Git checkout or its <code>necto-scenarios/</code> folder. Folder files must end in <code>.necto.json</code>. Use Git outside Necto to share changes.</p>
   <p v-if="!folder.supported">Local folder access is unavailable in this browser. Import or download team files instead; desktop Chrome and Edge support directory access on HTTPS or localhost.</p>
-  <p v-if="folder.connected"><strong>{{folder.name}} / necto-scenarios</strong><small>{{folder.remembered?'Folder preference saved for this API in this browser.':'Connected for this session.'}}</small></p>
+  <p v-if="folder.connected"><strong>{{folder.path}}</strong><small>{{folder.remembered?'Folder preference saved for this API in this browser.':'Connected for this session.'}}</small></p>
   <div class="folder-actions"><button v-if="folder.supported" type="button" class="secondary" :disabled="folder.pending" @click="folder.choose">{{folder.connected?'Change folder':'Choose folder'}}</button><button v-if="folder.connected" type="button" class="secondary" :disabled="folder.pending" @click="folder.disconnect">Disconnect folder</button></div>
   <FolderLibrary :folder="folder" />
   <label>Import team scenario file<input type="file" accept=".json,application/json" :disabled="folder.pending||folder.restoring" @change="importFile(folder,$event)"></label>
