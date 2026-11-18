@@ -9,23 +9,6 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 
-def remove_invalid_sample_const(schema):
-    if not isinstance(schema, dict):
-        return
-    # The sample exporter writes const: null on draft-invoice schemas with a
-    # concrete non-null type. Keep real constants and schemas that allow null.
-    if (
-        schema.get("const", False) is None
-        and schema.get("type") in ("object", "array", "string", "integer", "number", "boolean")
-        and not schema.get("nullable")
-    ):
-        del schema["const"]
-
-    for field in schema.get("properties", {}).values():
-        remove_invalid_sample_const(field)
-    remove_invalid_sample_const(schema.get("items"))
-
-
 def capture(base, output):
     def get(path, tenant=None):
         headers = {"X-Tenant": tenant} if tenant else {}
@@ -44,10 +27,6 @@ def capture(base, output):
     mappings = get("/necto/endpoint-mappings")
     if not document.get("openapi") or not document.get("paths") or not mappings:
         raise RuntimeError("The sample must expose an OpenAPI document and generated mappings.")
-
-    schemas = document.get("components", {}).get("schemas", {})
-    for name in ("CreateInvoiceRequest", "CreateInvoiceLineRequest", "InvoiceLineInput", "InvoiceLineInputArray"):
-        remove_invalid_sample_const(schemas.get(name))
 
     tenants = {}
     for tenant in ("acme", "northstar"):
