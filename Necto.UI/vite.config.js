@@ -10,10 +10,16 @@ try {
   if (!dirty) runnerRevision = execFileSync('git', ['rev-parse', 'HEAD'], {cwd, encoding:'utf8'}).trim()
 } catch { /* Source archives and modified checkouts use their local runner. */ }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   define: { __NECTO_REVISION__: JSON.stringify(runnerRevision), __NECTO_VERSION__: JSON.stringify(readFileSync(new URL('../Necto/Necto.csproj', import.meta.url), 'utf8').match(/<Version>([^<]+)<\/Version>/)[1]) },
   base: './',
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    ...(mode === 'live-demo' ? [{
+      name: 'demo-relative-base',
+      transformIndexHtml: (html) => html.replace('<base href="/">', '<base href="./">'),
+    }] : []),
+  ],
   server: {
     proxy: {
       '/configuration': {
@@ -31,4 +37,4 @@ export default defineConfig({
       '/weatherforecast': 'http://localhost:5000',
     },
   },
-})
+}))

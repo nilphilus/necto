@@ -16,15 +16,32 @@ Open `index.html` directly in a browser, or serve this directory locally:
 python3 -m http.server 4173 --directory docs/landing-page
 ```
 
-Open `http://localhost:4173/`. No Node.js, dependencies, framework build or external image/font service is needed. The directory can be hosted unchanged by any static host. GitHub Pages serves this directory using the repository’s deployment workflow.
+Open `http://localhost:4173/`. No Node.js, dependencies, framework build or external image/font service is needed. This serves the landing page and the interactive walkthrough. Build the full live demo separately to enable the Live demo link.
 
 The interactive invoice example is explicitly labeled sample data and never calls an API. Gallery screenshots are real captures of the current sample application, not generated UI mockups. Tab navigation supports arrows/Home/End, images open in a native dialog, and code blocks support copying with a manual fallback. Reduced motion is respected.
+
+## Live demo
+
+The fake API demo simulates the .NET FastEndpoints API in the browser. It uses the sample's OpenAPI document, generated endpoint mappings and seeded tenants. From the repository root, with .NET 10, Node.js, pnpm and Python 3 installed:
+
+```sh
+dotnet build SampleApi.FastEndpoints/SampleApi.FastEndpoints.csproj -c Release
+mkdir -p /tmp/necto-pages
+cp -a docs/landing-page/. /tmp/necto-pages/
+pnpm --dir Necto.UI run build --mode live-demo --outDir /tmp/necto-pages/demo --emptyOutDir
+python3 tools/capture-fastendpoints-demo.py \
+  --assembly SampleApi.FastEndpoints/bin/Release/net10.0/SampleApi.FastEndpoints.dll \
+  --output /tmp/necto-pages/demo/fixtures
+python3 -m http.server 4173 --directory /tmp/necto-pages
+```
+
+Open `http://localhost:4173/demo/`. Create a draft invoice with the OpenAPI example for Acme, then choose **Get invoice details** under **Next request** to reuse its ID. You can also add a line and list the updated invoices. The sample API runs only while capturing the fixtures. Each browser tab starts with its own copy of the seeded records, and reloading resets it.
 
 ## GitHub Pages publication
 
 The public website is [https://nilphilus.github.io/necto/](https://nilphilus.github.io/necto/), with the technical guide at [technical.html](https://nilphilus.github.io/necto/technical.html). The source repository is public.
 
-The [GitHub Pages workflow](../../.github/workflows/pages.yml) deploys `docs/landing-page` as the site root when this directory changes on `main`, or when manually dispatched. GitHub Pages uses **GitHub Actions** as its deployment source. Relative asset and page links support the `/necto/` project path without a build-time base URL. Opening `index.html` on GitHub itself shows source; use the public website for the rendered page, or the local preview for unpublished changes.
+The [GitHub Pages workflow](../../.github/workflows/pages.yml) deploys `docs/landing-page` as the site root and the built demo under `/demo/` when the website or demo sources change on `main`, or when manually dispatched. GitHub Pages uses **GitHub Actions** as its deployment source. Relative asset and page links support the `/necto/` project path without a build-time base URL. Opening `index.html` on GitHub itself shows source; use the public website for the rendered page, or the local preview for unpublished changes.
 
 ## Content decisions
 

@@ -103,6 +103,7 @@ const presetFields = ref(null)
 const presetDeleteControl = ref(null)
 const graphView = ref('')
 watch(graphView, view => { if (view === 'builder') builderVisited.value = true })
+const liveDemo = import.meta.env.MODE === 'live-demo'
 const basePath = new URL(document.baseURI).pathname
 const historyEntries = new Map()
 const pendingRoute = shallowRef(null)
@@ -412,10 +413,11 @@ function writeRoute(route, { replace = false, preserveUrl = false } = {}) {
     scenarioId: editingScenarioId.value, name: scenarioName.value, folderSource:editingFolderSource.value,
   })
   const state = { nectoEntry: entry, scenarioStep: route.index }
+  const url = liveDemo ? basePath + '#' + routePath(route, '/') : routePath(route, basePath)
   if (replace) {
     historyEntries.delete(history.state?.nectoEntry)
-    history.replaceState(state, '', preserveUrl ? window.location.href : routePath(route, basePath))
-  } else history.pushState(state, '', routePath(route, basePath))
+    history.replaceState(state, '', preserveUrl ? window.location.href : url)
+  } else history.pushState(state, '', url)
   activeRoute = route
   pendingRoute.value = null
   routeError.value = ''
@@ -540,7 +542,9 @@ function selectChainStep(index) {
 
 function restoreRoute() {
   if (builderPending.value) { writeRoute({ view: 'builder' }, { replace: true }); return }
-  const route = readRoute(window.location.pathname, basePath)
+  const route = liveDemo
+    ? readRoute(window.location.hash.slice(1) || '/', '/')
+    : readRoute(window.location.pathname, basePath)
   activeRoute = route
   graphView.value = route.view
   routeError.value = ''
@@ -842,6 +846,10 @@ function removeScenario(id) {
         </button>
       </div>
     </header>
+
+    <p v-if="liveDemo" class="demo-notice">
+      <strong>Fake API demo</strong> · Runs in your browser and simulates the .NET FastEndpoints API. Demo data resets on refresh.
+    </p>
 
     <AuthorizationDialog
       v-if="authorizationOpen"
@@ -1360,6 +1368,13 @@ body { margin: 0; background: #eef2ee; }
 
 .work-area { overflow: auto; min-width: 0; padding: 1.5rem; background: var(--canvas); scroll-padding-block: 1rem; }
 .app-message { margin: 1rem; }
+.demo-notice {
+  margin: 0;
+  padding: .35rem 1rem;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: .78rem;
+}
 .mapping-notice { margin: 0 0 1rem; }
 .preset-guidance { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; margin-bottom: .65rem; color: var(--muted); font-size: .75rem; }
 .preset-guidance button { padding: .2rem .4rem; font-size: inherit; }
