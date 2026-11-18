@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { canCaptureHistory } from './historySnapshot.js';
 import RequestTools from './RequestTools.vue';
 import { buildRequest } from '../request-runner/request.js';
 import { requestSnippet } from './snippets.js';
@@ -11,7 +12,7 @@ const props = defineProps({
   history: Object,
   prepare: Function
 });
-const emit = defineEmits(['edit-request']);
+const emit = defineEmits(['edit-request', 'capture-requests']);
 const trigger = ref(null),
   menu = ref(null),
   advanced = ref(null),
@@ -19,6 +20,12 @@ const trigger = ref(null),
   style = ref({}),
   feedback = ref('');
 defineExpose({ revealInvalid: element => advanced.value.revealInvalid(element) })
+const latest = computed(() => props.history?.forOperation(props.operation.key)[0]);
+function captureLatest() {
+  if (props.session.pending || !canCaptureHistory(latest.value)) return;
+  close();
+  emit('capture-requests', [latest.value]);
+}
 const prepared = computed(() => {
   try {
     return {
@@ -117,6 +124,9 @@ onUnmounted(() => {
       ><small v-if="prepared.error"
         >Complete request inputs to enable copying.</small
       >
+      <button v-if="canCaptureHistory(latest)" type="button" :disabled="session.pending" @click="captureLatest">
+        Add last request to scenario…
+      </button>
       <p v-if="feedback" role="status">{{ feedback }}</p>
       <strong>Inspect</strong
       ><button type="button" @click="inspect('Contract')">Contract</button
@@ -135,7 +145,7 @@ onUnmounted(() => {
     ref="advanced"
     v-bind="props"
     hide-trigger
-    @closed="target => (target ?? trigger)?.focus()" @edit-request="emit('edit-request')"
+    @closed="target => (target ?? trigger)?.focus()" @edit-request="emit('edit-request')" @capture-requests="emit('capture-requests', $event)"
   />
 </template>
 <style scoped>
