@@ -14,7 +14,7 @@ import StepInputs from './StepInputs.vue'
 import SharedVariables from './SharedVariables.vue'
 import { variableProducer, inputProducers } from './variables.js'
 import StepWaiting from './StepWaiting.vue'
-import { useBuilder, savedBlueprint } from './useBuilder.js'
+import { savedBlueprint } from './definition.js'
 import {
   dependencies,
   newBlueprint,
@@ -30,6 +30,7 @@ import ScenarioBodyEditor from './ScenarioBodyEditor.vue'
 import ExpandedResponse from './ExpandedResponse.vue'
 
 const props = defineProps({
+  store: { type: Object, required: true },
   mappingLinks: { type: Array, default: () => [] },
   configuration: Object,
   operations: Array,
@@ -43,9 +44,8 @@ const props = defineProps({
   busy: Boolean,
   folder: Object,
 })
-const emit = defineEmits(['back', 'pending', 'folder-settings'])
-const configurationRef = computed(() => props.configuration)
-const store = useBuilder(configurationRef)
+const emit = defineEmits(['back', 'folder-settings'])
+const store = props.store
 const { draft, saved, dirty, error, notice, execution, pending, questions } = store
 const pickingStepId = ref(''),
   removedStep = ref(null)
@@ -186,15 +186,9 @@ watch(
     tab.value = 'configure'
   }
 )
-watch(
-  pending,
-  (value) => {
-    if (value) removedStep.value = null
-    emit('pending', value)
-  },
-  { immediate: true }
-)
-onScopeDispose(() => emit('pending', false))
+watch(pending, (value) => {
+  if (value) removedStep.value = null
+})
 if (props.authentication)
   onScopeDispose(props.authentication.onChange((ids) => store.invalidate(ids)))
 watch(
@@ -212,12 +206,12 @@ function attempt(action) {
     error.value = cause.message
   }
 }
+const hasUnsavedDraft = computed(() =>
+  dirty.value && (draft.value.steps.length > 0 || Boolean(draft.value.description) ||
+    draft.value.name !== 'Untitled scenario' || saved.value.some((item) => item.id === draft.value.id))
+)
 function mayDiscard() {
-  return (
-    !dirty.value ||
-    !draft.value.steps.length ||
-    window.confirm('Discard unsaved Scenario Builder changes?')
-  )
+  return !hasUnsavedDraft.value || window.confirm('Discard unsaved Scenario Builder changes?')
 }
 function fresh() {
   if (mayDiscard()) store.fresh()
@@ -227,6 +221,16 @@ function openSaved() {
   if (item && mayDiscard()) store.open(item)
   picker.value = saved.value.some((item) => item.id === draft.value.id) ? draft.value.id : ''
 }
+function openFromLibrary(id) {
+  const item = saved.value.find((scenario) => scenario.id === id)
+  if (!item || pending.value || !mayDiscard()) return false
+  store.open(item)
+  picker.value = id
+  return true
+}
+
+defineExpose({ openFromLibrary, reviewRun })
+
 function save() {
   attempt(() => {
     store.save()
@@ -585,7 +589,7 @@ function importQuick() {
   })
 }
 function beforeUnload(event) {
-  if (pending.value || (dirty.value && draft.value.steps.length)) {
+  if (pending.value || hasUnsavedDraft.value) {
     event.preventDefault()
     event.returnValue = ''
   }
@@ -625,6 +629,17 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
           maxlength="200"
           aria-label="Scenario name"
       /></label>
+      <details class="scenario-description">
+        <summary>Description</summary>
+        <textarea
+          v-model="draft.description"
+          :disabled="pending"
+          maxlength="500"
+          rows="2"
+          aria-label="Scenario description"
+          placeholder="What does this scenario do?"
+        />
+      </details>
       <label
         >Saved<select
           v-model="picker"
@@ -1273,6 +1288,18 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
   </section>
 </template>
 <style scoped>
+.scenario-description {
+  flex: 1 1 13rem;
+  min-width: 0;
+  font-size: .8rem;
+}
+.scenario-description textarea {
+  display: block;
+  width: 100%;
+  margin-top: .35rem;
+  resize: vertical;
+}
+
 .response-step-meta {
   display: flex;
   align-items: center;
