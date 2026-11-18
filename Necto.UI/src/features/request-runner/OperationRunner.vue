@@ -246,6 +246,7 @@ function sendShortcut(event) {
       </div>
       <div v-show="!requestCompact" class="pane-body">
         <slot name="samples" />
+        <slot v-if="!operation.requestBody" name="openapi-examples" />
         <ImportedInputs :session="session" />
         <p v-if="!parameters.length && !operation.requestBody" class="muted empty">Ready to send. This endpoint has no inputs.</p>
 
@@ -297,12 +298,18 @@ function sendShortcut(event) {
         </div>
 
         <BodyEditor v-if="operation.requestBody" :operation="operation" :session="session">
+        <template #body-actions><slot name="openapi-examples" /></template>
         <div v-if="content" class="field">
-          <p class="body-origin"><strong>{{ session.sampleName ? 'Saved request' : hasBodyExample(content[1], operation.resolve) ? 'OpenAPI example' : 'Generated template' }}</strong><span v-if="!session.sampleName && !hasBodyExample(content[1], operation.resolve)"> · Fill placeholder values before sending. API validation may require different values.</span></p>
+          <p v-if="!session.sampleName && !session.exampleKey && !hasBodyExample(content[1], operation.resolve)" class="body-origin">
+            <strong>Generated template</strong> · Fill placeholder values before sending. API validation may require different values.
+          </p>
           <details v-if="content[1].schema" class="body-schema"><summary>Body fields and requirements</summary><dl><template v-for="field in bodyFields(operation, content[1].schema)" :key="field.path"><dt><code>{{ field.path }}</code></dt><dd>{{ field.rules }}</dd></template></dl><small>Requirements published by this API. Additional business rules may apply.</small></details>
           <div class="body-heading">
             <label :for="`${parameterIdPrefix}-body`" @click="focusFirstBodyValue">Request body <small>{{ content[0] }}</small></label>
-            <ExpandedBodyEditor :session="session" @tab="tabBodyValue" />
+            <div class="body-actions">
+              <slot name="openapi-examples" />
+              <ExpandedBodyEditor :session="session" @tab="tabBodyValue" />
+            </div>
           </div>
           <div class="field-label">
             <textarea
@@ -437,6 +444,7 @@ function sendShortcut(event) {
 .body-preset-origins summary { cursor: pointer; }
 .body-origin, .body-schema { font-size: .78rem; margin: 0 0 .5rem; }
 .body-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .35rem; }
+.body-actions { display: flex; flex-wrap: wrap; gap: .35rem; }
 .body-schema summary { cursor: pointer; color: var(--accent); }
 .body-schema dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: .35rem; overflow-wrap: anywhere; }
 .body-schema dd { margin: 0; color: var(--muted); }

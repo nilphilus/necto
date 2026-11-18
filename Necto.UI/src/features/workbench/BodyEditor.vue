@@ -121,7 +121,10 @@ watch(
         </option>
       </select></label
     >
-    <small v-else-if="!isJson(media[0])">Request body · {{ media[0] }}</small>
+    <div v-if="forms || binary" class="body-heading">
+      <small>Request body · {{ media[0] }}</small>
+      <slot name="body-actions" />
+    </div>
     <template v-if="forms">
       <div
         v-for="(row, index) in session.formFields"
@@ -166,7 +169,10 @@ watch(
     <template v-else-if="!isJson(media[0])">
       <div class="body-heading">
         <label :for="bodyId">Request body</label>
-        <ExpandedBodyEditor :session="session" />
+        <div class="body-actions">
+          <slot name="body-actions" />
+          <ExpandedBodyEditor :session="session" />
+        </div>
       </div>
       <textarea :id="bodyId" v-model="session.body" rows="4" spellcheck="false" />
     </template>
@@ -211,6 +217,7 @@ watch(
   flex-wrap: wrap;
   gap: 0.35rem;
 }
+.body-actions { display: flex; flex-wrap: wrap; gap: .35rem; }
 label {
   display: grid;
   gap: 0.25rem;

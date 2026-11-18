@@ -1,6 +1,5 @@
 <script setup>
 import { retainDraft, hasSensitiveBody } from '../workbench/sensitiveSchema.js'
-import DescriptionHelp from '../workbench/DescriptionHelp.vue'
 import { requestExamples, applyRequestExample, draftSnapshot, restoreExampleDraft, exampleDrafts } from '../workbench/openapiExamples.js'
 import { executionOptions } from '../workbench/executionOptions.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
@@ -33,27 +32,42 @@ const query = ref('')
 const page = ref(0)
 const pageSize = 3
 const examples = computed(() => requestExamples(props.operation))
-const selectedExample = computed(() => examples.value.find(item => item.id === props.session.exampleKey))
+const examplesDialog = ref(null)
+const exampleQuery = ref('')
+const previewId = ref('')
+const matchingExamples = computed(() => {
+  const term = exampleQuery.value.trim().toLocaleLowerCase()
+  return examples.value.filter(example => (example.name + ' ' + example.subtitle).toLocaleLowerCase().includes(term))
+})
+const previewExample = computed(() => matchingExamples.value.find(example => example.id === previewId.value) ?? matchingExamples.value[0])
+const examplePreview = computed(() => {
+  const value = previewExample.value?.value
+  return (typeof value === 'string' ? value : JSON.stringify(value, null, 2) ?? '').slice(0, 4000)
+})
 const originalDrafts = exampleDrafts
-const payloads = computed(() => [
-  ...saved.value.samples.map(sample => ({...sample,kind:'saved',id:'saved:'+sample.name})),
-  ...examples.value.map(example => ({...example,exampleKind:example.kind,kind:'example',id:'example:'+example.id,exampleId:example.id}))
-])
-function loadPayload(payload) {
-  if (payload.kind === 'saved') { originalDrafts.delete(props.session); loadSample(payload.name); return }
+const payloads = computed(() => saved.value.samples)
+
+function openExamples() {
+  exampleQuery.value = ''
+  previewId.value = props.session.exampleKey ?? ''
+  examplesDialog.value?.showModal()
+}
+function useExample() {
   try {
-    const example = examples.value.find(item => item.id === payload.exampleId)
     const snapshot = originalDrafts.get(props.session) ?? draftSnapshot(props.session)
-    applyRequestExample(props.operation, props.session, example)
-    originalDrafts.set(props.session,snapshot);error.value=''
-  } catch(cause) { error.value=cause.message }
+    applyRequestExample(props.operation, props.session, previewExample.value)
+    originalDrafts.set(props.session, snapshot)
+    error.value = ''
+    examplesDialog.value.close()
+  } catch (cause) {
+    error.value = cause.message
+  }
 }
 function returnToDraft() {
   const snapshot=originalDrafts.get(props.session)
   if (snapshot) { restoreExampleDraft(props.session,snapshot);originalDrafts.delete(props.session) }
 }
-const isSelected = sample => sample.kind === 'saved' ? !props.session.exampleKey && props.session.sampleName === sample.name : props.session.exampleKey === sample.exampleId
-
+const isSelected = sample => !props.session.exampleKey && props.session.sampleName === sample.name
 const matchingSamples = computed(() => {
   const term = query.value.trim().toLocaleLowerCase()
   return payloads.value.filter(sample => `${sample.name} ${sample.subtitle ?? ''}`.toLocaleLowerCase().includes(term))
@@ -94,6 +108,7 @@ function showSelectedPage() {
 
 watch(() => props.session, () => {
   storeDialog.value?.close()
+  examplesDialog.value?.close()
   query.value = ''
   showSelectedPage()
 }, { immediate: true })
@@ -116,7 +131,7 @@ function openStoreDialog(existing = '', rename = false) {
   storeOpen.value = true
 }
 
-defineExpose({ openStoreDialog })
+defineExpose({ openStoreDialog, openExamples, hasExamples: computed(() => examples.value.length > 0) })
 
 function persist(update) {
   try {
@@ -194,9 +209,9 @@ function toggleDefault(sampleName) {
 </script>
 
 <template>
-  <section v-if="payloads.length || (error && !storeOpen)" class="samples" aria-label="Saved requests and OpenAPI examples">
+  <section v-if="payloads.length || (error && !storeOpen)" class="samples" aria-label="Saved requests">
     <div v-if="payloads.length" class="sample-toolbar">
-      <strong>{{ examples.length ? 'Payloads' : 'Saved requests' }}</strong>
+      <strong>Saved requests</strong>
       <div class="sample-controls">
         <button type="button" class="secondary icon-button"
           aria-label="Focus saved request search" title="Search saved requests" @click="searchInput?.focus()">
@@ -214,8 +229,6 @@ function toggleDefault(sampleName) {
         </template>
       </div>
     </div>
-    <button v-if="originalDrafts.has(session) && session.exampleKey" type="button" class="secondary" :disabled="session.pending" @click="returnToDraft">Return to draft</button>
-    <DescriptionHelp v-if="selectedExample?.description" :label="'About example ' + selectedExample.name" :description="selectedExample.description" />
     <div v-if="selectedSample && !session.exampleKey" class="sample-management" aria-label="Manage selected saved request">
       <button type="button" class="secondary" :disabled="session.pending" @click="openStoreDialog(selectedSample.name)">Update selected</button>
       <button type="button" class="secondary" :disabled="session.pending" @click="openStoreDialog(selectedSample.name, true)">Rename</button>
@@ -223,11 +236,11 @@ function toggleDefault(sampleName) {
     </div>
     <div v-if="deleting" class="delete-confirmation" role="group" aria-label="Confirm saved request deletion"><span>Delete {{ deleting }}?</span><button type="button" class="secondary" @click="deleteSelected">Delete saved request</button><button type="button" class="secondary" @click="deleting = ''">Keep request</button></div>
     <ul v-if="visibleSamples.length" class="sample-tags">
-      <li v-for="sample in visibleSamples" :key="sample.id" class="sample-tag"
+      <li v-for="sample in visibleSamples" :key="sample.name" class="sample-tag"
         :class="{ selected: isSelected(sample) }">
         <button type="button" class="sample-name" :aria-pressed="isSelected(sample)"
-          :title="sample.kind === 'example' ? sample.available ? 'Load OpenAPI example · ' + sample.subtitle + ' · nothing is sent' : sample.reason : sample.name" :disabled="session.pending || sample.kind === 'example' && !sample.available" @click="loadPayload(sample)"><small v-if="sample.kind === 'example'">Example · </small>{{ sample.name }}<small v-if="sample.kind === 'example' && !sample.available"> · unavailable</small></button>
-        <button v-if="sample.kind === 'saved'" type="button" class="sample-default" :aria-pressed="sample.name === saved.defaultName"
+          :title="sample.name" :disabled="session.pending" @click="originalDrafts.delete(session); loadSample(sample.name)">{{ sample.name }}</button>
+        <button class="sample-default" :aria-pressed="sample.name === saved.defaultName"
           :aria-label="`Default request: ${sample.name}`"
           :title="sample.name === saved.defaultName ? 'Clear default' : 'Set as default'"
           @click="toggleDefault(sample.name)">
@@ -235,10 +248,42 @@ function toggleDefault(sampleName) {
         </button>
       </li>
     </ul>
-    <p v-else-if="payloads.length" class="muted" role="status">No matching saved requests or examples.</p>
+    <p v-else-if="payloads.length" class="muted" role="status">No matching saved requests.</p>
     <p v-if="error && !storeOpen" class="error" role="alert">{{ error }}</p>
   </section>
   <Teleport to="body">
+    <dialog ref="examplesDialog" class="endpoint-dialog examples-dialog" aria-label="OpenAPI examples">
+      <header>
+        <h3>OpenAPI examples</h3>
+        <button type="button" class="secondary" autofocus @click="examplesDialog.close()">Close</button>
+      </header>
+      <label v-if="examples.length > 1" class="dialog-field">
+        Search examples
+        <input v-model="exampleQuery" type="search">
+      </label>
+      <label v-if="matchingExamples.length > 1" class="dialog-field">
+        Example
+        <select :value="previewExample?.id" @change="previewId = $event.target.value">
+          <option v-for="example in matchingExamples" :key="example.id" :value="example.id">
+            {{ example.name }} · {{ example.subtitle }}
+          </option>
+        </select>
+      </label>
+      <template v-if="previewExample">
+        <strong>{{ previewExample.name }} · {{ previewExample.subtitle }}</strong>
+        <p v-if="previewExample.description">{{ previewExample.description }}</p>
+        <pre v-if="previewExample.available">{{ examplePreview }}</pre>
+        <p v-else>{{ previewExample.reason }}</p>
+      </template>
+      <p v-else>No matching examples.</p>
+      <p v-if="error" class="error" role="alert">{{ error }}</p>
+      <div class="dialog-actions">
+        <button v-if="originalDrafts.has(session) && session.exampleKey" type="button" class="secondary"
+          :disabled="session.pending" @click="returnToDraft(); examplesDialog.close()">Return to draft</button>
+        <button type="button" class="primary" :disabled="session.pending || !previewExample?.available"
+          @click="useExample">Use as draft</button>
+      </div>
+    </dialog>
     <dialog ref="storeDialog" class="endpoint-dialog" aria-labelledby="store-sample-title" @close="storeOpen = false">
       <h3 id="store-sample-title">{{ renameOnly ? 'Rename saved request' : editing ? 'Update saved request' : 'Save request' }}</h3>
       <form @submit.prevent="storeSample">
@@ -282,5 +327,8 @@ function toggleDefault(sampleName) {
 .sample-tag .sample-name { min-width: 0; padding: .18rem .45rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sample-tag .sample-default { flex: none; padding: .18rem .4rem; border-left: 1px solid var(--line); border-radius: 0 1rem 1rem 0; }
 .sample-default[aria-pressed="true"] { font-weight: 700; }
+.examples-dialog header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.examples-dialog pre { max-height: 42dvh; overflow: auto; padding: .6rem; background: var(--subtle); white-space: pre-wrap; overflow-wrap: anywhere; }
+.examples-dialog select { width: 100%; }
 fieldset { display: flex; flex-wrap: wrap; gap: .35rem .75rem; min-width: 0; margin: 0; }
 </style>
