@@ -38,6 +38,9 @@ public sealed class NectoUIMetadataTests
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/docs/")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/docs/api/endpoint/example")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/docs/configuration")).StatusCode);
+        var builderPage = await client.GetAsync("/docs/builder");
+        Assert.Equal(HttpStatusCode.OK, builderPage.StatusCode);
+        Assert.Contains("<base href=\"/docs/\">", await builderPage.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/docs/assets/missing.js")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/protected")).StatusCode);
     }
@@ -94,6 +97,37 @@ public sealed class NectoUIMetadataTests
         var configuration = await client.GetFromJsonAsync<JsonObject>("/necto/configuration");
         Assert.False(configuration!.ContainsKey("endpointMappingsUrl"));
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/necto/endpoint-mappings")).StatusCode);
+    }
+
+    [Fact]
+    public async Task ConfiguredOpenApiDocumentsUseTheApplicationPathBase()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        await using var app = builder.Build();
+        app.UsePathBase("/tenant");
+        app.MapNectoUI(openApiPath: "/openapi/v1.json", openApiDocuments: new Dictionary<string, string>
+        {
+            ["Version 1"] = "/openapi/v1.json",
+            ["Version 2"] = "/swagger/v2/swagger.json",
+        });
+        await app.StartAsync();
+
+        using var client = app.GetTestClient();
+        var configuration = await client.GetFromJsonAsync<JsonObject>("/tenant/necto/configuration");
+        Assert.Equal("/tenant/openapi/v1.json", configuration!["openApiUrl"]!.GetValue<string>());
+        var documents = configuration["openApiDocuments"]!.AsArray();
+        Assert.Collection(documents,
+            item =>
+            {
+                Assert.Equal("Version 1", item!["name"]!.GetValue<string>());
+                Assert.Equal("/tenant/openapi/v1.json", item["url"]!.GetValue<string>());
+            },
+            item =>
+            {
+                Assert.Equal("Version 2", item!["name"]!.GetValue<string>());
+                Assert.Equal("/tenant/swagger/v2/swagger.json", item["url"]!.GetValue<string>());
+            });
     }
 
     private sealed class SkipRequiredHeaderAttribute : Attribute;

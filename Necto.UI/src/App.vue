@@ -14,6 +14,7 @@ import AuthorizationDialog from './features/authentication/AuthorizationDialog.v
 import { useAuthentication } from './features/authentication/useAuthentication.js'
 import NectoSkeleton from './NectoSkeleton.vue'
 import { useCatalog } from './features/api-catalog/catalog.js'
+import OpenApiDocumentPicker from './features/api-catalog/OpenApiDocumentPicker.vue'
 import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
 import OperationRunner from './features/request-runner/OperationRunner.vue'
 import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
@@ -47,7 +48,8 @@ authentication.register({ id: 'local', name: 'Local API', bootstrap: true, schem
   openApiUrl: new URL('/openapi/v1.json', document.baseURI).href, apiBaseUrl: new URL('/', document.baseURI).href,
   configurationUrl: new URL('./configuration', document.baseURI).href,
 }, origins: [location.origin] })
-const { spec, configuration, error, operations, groups, externalApis, reload: reloadCatalog, importDocument, documentSource, restoreServerDocument } = useCatalog(authentication)
+const { spec, configuration, error, operations, groups, externalApis, reload: reloadCatalog, importDocument, documentSource, restoreServerDocument,
+  openApiDocuments, documentLoading, documentError, selectOpenApiDocument } = useCatalog(authentication)
 const { sessions, sessionFor, createSession, run, prepare: prepareRequest, cancel: cancelRequest, history: requestHistory } = useRequestRunner(configuration, authentication)
 const { sampleStorageKey, createDraft } = createSampleDrafts({
   createSession,
@@ -74,7 +76,7 @@ const { scenarioName, editingScenarioId, editingFolderSource, editingScenario,
   scenarioDirty, overwriteScenario, saveEditing, selectOriginalName, suggestCopyName } =
   useScenarioEditing(scenarioStore, () => chain.value, (...args) => valuesFor(...args))
 const scenarioFolder = useScenarioFolder(configuration,operations,computed(()=>scenarioPending.value||builderPending.value))
-const workspaceLocked = computed(() => scenarioPending.value || builderPending.value || scenarioFolder.pending)
+const workspaceLocked = computed(() => scenarioPending.value || builderPending.value || scenarioFolder.pending || documentLoading.value)
 const scenarioBusy = computed(() => workspaceLocked.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
 const catalogMedia = matchMedia('(max-width: 760px)')
 const catalogOpen = ref(!catalogMedia.matches)
@@ -125,6 +127,15 @@ const chain = computed(() => {
 const currentIndex = computed(() => inspectedScenarioStep.value === null ? chain.value.length - 1 : Math.min(inspectedScenarioStep.value, chain.value.length - 1))
 const current = computed(() => chain.value[currentIndex.value])
 const authorizedCount = computed(() => { const api = authentication.apis.get(current.value?.operation.apiId ?? 'local'); return Object.keys(api?.credentials ?? {}).length + (api?.access ? 1 : 0) })
+const activeServerDocument = computed(() => documentSource.value.kind === 'server' ? configuration.value?.openApiUrl : undefined)
+async function switchOpenApiDocument(url) {
+  if (scenarioBusy.value || url === activeServerDocument.value) return
+  const draft = builderStore.draft.value
+  if (builderStore.dirty.value && (draft.steps.length || draft.description) &&
+      !window.confirm('Discard unsaved Builder changes and switch OpenAPI document?')) return
+  await selectOpenApiDocument(url)
+}
+
 function openAuthorization(id = current.value?.operation.apiId ?? 'local') { authorizationApiId.value = id; authorizationOpen.value = true }
 async function closeAuthorization() { authorizationOpen.value = false; await nextTick(); authorizationButton.value?.focus() }
 async function retryAuthorizedMetadata(id) {
@@ -840,12 +851,16 @@ function removeScenario(id) {
       @close="closeAuthorization"
       :retry-documentation="retryAuthorizedMetadata"
     />
-    <p v-if="error" class="app-message error" role="alert">
-      {{ error }}
-      <button type="button" class="secondary" @click="retryAuthorizedMetadata">
-        Retry documentation
-      </button>
-    </p>
+    <div v-if="error" class="app-message error">
+      <div role="alert">
+        {{ error }}
+        <button type="button" class="secondary" @click="retryAuthorizedMetadata">
+          Retry documentation
+        </button>
+      </div>
+      <OpenApiDocumentPicker v-if="!spec" :documents="openApiDocuments" :selected="activeServerDocument"
+        :disabled="scenarioBusy" :error="documentError" @select="switchOpenApiDocument" />
+    </div>
     <p v-else-if="!spec" class="app-message" role="status">Loading API documentation…</p>
     <template v-else>
       <p v-if="spec?.['x-necto-import-warning']" class="app-message" role="status">
@@ -1124,6 +1139,10 @@ function removeScenario(id) {
               :active-operation="current?.operation.key ?? ''"
               @select-operation="selectCatalogOperation"
             >
+              <template #documents>
+                <OpenApiDocumentPicker :documents="openApiDocuments" :selected="activeServerDocument"
+                  :disabled="scenarioBusy" :error="documentError" @select="switchOpenApiDocument" />
+              </template>
               <template #actions><OperationTasks :configuration="configuration" :authentication="authentication" :operations="operations" @open-operation="operation => selectCatalogOperation(operation, operation.tags[0])" /><CurlImport :operations="operations" :configuration="configuration" :disabled="scenarioBusy" @import="loadCurlDraft" /></template>
             </EndpointCatalog>
           </div>

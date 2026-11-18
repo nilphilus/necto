@@ -12,11 +12,14 @@ public static class NectoUIApplicationExtensions
 {
     private static readonly string[] ReadMethods = [HttpMethods.Get, HttpMethods.Head];
     private static readonly FileExtensionContentTypeProvider ContentTypes = new();
+    private static readonly string? PackageVersion = typeof(NectoUIApplicationExtensions).Assembly
+        .GetCustomAttributes<AssemblyMetadataAttribute>()
+        .FirstOrDefault(attribute => attribute.Key == "NectoPackageVersion")?.Value;
 
     /// <summary>Serves the embedded UI and automatically registers application-generated mappings.</summary>
     /// <param name="app">The application serving Necto UI.</param>
     /// <param name="routePrefix">The UI path, relative to the application's path base.</param>
-    /// <param name="openApiPath">The OpenAPI JSON path, relative to the application's path base.</param>
+    /// <param name="openApiPath">The default OpenAPI JSON path, relative to the application's path base.</param>
     /// <param name="agentPath">Optional path registered using MapNectoAgent.</param>
     /// <param name="endpointMappingsPath">Overrides discovery of a single registered Necto mappings route.</param>
     /// <param name="metadataAttribute">Optional metadata for the UI and registered Necto mappings routes.</param>
@@ -27,14 +30,40 @@ public static class NectoUIApplicationExtensions
         string? endpointMappingsPath = null,
         string? agentPath = null,
         Attribute? metadataAttribute = null)
+        => UseNectoUICore(app, routePrefix, openApiPath, endpointMappingsPath, agentPath, metadataAttribute, null);
+
+    /// <summary>Serves the embedded UI with a selector for the configured OpenAPI documents.</summary>
+    public static WebApplication UseNectoUI(
+        this WebApplication app,
+        IReadOnlyDictionary<string, string> openApiDocuments,
+        string routePrefix = "/necto",
+        string openApiPath = "/openapi/v1.json",
+        string? endpointMappingsPath = null,
+        string? agentPath = null,
+        Attribute? metadataAttribute = null)
+        => UseNectoUICore(app, routePrefix, openApiPath, endpointMappingsPath, agentPath, metadataAttribute, openApiDocuments);
+
+    private static WebApplication UseNectoUICore(
+        WebApplication app,
+        string routePrefix,
+        string openApiPath,
+        string? endpointMappingsPath,
+        string? agentPath,
+        Attribute? metadataAttribute,
+        IReadOnlyDictionary<string, string>? openApiDocuments)
     {
         if (endpointMappingsPath is null && !EndpointMappingsMetadata.HasMappings(app.Services))
         {
             var application = Assembly.Load(new AssemblyName(app.Environment.ApplicationName));
             application.GetCustomAttribute<NectoMappingsAttribute>()?.Map(app);
         }
-        var ui = app.MapNectoUI(routePrefix, openApiPath, endpointMappingsPath, agentPath);
+        var ui = MapNectoUICore(app, routePrefix, openApiPath, endpointMappingsPath, agentPath, openApiDocuments);
         NectoEntityNames.Register(app, openApiPath);
+        if (openApiDocuments is not null)
+        {
+            foreach (var path in openApiDocuments.Values)
+                NectoEntityNames.Register(app, path);
+        }
         if (metadataAttribute is not null)
         {
             ui.WithMetadata(metadataAttribute);
@@ -46,7 +75,7 @@ public static class NectoUIApplicationExtensions
     /// <summary>Maps the embedded Necto UI and returns its group for endpoint conventions.</summary>
     /// <param name="app">The application serving Necto UI.</param>
     /// <param name="routePrefix">The UI path, relative to the application's path base.</param>
-    /// <param name="openApiPath">The OpenAPI JSON path, relative to the application's path base.</param>
+    /// <param name="openApiPath">The default OpenAPI JSON path, relative to the application's path base.</param>
     /// <param name="endpointMappingsPath">Overrides discovery of a single registered Necto mappings route.</param>
     /// <param name="agentPath">Optional path registered using MapNectoAgent.</param>
     public static RouteGroupBuilder MapNectoUI(
@@ -55,6 +84,25 @@ public static class NectoUIApplicationExtensions
         string openApiPath = "/openapi/v1.json",
         string? endpointMappingsPath = null,
         string? agentPath = null)
+        => MapNectoUICore(app, routePrefix, openApiPath, endpointMappingsPath, agentPath, null);
+
+    /// <summary>Maps the embedded UI with a selector for the configured OpenAPI documents.</summary>
+    public static RouteGroupBuilder MapNectoUI(
+        this WebApplication app,
+        IReadOnlyDictionary<string, string> openApiDocuments,
+        string routePrefix = "/necto",
+        string openApiPath = "/openapi/v1.json",
+        string? endpointMappingsPath = null,
+        string? agentPath = null)
+        => MapNectoUICore(app, routePrefix, openApiPath, endpointMappingsPath, agentPath, openApiDocuments);
+
+    private static RouteGroupBuilder MapNectoUICore(
+        WebApplication app,
+        string routePrefix,
+        string openApiPath,
+        string? endpointMappingsPath,
+        string? agentPath,
+        IReadOnlyDictionary<string, string>? openApiDocuments)
     {
         ArgumentNullException.ThrowIfNull(app);
         ValidatePath(routePrefix, nameof(routePrefix));
@@ -71,6 +119,12 @@ public static class NectoUIApplicationExtensions
         }
 
         var openApi = new PathString(openApiPath);
+        var documents = openApiDocuments?.Select(document =>
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(document.Key, nameof(openApiDocuments));
+            ValidatePath(document.Value, nameof(openApiDocuments));
+            return (Name: document.Key, Path: new PathString(document.Value));
+        }).ToArray();
         var dataSources = ((IEndpointRouteBuilder)app).DataSources;
         var ui = app.MapGroup(uiPath).ExcludeFromDescription();
 
@@ -86,19 +140,27 @@ public static class NectoUIApplicationExtensions
         });
 
         foreach (var route in new[] { "/api", "/api/endpoint/{operation}", "/scenarios",
-            "/scenarios/{id}/steps/{step:int}", "/entities", "/endpoints", "/agent", "/oauth-callback" })
+            "/scenarios/{id}/steps/{step:int}", "/builder", "/entities", "/endpoints", "/agent", "/oauth-callback" })
         {
             ui.MapMethods(route, ReadMethods, (HttpContext context) => ServeIndex(context, uiPath));
         }
 
         ui.MapMethods("/configuration", ReadMethods, (HttpContext context) =>
         {
-            var configuration = new Dictionary<string, string>
+            var configuration = new Dictionary<string, object>
             {
                 ["openApiUrl"] = context.Request.PathBase.Add(openApi).ToUriComponent(),
                 ["apiBaseUrl"] = context.Request.PathBase.ToUriComponent() + "/"
             };
             foreach (var item in NectoGeneratedMetadata.Discover(dataSources, context.Request.PathBase)) configuration[item.Key] = item.Value;
+            if (documents?.Length > 0)
+                configuration["openApiDocuments"] = documents.Select(document => new
+                {
+                    name = document.Name,
+                    url = context.Request.PathBase.Add(document.Path).ToUriComponent()
+                }).ToArray();
+            if (PackageVersion is not null)
+                configuration["nectoPackageVersion"] = PackageVersion;
             var mappingsPath = endpointMappingsPath ?? FindEndpointMappingsPath(dataSources);
             if (mappingsPath is not null)
                 configuration["endpointMappingsUrl"] = context.Request.PathBase.Add(new PathString(mappingsPath)).ToUriComponent();
