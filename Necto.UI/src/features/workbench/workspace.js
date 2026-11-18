@@ -1,8 +1,8 @@
+import { validateConnectionCollection } from '../external-apis/connections.js'
+import { validateScenarioCollection } from '../scenarios/definition.js'
+import { validateBuilderCollection } from '../scenario-builder/definition.js'
 import { validateSampleCollection } from '../request-runner/samples.js'
 import { validatePresetCollection } from '../presets/presetCollection.js'
-import { validateBlueprint } from '../scenario-builder/model.js'
-import { validateScenario } from '../scenarios/scenario.js'
-import { normalizeConnection } from '../external-apis/connections.js'
 import { sensitiveName } from './privacy.js'
 function safeUrl(value) {
   try {
@@ -95,19 +95,13 @@ export function inspectWorkspace(text, storage) {
       throw new Error('Invalid or duplicate workspace entry.')
     const value = entry.value
     if (entry.key.startsWith('necto:scenario-builder:')) {
-      if (value.version !== 1 || !Array.isArray(value.blueprints) || value.blueprints.length > 100) throw new Error('Invalid builder collection.')
-      value.blueprints.forEach(validateBlueprint)
-      if (new Set(value.blueprints.map(item => item.id)).size !== value.blueprints.length) throw new Error('Duplicate builder IDs.')
+      validateBuilderCollection(value)
     } else if (entry.key.startsWith('necto:scenarios:')) {
-      if (value.version !== 1 || !Array.isArray(value.scenarios))
-        throw new Error('Invalid scenario collection.')
-      value.scenarios.forEach(validateScenario)
+      validateScenarioCollection(value)
     } else if ((entry.key.startsWith('necto:samples:') || entry.key.startsWith('necto:request-samples:'))) {
       validateSampleCollection(value)
     } else if (entry.key.startsWith('necto:external-apis:')) {
-      if (!Array.isArray(value.connections) || typeof value.show !== 'boolean')
-        throw new Error('Invalid API connections.')
-      value.connections.forEach(normalizeConnection)
+      validateConnectionCollection(value)
     } else if (entry.key.startsWith('necto:environments:')) {
       validatePresetCollection(value)
     } else if (
