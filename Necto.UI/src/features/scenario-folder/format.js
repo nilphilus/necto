@@ -1,8 +1,6 @@
 import { inputSources } from '../scenario-builder/variables.js'
-import { savedBlueprint } from '../scenario-builder/useBuilder.js'
-import { validateScenario } from '../scenarios/scenario.js'
-import { payloadSnapshot } from '../workbench/body.js'
-import { executionOptions } from '../workbench/executionOptions.js'
+import { sharedBlueprint } from '../scenario-builder/definition.js'
+import { sharedChain } from '../scenarios/definition.js'
 import { pointerPath } from '../workbench/assertions.js'
 import { expectedValue } from '../scenario-builder/waiting.js'
 import { redactSchema } from '../workbench/sensitiveSchema.js'
@@ -12,24 +10,13 @@ import { pointerParts } from '../scenario-builder/pointers.js'
 export const FILE_LIMIT = 2 * 1024 * 1024
 export const FOLDER_NAME = 'necto-scenarios'
 export const FILE_SUFFIX = '.necto.json'
-const clone=value=>JSON.parse(JSON.stringify(value))
-function requestDefinition(request) {
- request.assertions=(request.assertions??[]).map(check=>({kind:check.kind,path:check.path,...(!['exists','nonempty'].includes(check.kind)?{expected:check.expected}:{})}))
- if(request.formFields)request.formFields=request.formFields.map(row=>({name:row.name,value:row.value,kind:row.kind,enabled:row.enabled,required:Boolean(row.required),multiple:Boolean(row.multiple),attachmentRequired:Boolean(row.attachmentRequired),files:[]}))
- return request
-}
-export function canonicalScenario(kind,scenario) {
- if(!['builder','chain'].includes(kind))throw new Error('Unsupported scenario kind.')
- if(typeof scenario?.name!=='string'||scenario.name.length>200||typeof scenario?.id!=='string'||scenario.id.length>2000)throw new Error('Shared scenarios need a name of up to 200 characters and a bounded ID.')
- if(kind==='builder'){
-  const definition=savedBlueprint(scenario)
-  for(const step of definition.steps)requestDefinition(step.request)
-  return definition
- }
- validateScenario(scenario)
- const definition=clone({version:1,id:scenario.id,name:scenario.name.trim(),steps:scenario.steps.map(step=>({operationKey:step.operationKey,apiId:step.apiId,name:step.name,method:step.method,path:step.path,fields:step.fields,body:step.body,bindings:step.bindings.map(binding=>({sourceStep:binding.sourceStep,path:binding.path,location:binding.location,name:binding.name,...(binding.selector?{selector:{arrayPath:binding.selector.arrayPath,field:binding.selector.field,expected:binding.selector.expected}}:{})})),...payloadSnapshot(step),...executionOptions(step),assertions:step.assertions??[],serverIndex:step.serverIndex,serverValues:step.serverValues??{}}))})
- definition.steps.forEach(requestDefinition)
- return definition
+export function canonicalScenario(kind, scenario) {
+  if (!['builder', 'chain'].includes(kind)) throw new Error('Unsupported scenario kind.')
+  if (typeof scenario?.name !== 'string' || scenario.name.length > 200 ||
+      typeof scenario?.id !== 'string' || scenario.id.length > 2000) {
+    throw new Error('Shared scenarios need a name of up to 200 characters and a bounded ID.')
+  }
+  return kind === 'builder' ? sharedBlueprint(scenario) : sharedChain(scenario)
 }
 function clean(value,depth=0,budget={left:25000}) {
  if(--budget.left<0||depth>64)throw new Error('Static values are too deep or large to prepare for sharing.')

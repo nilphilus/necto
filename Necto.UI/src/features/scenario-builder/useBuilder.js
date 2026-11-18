@@ -1,33 +1,15 @@
-import { randomSnapshot } from './random.js'
-import { expressionSnapshot } from './expression.js'
+import { savedBlueprint } from './definition.js'
+export { savedBlueprint } from './definition.js'
 import { inputSources } from './variables.js'
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
-import { sharedOrigin } from '../scenario-folder/origin.js'
+import { sharedOrigin } from '../scenario-definitions/origin.js'
 import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
-import { payloadSnapshot } from '../workbench/body.js'
-import { executionOptions } from '../workbench/executionOptions.js'
 import { newBlueprint, validateBlueprint, parseHuman } from './model.js'
 import { prepareBlueprint, executeBlueprint } from './runner.js'
-import { variableSnapshot } from './variables.js'
-import { waitOptions } from './waiting.js'
-import { allConnections, hasTiming, upgradeBlueprint } from './connections.js'
+import { upgradeBlueprint } from './connections.js'
 
 const clone = value => JSON.parse(JSON.stringify(value))
-export function savedBlueprint(draft) {
-  validateBlueprint(draft)
-  draft = upgradeBlueprint(draft)
-  const saved = clone({ format: draft.format, version: 7, variables: draft.variables.map(variableSnapshot), id: draft.id, name: draft.name.trim(), concurrency: draft.concurrency,
-    connections: allConnections(draft).filter(edge => edge.from !== null || hasTiming(edge)).map(edge => ({ from: edge.from, to: edge.to, ...waitOptions(edge) })),
-    steps: draft.steps.map(step => ({ ...(step.position ? { position: { ...step.position } } : {}), id: step.id, label: step.label.trim(), operationKey: step.operationKey, apiId: step.apiId, method: step.method, path: step.path,
-      dependsOn: [], inputs: step.inputs.map(input => ({ location: input.location,
-        ...(input.location === 'body' ? { pointer: input.pointer } : { name: input.name }), source: input.source,
-        ...(input.source === 'random' ? randomSnapshot(input) : input.source === 'expression' ? expressionSnapshot(input) : input.source === 'response' ? { stepId: input.stepId, responsePointer: input.responsePointer } : input.source === 'variable' ? { variableId: input.variableId } : input.source === 'human' ? { prompt: input.prompt, valueType: input.valueType } : input.source === 'generate' ? { generator: input.generator, ...(input.generator === 'regex' ? { pattern: input.pattern } : {}) } : {}) })),
-      request: { fields: { ...step.request.fields }, body: step.request.body, ...payloadSnapshot(step.request), ...executionOptions(step.request),
-        assertions: step.request.assertions ?? [], serverIndex: step.request.serverIndex, serverValues: step.request.serverValues ?? {} } })) })
-  validateBlueprint(saved)
-  return saved
-}
 export function useBuilder(configuration) {
   const draft = ref(newBlueprint()), saved = ref([]), error = ref(''), notice = ref('')
   const execution = reactive({ status: 'idle', steps: [], error: '', stale: false, presetNames: [] }), pending = ref(false), questions = reactive(new Map())

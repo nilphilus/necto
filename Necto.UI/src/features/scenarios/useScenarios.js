@@ -1,4 +1,4 @@
-import { sharedOrigin } from '../scenario-folder/origin.js'
+import { sharedOrigin } from '../scenario-definitions/origin.js'
 import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'

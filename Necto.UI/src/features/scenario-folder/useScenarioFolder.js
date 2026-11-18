@@ -1,10 +1,14 @@
 import { computed, reactive, toValue, watch, onScopeDispose } from 'vue'
 import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
-import { notifyWorkspaceImport } from '../workbench/workspaceUpdates.js'
-import { canonicalScenario, sharedDefinition, parseShared, serializeShared, sharedFileName, scenarioKey, FILE_LIMIT } from './format.js'
+import { teamDefinitions as builderDefinitions } from '../scenario-builder/definition.js'
+import { teamDefinitions as quickDefinitions } from '../scenarios/definition.js'
+import { sharedDefinition, parseShared, serializeShared, sharedFileName, scenarioKey, FILE_LIMIT } from './format.js'
 import { scanDirectory, scenarioDirectory, readScenarioFile, writeScenarioFile } from './directory.js'
-import { contentRevision, sharedOrigin } from './origin.js'
+import { contentRevision } from './origin.js'
+import { sharedOrigin } from '../scenario-definitions/origin.js'
 import { folderHandles } from './handles.js'
+const collections = { builder: builderDefinitions, chain: quickDefinitions }
+
 export function useScenarioFolder(configuration,operations,locked,options={}) {
  const platform=options.platform??globalThis,storage=options.storage??platform.localStorage,handles=options.handles??folderHandles
  const supported=typeof platform.showDirectoryPicker==='function'&&platform.isSecureContext!==false
@@ -54,21 +58,11 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
   let forgotten=true;try{await handles.remove(current)}catch{forgotten=false}
   guard();directory=undefined;baselines.clear();Object.assign(state,{connected:false,ready:false,name:'',entries:[],remembered:false});state.notice=forgotten?'Folder disconnected. Files and browser scenarios were kept.':'Disconnected for this session. This browser could not remove the remembered folder preference. Files were kept.';return true
  })}
- function browserCollection(kind,current){return 'necto:'+(kind==='builder'?'scenario-builder:':'scenarios:')+current}
- function importDefinition(file,current,guard){
-  const collectionKey=browserCollection(file.kind,current),property=file.kind==='builder'?'blueprints':'scenarios',before=storage.getItem(collectionKey)
-  const stored=before?JSON.parse(before):{version:1,[property]:[]}
-  if(stored.version!==1||!Array.isArray(stored[property]))throw new Error('The saved browser collection is invalid. Export or repair it before importing.')
-  const existing=stored[property].map(item=>{const definition=canonicalScenario(file.kind,item),origin=sharedOrigin(item._sharedSource);return origin?{...definition,_sharedSource:origin}:definition})
-  if(new Set(existing.map(item=>item.id)).size!==existing.length)throw new Error('The browser collection contains duplicate IDs.')
-  const previous=existing.find(item=>item.id===file.scenario.id)
-  if(previous&&JSON.stringify(canonicalScenario(file.kind,previous))!==JSON.stringify(canonicalScenario(file.kind,file.scenario))&&!platform.confirm(`Replace the saved browser definition “${previous.name}”? Unsaved drafts are kept. No request will run.`))return false
-  const next=[...existing.filter(item=>item.id!==file.scenario.id),file.scenario]
-  if(next.length>100)throw new Error('A browser scenario collection supports at most 100 definitions.')
-  const text=JSON.stringify({version:1,[property]:next})
-  if(new TextEncoder().encode(text).length>FILE_LIMIT)throw new Error('The browser collection would exceed 2 MiB. Remove or export some saved definitions first.')
-  guard();if(storage.getItem(collectionKey)!==before)throw new Error('Saved scenarios changed in another tab. Try importing again.')
-  storage.setItem(collectionKey,text);notifyWorkspaceImport([collectionKey]);return true
+ function importDefinition(file,current,guard) {
+  return collections[file.kind].importDefinition({
+   storage, workspace:current, definition:file.scenario, guard, byteLimit:FILE_LIMIT,
+   confirmReplace: message => platform.confirm(message)
+  })
  }
  async function importEntry(entry){return perform(async(guard,current)=>{
   if(!directory)throw new Error('Reconnect the scenario folder first.')
@@ -91,12 +85,7 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
  })}
  function bindOrigin(kind,source,origin) {
   source._sharedSource=origin
-  const collectionKey=browserCollection(kind,key.value),property=kind==='builder'?'blueprints':'scenarios'
-  try {
-   const raw=storage.getItem(collectionKey);if(!raw)return
-   const stored=JSON.parse(raw),item=stored[property]?.find(item=>item.id===source.id)
-   if(item&&JSON.stringify(canonicalScenario(kind,item))===JSON.stringify(canonicalScenario(kind,source))){item._sharedSource=origin;storage.setItem(collectionKey,JSON.stringify(stored));notifyWorkspaceImport([collectionKey])}
-  }catch{/* The disk save remains valid if optional browser provenance cannot be persisted. */}
+  collections[kind].updateOrigin({storage,workspace:key.value,source,origin})
  }
  async function save(kind,source){return perform(async guard=>{
   if(!directory)throw new Error('Choose a scenario folder in Settings → Workspace first.')
