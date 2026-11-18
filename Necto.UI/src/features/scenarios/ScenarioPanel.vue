@@ -5,6 +5,7 @@ import FolderLibrary from '../scenario-folder/FolderLibrary.vue'
 import FolderFeedback from '../scenario-folder/FolderFeedback.vue'
 import ScenarioCi from '../workbench/ScenarioCi.vue'
 import ScenarioExport from './ScenarioExport.vue'
+import ScenarioSkillLink from './ScenarioSkillLink.vue'
 
 import { nextTick, ref } from 'vue'
 import { pathLabel } from './scenario.js'
@@ -72,7 +73,9 @@ function runScenario(scenario) {
         <button type="button" class="secondary" :disabled="busy" @click="emit('builder')">Scenario Builder →</button>
       </div>
     </div>
-    <p class="builder-intro muted">Import a scenario from the Necto skill or create one manually in Builder.</p>
+    <p class="builder-intro muted">
+      <ScenarioSkillLink :version="configuration?.nectoPackageVersion" /> to create scenarios with your agent.
+    </p>
     <p v-if="importError" class="error" role="alert">{{ importError }}</p>
     <p v-if="importResult" class="import-result" role="status">
       Imported “{{ importResult.scenario.name }}” · {{ importResult.scenario.steps.length }} steps.
@@ -152,7 +155,7 @@ function runScenario(scenario) {
         </section>
       </li>
     </ul>
-    <p v-if="!scenarios.length && !builderScenarios.length" class="muted">Save a request chain or a Builder scenario to see it here.</p>
+    <p v-if="!scenarios.length && !builderScenarios.length" class="muted">No scenarios saved for this OpenAPI workspace in this browser. Save a request chain, save a Builder scenario, or import a scenario file.</p>
   </section>
 </template>
 <style scoped>

@@ -4,6 +4,24 @@ Necto UI is a Vue application for browsing and running the operations in an Open
 
 [Product website](https://nilphilus.github.io/necto/) · [Setup and technical guide](https://nilphilus.github.io/necto/technical.html) · [Public source repository](https://github.com/nilphilus/necto)
 
+## Multiple OpenAPI documents
+
+Configure the registered document paths to show a selector in the endpoint catalog:
+
+```csharp
+app.UseNectoUI(
+    openApiPath: "/openapi/v1.json",
+    openApiDocuments: new Dictionary<string, string>
+    {
+        ["v1"] = "/openapi/v1.json",
+        ["v2"] = "/openapi/v2.json",
+    });
+```
+
+Use application-relative paths for ASP.NET Core OpenAPI or NSwag. The default
+remains `openApiPath`. Browser-saved scenarios are scoped to the selected
+document URL, so switching back restores that document's library.
+
 ## Necto 0.3.0
 
 - **Authorize** loads protected OpenAPI documents and authenticates requests with Bearer, Basic, API keys, browser sessions or OAuth2/OIDC PKCE. Credentials stay in tab memory and are scoped to approved API origins.
