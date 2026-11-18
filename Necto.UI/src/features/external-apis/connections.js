@@ -157,3 +157,9 @@ export function useExternalApis(configuration, authentication) {
   }))
   return { connections, show, contexts, statuses, storageError, revision, changedApiId, changedApiIds, saveConnection, removeConnection, testConnection }
 }
+
+export function validateConnectionCollection(value) {
+      if (!Array.isArray(value.connections) || typeof value.show !== 'boolean')
+        throw new Error('Invalid API connections.')
+      value.connections.forEach(normalizeConnection)
+}

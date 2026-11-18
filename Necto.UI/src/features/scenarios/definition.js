@@ -53,3 +53,9 @@ export const teamDefinitions = teamCollection({
   property: 'scenarios',
   canonical: sharedChain,
 })
+
+export function validateScenarioCollection(value) {
+  if (value.version !== 1 || !Array.isArray(value.scenarios))
+    throw new Error('Invalid scenario collection.')
+  value.scenarios.forEach(validateScenario)
+}

@@ -80,3 +80,11 @@ export const teamDefinitions = teamCollection({
   property: 'blueprints',
   canonical: sharedBlueprint,
 })
+
+export function validateBuilderCollection(value) {
+  if (value.version !== 1 || !Array.isArray(value.blueprints) || value.blueprints.length > 100)
+    throw new Error('Invalid builder collection.')
+  value.blueprints.forEach(validateBlueprint)
+  if (new Set(value.blueprints.map((item) => item.id)).size !== value.blueprints.length)
+    throw new Error('Duplicate builder IDs.')
+}
