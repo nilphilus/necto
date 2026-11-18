@@ -6,7 +6,7 @@ import { markRaw, onScopeDispose, reactive, watch } from 'vue'
 import { redactedRequest } from '../authentication/authentication.js'
 import { evaluateAssertions, validateAssertions } from '../workbench/assertions.js'
 import { useRequestHistory } from '../workbench/history.js'
-import { buildRequest, initialPayload, sendRequest } from './request.js'
+import { buildRequest, contextKey, fieldKey, initialPayload, sendRequest, supportedParameters } from './request.js'
 
 export function useRequestRunner(configuration, authentication) {
   const running = new Map()
@@ -68,6 +68,7 @@ export function useRequestRunner(configuration, authentication) {
     controllers.set(session, controller)
     let timeout
     let request
+    let sentDraft
     const workspaceAtStart = workspaceIdentity(configuration.value)
     try {
       const policy = executionOptions(session)
@@ -75,6 +76,11 @@ export function useRequestRunner(configuration, authentication) {
       validateAssertions(session.assertions ?? [])
       const identity = requestIdentity(buildRequest(operation, configuration.value, session, values), session)
       request = prepare(operation, session, values)
+      sentDraft = { ...session, fields: { ...session.fields } }
+      for (const parameter of supportedParameters(operation)) {
+        const key = contextKey(parameter)
+        if (values?.has(key)) sentDraft.fields[fieldKey(parameter)] = String(values.get(key) ?? '')
+      }
       const snapshot = captureSentRequest(request, session)
       const sentRequest = snapshot ? markRaw(snapshot) : undefined
       request.options.signal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
@@ -94,13 +100,13 @@ export function useRequestRunner(configuration, authentication) {
       session.resultStale = false
       session.result = { ...result, requestIdentity: identity, sentRequest, elapsed: Math.round(performance.now() - started) }
       session.result.assertions = evaluateAssertions(session.assertions ?? [], session.result)
-      try { if (workspaceIdentity(configuration.value) === workspaceAtStart) history.add(operation, request, session.result, '', session) } catch { /* History must not change the outcome of a sent request. */ }
+      try { if (workspaceIdentity(configuration.value) === workspaceAtStart) history.add(operation, request, session.result, '', sentDraft) } catch { /* History must not change the outcome of a sent request. */ }
       return session.result
     } catch (cause) {
       if (invalidated()) { session.result = null; session.error = ''; return null }
       if (session.result) session.resultStale = true
       session.error = controller.signal.aborted ? controller.signal.reason?.message ?? 'Request canceled.' : signal?.aborted ? 'Request canceled.' : cause.message
-      try { if (workspaceIdentity(configuration.value) === workspaceAtStart) history.add(operation, request, undefined, session.error, session) } catch { /* Metadata retention is optional. */ }
+      try { if (workspaceIdentity(configuration.value) === workspaceAtStart) history.add(operation, request, undefined, session.error, sentDraft) } catch { /* Metadata retention is optional. */ }
       if (session.result?.receiving) session.result.receiving = false
       if (session.result?.stream) { session.result.stream.done = true; session.result.stream.reason = session.error }
 

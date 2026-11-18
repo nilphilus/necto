@@ -16,6 +16,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <AssemblyMetadata Include="NectoPackageVersion" Value="$(PackageVersion)" Condition="'$(PackageVersion)' != ''" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
     <None Include="../Necto.UI/README.md" Pack="true" PackagePath="/" />

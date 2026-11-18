@@ -70,10 +70,40 @@ export function readOperations(spec, api = { id: 'local' }) {
   })
 }
 
+function availableDocuments(settings, defaultUrl) {
+  const documents = new Map()
+  for (const item of Array.isArray(settings.openApiDocuments) ? settings.openApiDocuments : []) {
+    if (typeof item?.name !== 'string' || !item.name.trim() || typeof item.url !== 'string') continue
+    try {
+      const url = new URL(item.url, document.baseURI)
+      if (url.origin === new URL(defaultUrl).origin && !url.username && !url.password && !url.hash)
+        documents.set(url.href, { name: item.name, url: url.href })
+    } catch { /* Invalid configured entries are excluded. */ }
+  }
+  if (!documents.has(defaultUrl)) {
+    const name = new URL(defaultUrl).pathname.split('/').at(-1)?.replace(/\.(?:json|ya?ml)$/i, '')
+    documents.set(defaultUrl, { name: name || 'Default', url: defaultUrl })
+  }
+  return [...documents.values()]
+}
+
 export function useCatalog(authentication) {
   const spec = ref(null)
   const configuration = ref(null)
   const error = ref('')
+  const documentError = ref('')
+  const documentLoading = ref(false)
+  const openApiDocuments = ref([])
+  let serverSettings, selectedServerUrl
+  const selectionKey = () => 'necto:openapi-document:' + serverSettings.configurationUrl
+  function rememberedDocument() {
+    try { return sessionStorage.getItem(selectionKey()) }
+    catch { return null }
+  }
+  function rememberDocument(url) {
+    try { sessionStorage.setItem(selectionKey(), url) }
+    catch { /* A browser policy may restrict storage. */ }
+  }
   const documentSource = ref({ kind: 'server', name: 'Server document' })
   const externalApis = useExternalApis(configuration, authentication)
   const operations = computed(() => spec.value ? [
@@ -101,6 +131,8 @@ export function useCatalog(authentication) {
       error.value = ''
       return { message: 'Credentials applied. Imported API document kept; no server document was loaded.' }
     }
+    documentLoading.value = false
+    documentError.value = ''
     const version = ++generation
     controller?.abort()
     controller = new AbortController()
@@ -109,23 +141,57 @@ export function useCatalog(authentication) {
     try {
       const settings = await fetchJson('./configuration', authentication, signal)
       if (version !== generation) return
-      const openApiUrl = new URL(settings.openApiUrl, document.baseURI).href
-      configuration.value = { ...settings, openApiUrl, configurationUrl: new URL('./configuration', document.baseURI).href }
+      const defaultUrl = new URL(settings.openApiUrl, document.baseURI).href
+      const documents = availableDocuments(settings, defaultUrl)
+      openApiDocuments.value = documents
+      serverSettings = { ...settings, openApiDocuments: documents, configurationUrl: new URL('./configuration', document.baseURI).href }
+      const preferredUrl = selectedServerUrl ?? rememberedDocument()
+      const openApiUrl = documents.some((item) => item.url === preferredUrl) ? preferredUrl : defaultUrl
+      configuration.value = { ...serverSettings, openApiUrl }
       const current = authentication?.apis.get('local')
       authentication?.register({ id: 'local', name: 'Local API', configuration: configuration.value, document: current?.document, schemes: current?.schemes, origins: [new URL(openApiUrl).origin] })
       const openApiDocument = await fetchJson(openApiUrl, authentication, signal, true)
       if (!openApiDocument?.openapi) throw new Error('Expected an OpenAPI document. If redirected to a login page, sign into the product first.')
       if (version === generation) {
         spec.value = openApiDocument
+        selectedServerUrl = openApiUrl
         documentSource.value = { kind: 'server', name: 'Server document' }
       }
     } catch (cause) {
       if (version === generation && !signal.aborted) error.value = `Could not load the API documentation. ${cause.message}`
     }
   }
+  async function selectOpenApiDocument(url) {
+    if (!serverSettings || !openApiDocuments.value.some((item) => item.url === url) ||
+        documentSource.value.kind === 'server' && configuration.value?.openApiUrl === url) return
+    const version = ++generation
+    controller?.abort()
+    controller = new AbortController()
+    const signal = controller.signal
+    documentLoading.value = true
+    documentError.value = ''
+    try {
+      const openApiDocument = await fetchJson(url, authentication, signal, true)
+      if (!openApiDocument?.openapi) throw new Error('Expected an OpenAPI document.')
+      if (version !== generation) return
+      configuration.value = { ...serverSettings, openApiUrl: url }
+      spec.value = openApiDocument
+      selectedServerUrl = url
+      rememberDocument(url)
+      documentSource.value = { kind: 'server', name: 'Server document' }
+      error.value = ''
+    } catch (cause) {
+      if (version === generation && !signal.aborted)
+        documentError.value = `Could not switch OpenAPI document. ${cause.message}`
+    } finally {
+      if (version === generation) documentLoading.value = false
+    }
+  }
   async function importDocument(text, name = 'Local API document', { association = 'separate', workspaceName = name } = {}) {
     if (!['separate', 'current'].includes(association)) throw new Error('Choose how to associate this API document.')
     const workspaceId = association === 'separate' ? importedWorkspaceId(configuration.value, workspaceName) : configuration.value.workspaceId
+    documentLoading.value = false
+    documentError.value = ''
     const version = ++generation
     controller?.abort()
     controller = new AbortController()
@@ -139,5 +205,5 @@ export function useCatalog(authentication) {
     error.value = ''
   }
   onMounted(reload)
-  return { spec, configuration, error, operations, groups, externalApis, documentSource, reload, importDocument, restoreServerDocument: () => reload({ server: true }) }
+  return { spec, configuration, error, operations, groups, externalApis, documentSource, openApiDocuments, documentLoading, documentError, selectOpenApiDocument, reload, importDocument, restoreServerDocument: () => reload({ server: true }) }
 }

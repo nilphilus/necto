@@ -11,12 +11,15 @@ defineProps({
   pending: Boolean,
   validation: String,
   runProblem: String,
+  problemStep: String,
   review: Array,
+  hasBodyExpressions: Boolean,
 })
-defineEmits(['start'])
+defineEmits(['start', 'go-to-step'])
 
 const selectedPresets = defineModel('selectedPresets', { type: Array, required: true })
 const concurrency = defineModel('concurrency', { type: [Number, String], required: true })
+const allowExpressionOverrides = defineModel('allowExpressionOverrides', { type: Boolean, required: true })
 const allowHuman = defineModel('allowHuman', { type: Boolean, required: true })
 const runDialog = ref(null)
 
@@ -51,14 +54,18 @@ defineExpose({
         <label v-for="name in presetNames" :key="name"
           ><input v-model="selectedPresets" type="checkbox" :value="name" />{{ name }}</label
         >
-        <p>Presets override matching static and dynamic fields. Last selected wins.</p>
+        <p>Presets override matching values. Last selected wins.</p>
+        <label v-if="hasBodyExpressions && selectedPresets.length" class="expression-override">
+          <input v-model="allowExpressionOverrides" type="checkbox">
+          Allow presets to override payload expressions
+        </label>
         <small v-if="selectedPresets.length"
           >Applied in order: {{ selectedPresets.join(' → ') }}</small
         ><small v-else>No presets. Use the scenario's own inputs.</small>
       </fieldset>
       <p v-else class="muted">No saved presets. Configure them in Settings → Presets.</p>
       <label class="parallel-limit"
-        >Maximum parallel requests<input
+        >Parallel requests for this run<input
           v-model.number="concurrency"
           type="number"
           min="1"
@@ -76,6 +83,10 @@ defineExpose({
           </li>
         </ul>
       </details>
+      <p v-if="review.some(step => !['GET', 'HEAD', 'OPTIONS'].includes(step.operation.method) &&
+        step.entryPolicies.some(policy => policy.waitFor?.retryCount > 0))" class="repeat-warning" role="alert">
+        A wait condition can repeat requests that change server data. Check the call limits below.
+      </p>
       <ol class="review-targets">
         <li v-for="step in review" :key="step.id">
           <strong>{{ step.label }}</strong
@@ -86,7 +97,9 @@ defineExpose({
               ? 'Preset fields: ' + step.presetOverrides.join(', ')
               : 'No matching preset fields (or shared presets disabled for this API).'
           }}</small
-          ><small
+          ><small v-for="expression in step.bodyExpressions" :key="expression.pointer" class="review-expression">
+            <code>{{ expression.pointer || '(whole body)' }}</code> · {{ expression.overridden ? 'Expression overridden by preset' : 'Expression evaluated before send' }}
+          </small><small
             >{{
               step.inputs
                 .flatMap(inputSources)
@@ -114,7 +127,10 @@ defineExpose({
           >
         </li>
       </ol>
-      <p v-if="runProblem" class="error" role="alert">{{ runProblem }}</p>
+      <p v-if="runProblem" class="error" role="alert">
+        {{ runProblem }}
+        <button v-if="problemStep" type="button" class="secondary" @click="$emit('go-to-step')">Go to step</button>
+      </p>
       <div class="run-actions">
         <button type="button" class="secondary" @click="runDialog.close()">Cancel</button
         ><button
@@ -130,6 +146,10 @@ defineExpose({
 </template>
 
 <style scoped>
+.expression-override { margin-block: .35rem; }
+.review-expression { color: var(--accent); }
+
+.repeat-warning { padding: .5rem; border-inline-start: 3px solid #b79b55; background: var(--subtle); }
 .builder-dialog {
   width: min(42rem, calc(100% - 2rem));
   max-height: 85dvh;

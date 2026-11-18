@@ -47,6 +47,18 @@ export function useBuilder(configuration) {
     persist([...saved.value.filter(item => item.id !== blueprint.id), blueprint])
     notice.value = 'Saved in this browser. Run inputs and responses are not included.'
   }
+  function saveCaptured(blueprint) {
+    const isOpen = draft.value.id === blueprint.id
+    if (isOpen && dirty.value) throw new Error('Save or discard the open Builder changes before adding requests.')
+    const definition = savedBlueprint(blueprint)
+    const origin = sharedOrigin(blueprint._sharedSource)
+    if (origin) definition._sharedSource = origin
+    const exists = saved.value.some((item) => item.id === definition.id)
+    persist(exists
+      ? saved.value.map((item) => item.id === definition.id ? definition : item)
+      : [...saved.value, definition])
+    if (isOpen) open(definition)
+  }
   function open(blueprint) { if (pending.value) return; clearRun(); draft.value = upgradeBlueprint(clone(blueprint)); notice.value = ''; error.value = '' }
   function fresh() { open(newBlueprint()) }
   function remove() { if (pending.value) return; persist(saved.value.filter(item => item.id !== draft.value.id)); fresh() }
@@ -63,16 +75,16 @@ export function useBuilder(configuration) {
       } })
     })
   }
-  async function run(context, execute, allowHuman) {
+  async function run(context, execute, allowHuman, concurrency = draft.value.concurrency) {
     if (pending.value) return
     error.value = ''; notice.value = ''
-    const plan = prepareBlueprint(draft.value, context)
+    const plan = prepareBlueprint({ ...draft.value, concurrency }, context)
     if (!allowHuman && plan.some(step => step.inputs.flatMap(inputSources).some(input => input.source === 'human' || input.source === 'variable' && plan.variables.find(variable => variable.id === input.variableId)?.source === 'human'))) throw new Error('Enable human-in-the-loop for steps that ask for input.')
     const runRevision = revision
     Object.assign(execution, { status: 'running', steps: plan, error: '', stale: false, presetNames: [...(context.presetNames ?? [])] })
     const current = controller = new AbortController(); pending.value = true
     try {
-      const outcome = await executeBlueprint(execution.steps, { concurrency: draft.value.concurrency, execute, signal: current.signal, ask: allowHuman ? ask : undefined })
+      const outcome = await executeBlueprint(execution.steps, { concurrency, execute, signal: current.signal, ask: allowHuman ? ask : undefined })
       if (revision === runRevision) Object.assign(execution, outcome)
     } finally {
       // A canceled run must not retain human answers in its prompt queue.
@@ -80,5 +92,5 @@ export function useBuilder(configuration) {
       if (controller === current) controller = undefined
     }
   }
-  return { draft, saved, dirty, error, notice, execution, pending, questions, save, open, fresh, remove, stop, run, invalidate }
+  return { draft, saved, dirty, error, notice, execution, pending, questions, save, saveCaptured, open, fresh, remove, stop, run, invalidate }
 }

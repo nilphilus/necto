@@ -29,12 +29,15 @@ const document={openapi:'3.1.0',info:{title:'Commerce API',version:'1'},paths:{
  if(output)await fs.mkdir(output,{recursive:true});const shot=async name=>{if(output)await p.screenshot({path:path.join(output,name+'.png')})}
  await p.goto(base);await p.getByRole('button',{name:'Scenarios',exact:true}).click();await p.getByRole('button',{name:'Scenario Builder →'}).click();await p.getByRole('heading',{name:'Scenario Builder',exact:true}).waitFor()
  await p.getByRole('textbox',{name:'Scenario name',exact:true}).fill('Order fulfilment')
- const add=async(name,label)=>{await p.getByRole('button',{name:'+ Add request',exact:true}).click();await p.getByRole('searchbox',{name:'Find endpoint',exact:true}).fill(name);await p.locator('.endpoint-options button').filter({hasText:name}).click();await p.getByRole('textbox',{name:'Step name',exact:true}).fill(label)}
+ const closeStep=async()=>{const step=p.locator('.step-dialog[open]');if(await step.count())await step.getByRole('button',{name:'Done',exact:true}).click()}
+ const add=async(name,label)=>{await closeStep();await p.getByRole('button',{name:'+ Add request',exact:true}).click();await p.getByRole('searchbox',{name:'Find endpoint',exact:true}).fill(name);await p.locator('.endpoint-options button').filter({hasText:name}).click();await p.getByRole('textbox',{name:'Step name',exact:true}).fill(label)}
  await add('Find customer','Find customer');await add('Check inventory','Check stock');await add('Create order','Create order')
  const addInput=async({target='Body',pointer='',source='Earlier response',step,response='',generator,pattern,prompt,type})=>{
   if(target==='Body'){await p.getByRole('button',{name:'Raw JSON',exact:true}).click();const advanced=p.locator('.advanced-body-bindings');if(await advanced.getAttribute('open')===null)await advanced.locator('summary').click()}
-  await p.getByRole('button',{name:'Add input',exact:true}).last().click();const card=p.locator('.input-card').last()
-  await card.getByLabel('Target',{exact:true}).selectOption({label:target});if(target==='Body')await card.getByLabel('Target JSON Pointer',{exact:true}).fill(pointer)
+  if(target==='Body') await p.getByRole('button',{name:'Add input',exact:true}).last().click()
+  else await p.locator('[data-parameter="' + target.replace(' · ', ':') + '"]').getByRole('button',{name:'Use a run-time value'}).click()
+  const card=p.locator('.input-card').last()
+  if(target==='Body'){await card.getByLabel('Target',{exact:true}).selectOption({label:target});await card.getByLabel('Target JSON Pointer',{exact:true}).fill(pointer)}
   await card.getByLabel('Value source',{exact:true}).selectOption({label:source})
   if(step){await card.getByLabel('Source step',{exact:true}).selectOption({label:step});await card.getByLabel('Response JSON Pointer',{exact:true}).fill(response)}
   if(generator)await card.getByLabel('Generator tag',{exact:true}).selectOption({label:generator})
@@ -45,7 +48,7 @@ const document={openapi:'3.1.0',info:{title:'Commerce API',version:'1'},paths:{
  await addInput({pointer:'/customerId',step:'Find customer',response:'/id'});await addInput({pointer:'/sku',step:'Check stock',response:'/sku'});await addInput({pointer:'/reference',source:'Generate data',generator:'Pattern · bounded regex',pattern:'INV-[A-Z]{3}-\\d{4}'})
  await add('Read confirmation','Read confirmation');await addInput({target:'path · id',step:'Create order',response:'/id'})
  await add('Approve dispatch','Approve dispatch');await addInput({target:'path · id',step:'Create order',response:'/id'});await addInput({pointer:'/approvalCode',source:'Ask at run time',prompt:'Enter dispatch approval code',type:'Text'})
- await p.getByRole('button',{name:'Save',exact:true}).click();await p.getByText('Saved in this browser.',{exact:false}).waitFor();assert.equal(calls.length,0);assert.equal(await p.locator('.edge').count(),6);await shot('scenario-builder-map')
+ await closeStep();await p.getByRole('button',{name:'Save',exact:true}).click();await p.getByText('Saved in this browser.',{exact:false}).waitFor();assert.equal(calls.length,0);assert.equal(await p.locator('.edge').count(),6);await shot('scenario-builder-map')
  await p.getByRole('button',{name:'Review & run',exact:true}).click();await p.getByRole('heading',{name:'Review scenario run',exact:true}).waitFor();assert.equal(calls.length,0);await shot('scenario-builder-review')
  await p.getByRole('button',{name:'Run scenario',exact:true}).click();await p.getByRole('region',{name:'Human input required'}).waitFor();assert.equal(peak,2)
  assert.ok(events.indexOf('start:/orders')>events.indexOf('end:/customers'));assert.ok(events.indexOf('start:/orders')>events.indexOf('end:/inventory'))
@@ -54,7 +57,7 @@ const document={openapi:'3.1.0',info:{title:'Commerce API',version:'1'},paths:{
  assert.equal(calls.some(call=>call.path.startsWith('/audit/')),false);await shot('scenario-builder-human')
  await p.getByLabel('Enter dispatch approval code',{exact:false}).fill('RUN-ONLY-9472');await p.getByRole('button',{name:'Continue Approve dispatch',exact:true}).click();await p.locator('.builder-run-status').filter({hasText:'5 / 5 completed'}).waitFor()
  assert.equal(JSON.parse(calls.find(call=>call.path==='/audit/901').body).approvalCode,'RUN-ONLY-9472');assert.equal(calls.length,5);assert.equal(await p.evaluate(()=>Object.values(localStorage).join('').includes('RUN-ONLY-9472')),false)
- await p.locator('.map-node').filter({hasText:'Create order'}).click();await p.locator('.response-content').getByText('901',{exact:false}).waitFor();await shot('scenario-builder-completed')
+ await p.getByRole('button',{name:'View response for Create order',exact:true}).click();await p.locator('.response-content').getByText('901',{exact:false}).waitFor();await shot('scenario-builder-completed');await closeStep()
  // Export includes the definition, never run answers, results or generated values.
  await p.locator('.builder-more summary').click();const downloading=p.waitForEvent('download');await p.getByRole('button',{name:'Export definition',exact:true}).click();const download=await downloading;const exported=await fs.readFile(await download.path(),'utf8');assert.equal(JSON.parse(exported).steps.length,5);assert.ok(!exported.includes('RUN-ONLY-9472'));assert.ok(!exported.includes(body.reference));await p.locator('.builder-more summary').click()
  // Export/save/reload never replay a request and retain only the definition.

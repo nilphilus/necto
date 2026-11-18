@@ -9,7 +9,7 @@ function expand(){dialog.value.showModal();expanded.value=true}
  <section class="step-response" aria-label="Step response">
   <button type="button" class="secondary expand-response" @click="expand">Expand response</button>
   <Teleport :disabled="!expanded" :to="host??'body'"><ResponsePreview :result="result" :operation="operation" :pending="pending" :stale="stale" /></Teleport>
-  <dialog ref="dialog" aria-labelledby="expanded-response-title" @close="expanded=false"><header><div><h3 id="expanded-response-title">Step response</h3><code>{{operation.method}} {{operation.path}}</code></div><button type="button" class="secondary" aria-label="Close expanded response" @click="dialog.close()">Done</button></header><p v-if="stale" class="previous-run">Previous run. Run again to use the updated definition.</p><div ref="host" class="expanded-content" /></dialog>
+  <dialog ref="dialog" aria-labelledby="expanded-response-title" @close="expanded=false"><header><div><h3 id="expanded-response-title">Expanded response</h3><code>{{operation.method}} {{operation.path}}</code></div><button type="button" class="secondary" aria-label="Close expanded response" @click="dialog.close()">Done</button></header><p v-if="stale" class="previous-run">Previous run. Run again to use the updated definition.</p><div ref="host" class="expanded-content" /></dialog>
  </section>
 </template>
 <style scoped>

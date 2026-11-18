@@ -3,7 +3,7 @@ import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { teamDefinitions as builderDefinitions } from '../scenario-builder/definition.js'
 import { teamDefinitions as quickDefinitions } from '../scenarios/definition.js'
 import { sharedDefinition, parseShared, serializeShared, sharedFileName, scenarioKey, FILE_LIMIT } from './format.js'
-import { scanDirectory, scenarioDirectory, readScenarioFile, writeScenarioFile } from './directory.js'
+import { scanDirectory, scenarioDirectory, scenarioFolderPath, readScenarioFile, writeScenarioFile } from './directory.js'
 import { contentRevision } from './origin.js'
 import { sharedOrigin } from '../scenario-definitions/origin.js'
 import { folderHandles } from './handles.js'
@@ -12,7 +12,7 @@ const collections = { builder: builderDefinitions, chain: quickDefinitions }
 export function useScenarioFolder(configuration,operations,locked,options={}) {
  const platform=options.platform??globalThis,storage=options.storage??platform.localStorage,handles=options.handles??folderHandles
  const supported=typeof platform.showDirectoryPicker==='function'&&platform.isSecureContext!==false
- const state=reactive({supported,connected:false,ready:false,restoring:false,pending:false,name:'',entries:[],error:'',notice:'',remembered:false})
+ const state=reactive({supported,connected:false,ready:false,restoring:false,pending:false,name:'',path:'',entries:[],error:'',notice:'',remembered:false})
  const key=computed(()=>workspaceIdentity(toValue(configuration)))
  let directory,epoch=0,baselines=new Map()
  onScopeDispose(()=>{epoch++;directory=undefined;baselines.clear()})
@@ -27,12 +27,12 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
   try{return await action(()=>assertCurrent(token,current),current)}catch(error){if(token===epoch&&error.name!=='AbortError')state.error=error.message;return null}finally{state.pending=false}
  }
  watch(key,async current=>{
-  const token=++epoch;directory=undefined;baselines=new Map();Object.assign(state,{connected:false,ready:false,name:'',entries:[],error:'',notice:'',remembered:false,restoring:false})
+  const token=++epoch;directory=undefined;baselines=new Map();Object.assign(state,{connected:false,ready:false,name:'',path:'',entries:[],error:'',notice:'',remembered:false,restoring:false})
   if(!current||!supported)return
   state.restoring=true
   try{
    const remembered=await handles.get(current);if(token!==epoch||!remembered)return
-   directory=remembered;Object.assign(state,{connected:true,remembered:true,name:remembered.name})
+   directory=remembered;Object.assign(state,{connected:true,remembered:true,name:remembered.name,path:scenarioFolderPath(remembered)})
    // Restoring a preference never prompts for filesystem access.
    if(remembered.queryPermission&&await remembered.queryPermission({mode:'readwrite'})!=='granted')return
    const entries=await scanDirectory(remembered);assertCurrent(token,current);state.entries=entries;state.ready=true
@@ -43,7 +43,7 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
  async function choose(){stopRestore();return perform(async(guard,current)=>{
   if(!supported)throw new Error('This browser cannot select local folders. Import or download team files instead.')
   const selected=await platform.showDirectoryPicker({id:'necto-scenarios',mode:'readwrite'});guard();await permission(selected,true);guard()
-  directory=selected;baselines.clear();Object.assign(state,{connected:true,ready:false,name:selected.name,entries:[]})
+  directory=selected;baselines.clear();Object.assign(state,{connected:true,ready:false,name:selected.name,path:scenarioFolderPath(selected),entries:[]})
   try{await handles.set(current,selected);guard();state.remembered=true}catch(error){guard();state.remembered=false;state.notice='Folder connected for this session; this browser could not remember it.'}
   const entries=await scanDirectory(selected);guard();state.entries=entries;state.ready=true
   state.notice||='Folder connected. After git pull, use Reload folder.'
@@ -56,7 +56,7 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
  })}
  async function disconnect(){stopRestore();return perform(async(guard,current)=>{
   let forgotten=true;try{await handles.remove(current)}catch{forgotten=false}
-  guard();directory=undefined;baselines.clear();Object.assign(state,{connected:false,ready:false,name:'',entries:[],remembered:false});state.notice=forgotten?'Folder disconnected. Files and browser scenarios were kept.':'Disconnected for this session. This browser could not remove the remembered folder preference. Files were kept.';return true
+  guard();directory=undefined;baselines.clear();Object.assign(state,{connected:false,ready:false,name:'',path:'',entries:[],remembered:false});state.notice=forgotten?'Folder disconnected. Files and browser scenarios were kept.':'Disconnected for this session. This browser could not remove the remembered folder preference. Files were kept.';return true
  })}
  function importDefinition(file,current,guard) {
   return collections[file.kind].importDefinition({
@@ -79,7 +79,11 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
  async function importFile(file){return perform(async(guard,current)=>{
   if(!file)return null
   if(file.size>FILE_LIMIT)throw new Error('A shared scenario file is limited to 2 MiB.')
-  const text=await file.text(),parsed=parseShared(text);parsed.scenario._sharedSource={kind:parsed.kind,id:parsed.scenario.id,revision:await contentRevision(text)};guard()
+  const text=await file.text(),parsed=parseShared(text)
+  if(platform.isSecureContext!==false&&globalThis.crypto?.subtle){
+   parsed.scenario._sharedSource={kind:parsed.kind,id:parsed.scenario.id,revision:await contentRevision(text)}
+  }
+  guard()
   if(!importDefinition(parsed,current,guard))return null
   state.notice=`Imported “${parsed.scenario.name}” into this browser. No request was sent.`;return parsed
  })}
@@ -104,7 +108,7 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
   const subdirectory=await scenarioDirectory(directory,true);guard()
   await writeScenarioFile(subdirectory,name,text,existing?.text,()=>{guard();if(toValue(operations)!==catalog)throw new Error('The API catalog changed while preparing the file. Try saving again.')})
   const revision=await contentRevision(text);guard();bindOrigin(kind,source,{kind,id:scenario.id,revision});guard();const entry={name,text,kind,scenario};baselines.set(id,{name,text});state.entries=[...entries.filter(entry=>scenarioKey(entry.kind,entry.scenario.id)!==id),entry].sort((a,b)=>a.scenario.name.localeCompare(b.scenario.name));state.ready=true
-  state.notice=`Saved “${scenario.name}” to ${state.name}/necto-scenarios/. Static values are included; review before committing.`;return entry
+  state.notice=`Saved “${scenario.name}” to ${state.path}/. Static values are included; review before committing.`;return entry
  })}
  async function download(kind,source){return perform(async guard=>{
   const scenario=sharedDefinition(kind,source,toValue(operations)),text=serializeShared(kind,scenario),name=await sharedFileName(kind,scenario);guard()

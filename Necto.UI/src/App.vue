@@ -14,6 +14,7 @@ import AuthorizationDialog from './features/authentication/AuthorizationDialog.v
 import { useAuthentication } from './features/authentication/useAuthentication.js'
 import NectoSkeleton from './NectoSkeleton.vue'
 import { useCatalog } from './features/api-catalog/catalog.js'
+import OpenApiDocumentPicker from './features/api-catalog/OpenApiDocumentPicker.vue'
 import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
 import OperationRunner from './features/request-runner/OperationRunner.vue'
 import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
@@ -26,6 +27,11 @@ import ExternalApiSettings from './features/external-apis/ExternalApiSettings.vu
 import EndpointGraph from './features/endpoint-graph/EndpointGraph.vue'
 import EntityGraph from './features/entity-graph/EntityGraph.vue'
 import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
+import CaptureRequestsDialog from './features/scenario-builder/CaptureRequestsDialog.vue'
+import { appendHistoryRequests } from './features/scenario-builder/captureHistory.js'
+import { parseBuilderImport } from './features/scenario-builder/definitionImport.js'
+import { FILE_LIMIT } from './features/scenario-folder/format.js'
+import { useBuilder } from './features/scenario-builder/useBuilder.js'
 import ScenarioBuilder from './features/scenario-builder/ScenarioBuilder.vue'
 import { useScenarios } from './features/scenarios/useScenarios.js'
 import { rememberBinding } from './features/scenarios/scenario.js'
@@ -41,7 +47,8 @@ authentication.register({ id: 'local', name: 'Local API', bootstrap: true, schem
   openApiUrl: new URL('/openapi/v1.json', document.baseURI).href, apiBaseUrl: new URL('/', document.baseURI).href,
   configurationUrl: new URL('./configuration', document.baseURI).href,
 }, origins: [location.origin] })
-const { spec, configuration, error, operations, groups, externalApis, reload: reloadCatalog, importDocument, documentSource, restoreServerDocument } = useCatalog(authentication)
+const { spec, configuration, error, operations, groups, externalApis, reload: reloadCatalog, importDocument, documentSource, restoreServerDocument,
+  openApiDocuments, documentLoading, documentError, selectOpenApiDocument } = useCatalog(authentication)
 const { sessions, sessionFor, createSession, run, prepare: prepareRequest, cancel: cancelRequest, history: requestHistory } = useRequestRunner(configuration, authentication)
 const { sampleStorageKey, createDraft } = createSampleDrafts({
   createSession,
@@ -55,7 +62,10 @@ const externalPending = computed(() => showExternalApis.value && [...externalSta
 const selectedChain = ref([])
 const inspectedScenarioStep = ref(null)
 const scenarioPanel = ref(null)
-const builderPending = ref(false)
+const builderStore = useBuilder(configuration)
+const { saved: builderScenarios, pending: builderPending, error: builderError } = builderStore
+const builderView = ref(null)
+const captureDialog = ref(null)
 const builderVisited = ref(false)
 const scenarioStore = useScenarios(configuration)
 const { scenarios, state: scenarioState, runs: scenarioRuns, pending: scenarioPending, error: scenarioError } = scenarioStore
@@ -65,7 +75,7 @@ const { scenarioName, editingScenarioId, editingFolderSource, editingScenario,
   scenarioDirty, overwriteScenario, saveEditing, selectOriginalName, suggestCopyName } =
   useScenarioEditing(scenarioStore, () => chain.value, (...args) => valuesFor(...args))
 const scenarioFolder = useScenarioFolder(configuration,operations,computed(()=>scenarioPending.value||builderPending.value))
-const workspaceLocked = computed(() => scenarioPending.value || builderPending.value || scenarioFolder.pending)
+const workspaceLocked = computed(() => scenarioPending.value || builderPending.value || scenarioFolder.pending || documentLoading.value)
 const scenarioBusy = computed(() => workspaceLocked.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
 const catalogMedia = matchMedia('(max-width: 760px)')
 const catalogOpen = ref(!catalogMedia.matches)
@@ -116,6 +126,15 @@ const chain = computed(() => {
 const currentIndex = computed(() => inspectedScenarioStep.value === null ? chain.value.length - 1 : Math.min(inspectedScenarioStep.value, chain.value.length - 1))
 const current = computed(() => chain.value[currentIndex.value])
 const authorizedCount = computed(() => { const api = authentication.apis.get(current.value?.operation.apiId ?? 'local'); return Object.keys(api?.credentials ?? {}).length + (api?.access ? 1 : 0) })
+const activeServerDocument = computed(() => documentSource.value.kind === 'server' ? configuration.value?.openApiUrl : undefined)
+async function switchOpenApiDocument(url) {
+  if (scenarioBusy.value || url === activeServerDocument.value) return
+  const draft = builderStore.draft.value
+  if (builderStore.dirty.value && (draft.steps.length || draft.description) &&
+      !window.confirm('Discard unsaved Builder changes and switch OpenAPI document?')) return
+  await selectOpenApiDocument(url)
+}
+
 function openAuthorization(id = current.value?.operation.apiId ?? 'local') { authorizationApiId.value = id; authorizationOpen.value = true }
 async function closeAuthorization() { authorizationOpen.value = false; await nextTick(); authorizationButton.value?.focus() }
 async function retryAuthorizedMetadata(id) {
@@ -431,6 +450,62 @@ function navigateView(view) {
     }
     void showChain(steps)
   } else writeRoute(view ? { view } : chainRoute())
+}
+
+async function openBuilderScenario(id, review = false) {
+  if (scenarioBusy.value) return
+  builderVisited.value = true
+  await nextTick()
+  if (scenarioBusy.value || graphView.value !== 'scenarios') return
+  if (!builderView.value?.openFromLibrary(id)) return
+  navigateView('builder')
+  await nextTick()
+  if (review && graphView.value === 'builder' && !scenarioBusy.value) builderView.value?.reviewRun()
+}
+
+async function importLibraryScenario(file) {
+  const workspace = workspaceIdentity(configuration.value)
+  if (scenarioBusy.value || !workspace) throw new Error('Load an API and wait for active requests before importing.')
+  if (file.size > FILE_LIMIT) throw new Error('Scenario imports are limited to 2 MiB.')
+  const text = await file.text()
+  const content = new Blob([text], { type: 'application/json' })
+  let format
+  try { format = JSON.parse(text)?.format } catch { throw new Error('Invalid JSON in scenario file.') }
+  if (scenarioBusy.value || workspace !== workspaceIdentity(configuration.value))
+    throw new Error('The API workspace changed. Import the scenario again.')
+  let scenario
+  if (format === 'necto-shared-scenario') {
+    const imported = await scenarioFolder.importFile(content)
+    if (!imported) {
+      if (scenarioFolder.error) throw new Error(scenarioFolder.error)
+      return null
+    }
+    scenario = imported.scenario
+  } else {
+    scenario = await parseBuilderImport(content)
+    if (scenarioBusy.value || workspace !== workspaceIdentity(configuration.value))
+      throw new Error('The API workspace changed. Import the scenario again.')
+    builderStore.saveCaptured(scenario)
+  }
+  const missing = [...new Set(scenario.steps.filter((step) => !operations.value.some((operation) =>
+    operation.key === step.operationKey && (operation.apiId ?? 'local') === step.apiId
+  )).map((step) => step.operationKey))]
+  return { scenario, missing }
+}
+
+function captureRequests(entries) {
+  if (scenarioBusy.value || !current.value || !entries.length) return
+  captureDialog.value?.show(current.value.operation, entries, workspaceIdentity(configuration.value))
+}
+
+function saveCapturedRequests({ operation, entries, workspace, id, name }) {
+  const target = operations.value.find((item) => item.key === operation.key &&
+    item.apiId === operation.apiId && item.method === operation.method && item.path === operation.path)
+  if (scenarioBusy.value || workspace !== workspaceIdentity(configuration.value) || !target)
+    throw new Error('The API or workspace changed. Reopen the request capture.')
+  const existing = id ? builderScenarios.value.find((item) => item.id === id) : undefined
+  if (id && !existing) throw new Error('This scenario is no longer saved.')
+  builderStore.saveCaptured(appendHistoryRequests(existing, name, target, entries))
 }
 
 function enterScenario(steps, id, name, index, replace = false, folderSource) {
@@ -775,12 +850,16 @@ function removeScenario(id) {
       @close="closeAuthorization"
       :retry-documentation="retryAuthorizedMetadata"
     />
-    <p v-if="error" class="app-message error" role="alert">
-      {{ error }}
-      <button type="button" class="secondary" @click="retryAuthorizedMetadata">
-        Retry documentation
-      </button>
-    </p>
+    <div v-if="error" class="app-message error">
+      <div role="alert">
+        {{ error }}
+        <button type="button" class="secondary" @click="retryAuthorizedMetadata">
+          Retry documentation
+        </button>
+      </div>
+      <OpenApiDocumentPicker v-if="!spec" :documents="openApiDocuments" :selected="activeServerDocument"
+        :disabled="scenarioBusy" :error="documentError" @select="switchOpenApiDocument" />
+    </div>
     <p v-else-if="!spec" class="app-message" role="status">Loading API documentation…</p>
     <template v-else>
       <p v-if="spec?.['x-necto-import-warning']" class="app-message" role="status">
@@ -986,6 +1065,8 @@ function removeScenario(id) {
       <EndpointGraph :inert="settingsOpen" :initial-operation-key="current?.operation.key" v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <ScenarioBuilder
+        ref="builderView"
+        :store="builderStore"
         :mapping-links="mappingLinks"
         :folder="scenarioFolder"
         @folder-settings="configureScenarioFolder"
@@ -1002,10 +1083,10 @@ function removeScenario(id) {
         :authentication="authentication"
         :execute="(operation, session, values, signal, onRequest) => run(operation, session, values, { signal, onRequest })"
         :busy="scenarioBusy"
-        @pending="builderPending = $event"
         @back="navigateView('scenarios')"
       />
-      <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="navigateView('builder')" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
+      <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="navigateView('builder')" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios"
+        :import-scenario="importLibraryScenario" :builder-scenarios="builderScenarios" :builder-error="builderError" @open-builder-scenario="openBuilderScenario" :state="scenarioState" :runs="scenarioRuns"
 
         :deleted="scenarioStore.deleted.value" @undo-remove="undoRemoveScenario" :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"
@@ -1057,6 +1138,10 @@ function removeScenario(id) {
               :active-operation="current?.operation.key ?? ''"
               @select-operation="selectCatalogOperation"
             >
+              <template #documents>
+                <OpenApiDocumentPicker :documents="openApiDocuments" :selected="activeServerDocument"
+                  :disabled="scenarioBusy" :error="documentError" @select="switchOpenApiDocument" />
+              </template>
               <template #actions><OperationTasks :configuration="configuration" :authentication="authentication" :operations="operations" @open-operation="operation => selectCatalogOperation(operation, operation.tags[0])" /><CurlImport :operations="operations" :configuration="configuration" :disabled="scenarioBusy" @import="loadCurlDraft" /></template>
             </EndpointCatalog>
           </div>
@@ -1135,7 +1220,8 @@ function removeScenario(id) {
                 </div>
               </form>
             </dialog>
-            <OperationRunner :prepare="prepareRequest" :cancel="cancelRequest" :history="requestHistory" :configuration="configuration" :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :preset-colors="presetColors" :default-preset-color="defaultPresetColor" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" :parameter-choices="parameter => choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
+            <CaptureRequestsDialog ref="captureDialog" :scenarios="builderScenarios" :save="saveCapturedRequests" />
+            <OperationRunner @capture-requests="captureRequests" :prepare="prepareRequest" :cancel="cancelRequest" :history="requestHistory" :configuration="configuration" :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :preset-colors="presetColors" :default-preset-color="defaultPresetColor" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" :parameter-choices="parameter => choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
               @choose-parameter="(location, choice) => choose(current.session, location, choice)" @edit-preset="editActivePreset">
               <template #request-actions>
                 <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">

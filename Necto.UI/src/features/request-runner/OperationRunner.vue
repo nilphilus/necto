@@ -32,7 +32,7 @@ const props = defineProps({
   parameterChoices: Function,
 })
 
-const emit = defineEmits(['edit-preset', 'choose-parameter'])
+const emit = defineEmits(['edit-preset', 'choose-parameter', 'capture-requests'])
 const target = computed(() => { try { return effectiveTarget(props.operation, props.configuration, props.session, props.values) } catch { return null } })
 const responseStale = computed(() => {
   if (!props.session.result) return false
@@ -228,7 +228,7 @@ function sendShortcut(event) {
         <button v-if="requestCompact" type="button" class="secondary" @click="editRequest">Edit request</button>
         <div class="request-actions">
           <slot name="request-actions" />
-          <RequestTools ref="settingsTools" @edit-request="editRequest" :operation="operation" :session="session" :values="values" :configuration="configuration" :prepare="prepare" :history="history" />
+          <RequestTools ref="settingsTools" @edit-request="editRequest" :operation="operation" :session="session" :values="values" :configuration="configuration" :prepare="prepare" :history="history" @capture-requests="emit('capture-requests', $event)" />
           <button v-if="session.result && !requestCompact" type="button" class="secondary focus-response" @click="focusResponse">Focus response</button>
         </div>
       </header>

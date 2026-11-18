@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { validateExpression } from './expression.js'
 const props=defineProps({input:Object,step:Object,steps:Array,variables:{type:Array,default:()=>[]},disabled:Boolean})
-const error=computed(()=>{try{validateExpression(props.input);return ''}catch{return 'Use supported syntax and give each selected input a unique name.'}})
+const error=computed(()=>{try{validateExpression(props.input);return ''}catch(cause){return cause.message}})
 function add(){props.input.bindings.push({name:'value'+(props.input.bindings.length+1),source:'response',stepId:'',responsePointer:''})}
 </script>
 <template>
@@ -17,7 +17,7 @@ function add(){props.input.bindings.push({name:'value'+(props.input.bindings.len
   </div>
   <button type="button" class="secondary" :disabled="input.bindings.length>=16" @click="add">Add expression input</button>
   <p v-if="error" class="error" role="status">{{error}}</p>
-  <small>Read selected inputs by name. Return a JSON value. Supports const, if, switch and basic operators; no functions, loops, imports or browser access. Presets override matching fields. Code is saved as written; keep secrets in local authorization or human inputs.</small>
+  <small>Read selected inputs by name. Return a JSON value. Supports const, if, switch and basic operators; no functions, loops, imports or browser access. {{ input.location === 'body' ? 'A run preset can replace this value if explicitly allowed.' : 'Matching run presets override this value.' }} Code is saved as written; keep secrets in local authorization or human inputs.</small>
  </fieldset>
 </template>
 <style scoped>

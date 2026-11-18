@@ -19,7 +19,7 @@ const props = defineProps({
   hideTrigger: Boolean,
   prepare: Function
 })
-const emit = defineEmits(['closed', 'edit-request'])
+const emit = defineEmits(['closed', 'edit-request', 'capture-requests'])
 const closeTarget = ref(null)
 function restoreFocus() { const target = closeTarget.value?.isConnected ? closeTarget.value : trigger.value; closeTarget.value = null; target?.focus(); emit('closed', target) }
 const requestedSection = ref('Checks')
@@ -274,7 +274,7 @@ function resetServer() {
       <p>Cancel is available beside Send while a request is running.</p>
     </details>
     <section v-if="tab === 'History'" :id="sectionId('History')" role="region" aria-label="History" tabindex="0">
-      <HistoryPanel :history="history" :operation="operation" :session="session" @restored="fixInputs" />
+      <HistoryPanel :history="history" :operation="operation" :session="session" @restored="fixInputs" @capture="entries => { dialog.close(); emit('capture-requests', entries) }" />
 
     </section>
     <p v-if="error" role="alert">{{ error }}</p>

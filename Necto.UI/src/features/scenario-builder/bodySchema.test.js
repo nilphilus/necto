@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { bodyAt, writeBody, sourceFor, schemaView, removeArrayItem, inferVariant, variantTemplate } from './bodySchema.js'
+import { bodyFieldEntries, bodyAt, writeBody, sourceFor, schemaView, removeArrayItem, inferVariant, variantTemplate } from './bodySchema.js'
 import { newBlueprint,newStep,validateBlueprint } from './model.js'
 import { savedBlueprint } from './useBuilder.js'
 import { prepareBlueprint } from './runner.js'
@@ -35,4 +35,14 @@ test('removing array entries rebases pending numeric edits without silently disc
  assert.deepEqual(s.request.bodyFieldEdits,{'/items/1/id':''})
  sourceFor(s,operation,['items',1,'id'],'generate',{type:'integer'})
  assert.equal(s.request.bodyFieldEdits,undefined)
+})
+
+test('payload editor includes values and expression paths missing from the schema', () => {
+  const s = step()
+  sourceFor(s, operation, ['limits', 'min'], 'expression', { type: 'number' })
+  assert.equal(bodyAt(s, ['limits']), undefined)
+  assert.equal(s.inputs[0].expression, '')
+  assert.deepEqual(bodyFieldEntries({ properties: { code: {} } }, JSON.parse(s.request.body), s.inputs, []).map(([key]) => key), ['code', 'items', 'limits'])
+  assert.deepEqual(bodyFieldEntries({}, undefined, s.inputs, ['limits']).map(([key]) => key), ['min'])
+  assert.throws(() => writeBody(s, operation, ['missingItems', '0', 'id'], 42), /Create the array or object/)
 })

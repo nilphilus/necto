@@ -8,7 +8,7 @@ defineProps({folder:Object})
   <button type="button" class="secondary" :disabled="folder.pending||folder.restoring" @click="folder.reload">{{folder.ready?'Reload folder':'Reconnect folder'}}</button>
   <ul v-if="folder.entries.length"><li v-for="entry in folder.entries" :key="entry.name"><div><strong>{{entry.scenario.name}}</strong><small>{{entry.kind==='builder'?'Builder':'Quick chain'}} · {{entry.scenario.steps.length}} steps</small><code :title="entry.name">{{entry.name}}</code></div><button type="button" class="secondary" :disabled="folder.pending||folder.restoring" :aria-label="'Import '+entry.scenario.name+' from folder'" @click="folder.importEntry(entry)">Import</button></li></ul>
   <p v-else-if="!folder.ready">Reconnect the folder to read its scenarios.</p>
-  <p v-else>No shared scenarios found. Save a scenario to create the necto-scenarios subfolder.</p>
+  <p v-else>No shared scenarios found. Put files ending in .necto.json directly in {{folder.path}}, then reload.</p>
  </details>
 </template>
 <style scoped>

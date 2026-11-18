@@ -22,6 +22,7 @@ export function migratePreset(entries) {
 }
 
 const bodyPresets = Symbol('body presets')
+export const protectedBodyPaths = Symbol('body paths reserved for expressions')
 
 function matchingPreset(name, siblings, layer) {
   if (layer.has(name)) return layer.get(name)
@@ -110,12 +111,12 @@ function bodyValue(value, example) {
   try { return JSON.parse(value) } catch { return value }
 }
 
-export function applyBodyPresets(operation, body, values, mediaType) {
+export function applyBodyPresets(operation, body, values, mediaType, reserved = []) {
   const layers = values.get(bodyPresets)
   const matches = new Set()
   const sources = [], paths = []
   const sourceNames = presetOrigins.get(values)?.bodyNames ?? []
-  if (!layers || mediaType !== undefined && !isJson(mediaType)) return { body, matches, sources }
+  if (!layers || reserved.some(path => !path.length) || mediaType !== undefined && !isJson(mediaType)) return { body, matches, sources }
   let parsed
   try { parsed = JSON.parse(body.trim() ? body : '{}') } catch { return { body, matches, sources } }
   let shape
@@ -126,7 +127,10 @@ export function applyBodyPresets(operation, body, values, mediaType) {
   }
   let applied = false
   let visited = 0
+  const startsWith = (path, prefix) => prefix.length <= path.length &&
+    prefix.every((segment, index) => String(segment) === String(path[index]))
   function fill(value, example, root = false, path = []) {
+    if (reserved.some(target => startsWith(path, target))) return value
     if (++visited > 5000 || path.length > 24) throw new TemplateLimitError()
     if (Array.isArray(value)) return value.map((item, index) => fill(item, example?.[index] ?? example?.[0], false, [...path, index]))
     if (!value || typeof value !== 'object') return value
@@ -142,16 +146,17 @@ export function applyBodyPresets(operation, body, values, mediaType) {
       }, undefined)
       const present = Object.hasOwn(value, name)
       const sample = Object.hasOwn(example, name) ? example[name] : undefined
-      if (entry) {
+      const fieldPath = [...path, name]
+      if (entry && !reserved.some(target => startsWith(target, fieldPath))) {
         applied = true
-        paths.push([...path, name])
-        if (source) sources.push({ path: [...path, name], preset: source })
+        paths.push(fieldPath)
+        if (source) sources.push({ path: fieldPath, preset: source })
         if (root) matches.add(name)
         entries.push([name, bodyValue(entry.value, sample ?? (present ? value[name] : undefined))])
       } else if (present) {
-        entries.push([name, fill(value[name], sample, false, [...path, name])])
+        entries.push([name, fill(value[name], sample, false, fieldPath)])
       } else if (sample && typeof sample === 'object' && !Array.isArray(sample)) {
-        const nested = fill({}, sample, false, [...path, name])
+        const nested = fill({}, sample, false, fieldPath)
         if (Object.keys(nested).length) entries.push([name, nested])
       }
     }
@@ -292,7 +297,7 @@ export function buildRequest(operation, configuration, draft, values = new Map()
     const content = bodyContent(operation, draft)
     if (!content) throw new Error('This request has no supported media type.')
     if (isJson(content[0])) {
-      const { body, notice } = applyBodyPresets(operation, draft.body ?? '', values, content[0])
+      const { body, notice } = applyBodyPresets(operation, draft.body ?? '', values, content[0], draft[protectedBodyPaths])
       if (notice) throw new Error(notice)
       if (body.trim() || operation.requestBody.required) {
         try { JSON.parse(body) } catch (cause) { throw new Error(jsonBodyIssue(body, cause)) }
