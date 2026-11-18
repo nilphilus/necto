@@ -39,7 +39,15 @@ const inbound = computed(() => selected.value ? allConnections(draft.value).filt
 const selected = computed(() => draft.value.steps.find(step => step.id === selectedId.value))
 const operation = computed(() => props.operations.find(operation => operation.key === selected.value?.operationKey))
 const suggestionsOpen = ref(false)
+const suggestionSummary = ref(null)
 const suggestionProblem = ref('')
+const appliedSuggestions = ref(new Map())
+const appliedToSelected = computed(() => {
+  const inputs = selected.value?.inputs ?? []
+  return (appliedSuggestions.value.get(selectedId.value) ?? []).filter(item => inputs.some(input =>
+    ['source', 'location', 'name', 'pointer', 'stepId', 'responsePointer'].every(key => input[key] === item.input[key])))
+})
+watch(() => draft.value.id, () => appliedSuggestions.value.clear())
 const suggestions = computed(() => suggestionsOpen.value
   ? suggestInputs(draft.value, selected.value, operation.value, props.mappingLinks)
   : [])
@@ -59,6 +67,9 @@ function useSuggestion(option) {
     }
     validateBlueprint({ ...draft.value, steps })
     draft.value.steps = steps
+    const applied = appliedSuggestions.value.get(selectedId.value) ?? []
+    appliedSuggestions.value.set(selectedId.value, [...applied, { input, added: !!producer }])
+    void nextTick(() => suggestionSummary.value?.focus())
   } catch (cause) { suggestionProblem.value = cause.message }
 }
 const runStep = computed(() => execution.steps.find(step => step.id === selectedId.value))
@@ -278,7 +289,15 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
             <section class="incoming-links" aria-label="Incoming connections"><h4>Incoming connections</h4><button v-for="edge in inbound" :key="connectionKey(edge.from, edge.to)" type="button" class="secondary" @click="openConnection(edge, $event)">{{ connectionSummary(edge, draft.steps) }}<small v-if="edge.delayMs !== undefined || edge.waitFor"> · Delay / Wait for</small></button><p class="muted">Drag between handles on the map. Configure timing and response bindings using ⚙ on the line.</p></section>
             <details v-if="operation" :key="selected.id" class="input-suggestions" @toggle="suggestionsOpen = $event.target.open">
               <summary>Suggest inputs</summary>
-              <p v-if="!suggestions.length" class="muted">No available scalar or whole-value mappings for unbound inputs. Configure array selection in Dynamic inputs or the JSON builder.</p>
+              <div v-if="appliedToSelected.length" ref="suggestionSummary" tabindex="-1" role="status" class="applied-suggestions">
+                <strong>Applied suggestions</strong>
+                <ul><li v-for="{input, added} in appliedToSelected" :key="input.pointer ?? input.location + ':' + input.name">
+                  {{ input.pointer || input.name || 'Whole body' }} ← {{ draft.steps.find(step => step.id === input.stepId)?.label }}
+                  · {{ input.responsePointer || 'whole response' }} · {{ added ? 'Step added' : 'Existing step' }}
+                </li></ul>
+              </div>
+              <p v-if="!suggestions.length && appliedToSelected.length" class="muted">No further suggestions for unbound fields.</p>
+              <p v-else-if="!suggestions.length" class="muted">No available scalar or whole-value mappings for unbound inputs. Configure array selection in Dynamic inputs or the JSON builder.</p>
               <div v-for="group in suggestions" :key="group.field">
                 <strong>{{ group.field }}</strong>
                 <ul><li v-for="(option, index) in group.options" :key="index">
@@ -319,6 +338,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
   </section>
 </template>
 <style scoped>
+.applied-suggestions { background:var(--accent-soft); border-radius:.4rem; padding:.45rem .65rem; margin:.5rem 0; overflow-wrap:anywhere; }
 .input-suggestions { font-size:.78rem; margin-block:.7rem; }.input-suggestions ul { margin:.35rem 0 .65rem; padding-left:1rem; }.input-suggestions li { margin-bottom:.25rem; }.input-suggestions small { margin-inline:.4rem; color:var(--muted); }
 .step-dialog { width:min(76rem,calc(100vw - 2rem)); height:min(90dvh,60rem); max-height:calc(100dvh - 2rem); padding:0; color:inherit; box-shadow:0 16px 65px #17342650; }
 .step-dialog::backdrop { background:#17342666; }
