@@ -1,6 +1,6 @@
 import { pickRandom } from './random.js'
 import { evaluateExpression, expressionContext } from './expression.js'
-import { applyBodyPresets, buildRequest, contextKey } from '../request-runner/request.js'
+import { applyBodyPresets, buildRequest, contextKey, protectedBodyPaths } from '../request-runner/request.js'
 import { effectiveTarget } from '../workbench/target.js'
 import { sentRequest } from './sentRequest.js'
 import { applyInput, dependencies, pointerParts, readPointer, validateBlueprint } from './model.js'
@@ -9,7 +9,7 @@ import { generateValue } from './generation.js'
 import { abortableDelay, waitMatches } from './waiting.js'
 import { allConnections, connectionSummary, upgradeBlueprint } from './connections.js'
 
-export function prepareBlueprint(blueprint, { operations, configuration, createSession, valuesFor }) {
+export function prepareBlueprint(blueprint, { operations, configuration, createSession, valuesFor, protectBodyExpressions = false }) {
   validateBlueprint(blueprint)
   blueprint = upgradeBlueprint(blueprint)
   const edges = allConnections(blueprint)
@@ -22,7 +22,11 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
       throw new Error(`${definition.label}: endpoint unavailable. Check API visibility and connections.`)
     const request = { ...definition.request, fields: { ...definition.request.fields }, formFields: definition.request.formFields?.map(row => ({ ...row, files: [...(row.files ?? [])] })) }, session = createSession(operation)
     Object.assign(session, request)
-    const context = valuesFor(operation), presetBody = applyBodyPresets(operation, session.body, context, session.mediaType)
+    const expressions = definition.inputs.filter(input => input.location === 'body' && input.source === 'expression')
+    const reserved = protectBodyExpressions ? expressions.map(input => pointerParts(input.pointer)) : []
+    if (reserved.length) session[protectedBodyPaths] = reserved
+    const context = valuesFor(operation)
+    const presetBody = applyBodyPresets(operation, session.body, context, session.mediaType, reserved)
     if (presetBody.notice) throw new Error(`${definition.label}: ${presetBody.notice}`)
     session.body = presetBody.body
     // Presets are run overrides, including bindings, generated and human inputs.
@@ -31,7 +35,7 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
     for (const input of definition.inputs) if (input.location === 'body' && input.pointer) {
       try { applyInput(probe, operation, input, null) } catch { /* Uncovered invalid targets are checked below. */ }
     }
-    const probed = applyBodyPresets(operation, probe.body, context, session.mediaType)
+    const probed = applyBodyPresets(operation, probe.body, context, session.mediaType, reserved)
     if (probed.notice) throw new Error(`${definition.label}: ${probed.notice}`)
     const paths = [...(presetBody.paths ?? []), ...(probed.paths ?? [])]
     const coveredBody = (input, candidates) => {
@@ -49,6 +53,7 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
         !operation.parameters.some(parameter => parameter.in === input.location && parameter.name === input.name)) throw new Error(`${definition.label}: input target is no longer present in the API.`)
     }
     const step = { id: definition.id, label: definition.label, operation, session, values,
+      bodyExpressions: expressions.map(input => ({ pointer: input.pointer, overridden: !activeInputs.includes(input) })),
       entryPolicies: edges.filter(edge => edge.to === definition.id).map(edge => ({ ...edge, label: connectionSummary(edge, blueprint.steps) })), presetOverrides: [...new Set([...values.keys()].filter(key => typeof key === 'string').concat(paths.map(path => 'body:/' + path.map(part => String(part).replaceAll('~','~0').replaceAll('/','~1')).join('/'))))], inputs: JSON.parse(JSON.stringify(activeInputs)), dependencies: dependencies(definition, blueprint), status: 'waiting', error: '' }
     // Check every static request before sending anything. Dynamic values are checked again at dispatch.
     const draft = { ...session, fields: { ...session.fields } }

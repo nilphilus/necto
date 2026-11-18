@@ -15,6 +15,28 @@ export function schemaView(operation, raw, variant=0, seen=new Set()) {
 }
 export function bodyAt(step,path) { try{return readPointer(JSON.parse(step.request.body),pointer(path))}catch{return undefined} }
 export function bindingAt(step,path) { return step.inputs.find(input=>input.location==='body'&&input.pointer===pointer(path)) }
+export function bodyBindingsUnder(bindings, path) {
+  return bindings.flatMap((binding) => {
+    if (binding.location !== 'body') return []
+    try {
+      const target = pointerParts(binding.pointer)
+      return target.length > path.length && prefix(path, target) ? [target[path.length]] : []
+    } catch {
+      // The step validator reports malformed pointers while they are being edited.
+      return []
+    }
+  })
+}
+export function bodyFieldEntries(schema, value, bindings, path) {
+  const fields = new Map(Object.entries(schema.properties ?? {}))
+  const present = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  const inferred = typeof schema.additionalProperties === 'object' ? schema.additionalProperties : {}
+  for (const key of [...Object.keys(present), ...bodyBindingsUnder(bindings, path)]) {
+    if (!fields.has(key)) fields.set(key, inferred)
+  }
+  return [...fields]
+}
+
 export function clearBodyEdits(step,path=[]) {
  if(!step.request.bodyFieldEdits)return
  for(const key of Object.keys(step.request.bodyFieldEdits))if(prefix(path,pointerParts(key))||prefix(pointerParts(key),path))delete step.request.bodyFieldEdits[key]
@@ -32,8 +54,8 @@ export function editBodyNumber(step,operation,path,text,integer=false) {
 export function sourceFor(step,operation,path,source,schema) {
   const overlapping=step.inputs.filter(input=>input.location==='body'&&(prefix(path,pointerParts(input.pointer))||prefix(pointerParts(input.pointer),path)))
   const next=step.inputs.filter(input=>!overlapping.includes(input))
-  if(source!=='static')next.push({location:'body',pointer:pointer(path),source,...(source==='random'?{stepId:'',responsePointer:'',itemPointer:''}:source==='expression'?{expression:'return null;',bindings:[]}:source==='response'?{stepId:'',responsePointer:''}:source==='variable'?{variableId:''}:source==='generate'?{generator:schema.format==='email'?'email':schema.type==='integer'||schema.type==='number'?'integer':schema.type==='boolean'?'boolean':'uuid',pattern:'INV-[A-Z]{3}-\\d{4}'}:source==='human'?{prompt:'Enter '+(path.at(-1)??'request body'),valueType:schema.type==='number'||schema.type==='integer'?'number':schema.type==='boolean'?'boolean':schema.type==='object'||schema.type==='array'?'json':'text'}:{})})
-  if(source!=='static'&&bodyAt(step,path)===undefined)writeBody(step,operation,path,schemaTemplate(operation,schema))
+  if(source!=='static')next.push({location:'body',pointer:pointer(path),source,...(source==='random'?{stepId:'',responsePointer:'',itemPointer:''}:source==='expression'?{expression:'',bindings:[]}:source==='response'?{stepId:'',responsePointer:''}:source==='variable'?{variableId:''}:source==='generate'?{generator:schema.format==='email'?'email':schema.type==='integer'||schema.type==='number'?'integer':schema.type==='boolean'?'boolean':'uuid',pattern:'INV-[A-Z]{3}-\\d{4}'}:source==='human'?{prompt:'Enter '+(path.at(-1)??'request body'),valueType:schema.type==='number'||schema.type==='integer'?'number':schema.type==='boolean'?'boolean':schema.type==='object'||schema.type==='array'?'json':'text'}:{})})
+  if(source!=='static'&&source!=='expression'&&bodyAt(step,path)===undefined)writeBody(step,operation,path,schemaTemplate(operation,schema))
   step.inputs=next;clearBodyEdits(step,path)
 }
 export function removeBodyField(step,path) {

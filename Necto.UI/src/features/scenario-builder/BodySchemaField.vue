@@ -7,6 +7,8 @@ import DescriptionHelp from '../workbench/DescriptionHelp.vue'
 import { computed, ref, watch, inject } from 'vue'
 import {
   bodyAt,
+  bodyFieldEntries,
+  bodyBindingsUnder,
   bindingAt,
   writeBody,
   sourceFor,
@@ -82,12 +84,27 @@ function useExample(index, element) {
   if (index !== '') set(examples.value[Number(index)].value)
   element.value = ''
 }
+const value = computed(current)
+const bodyBindings = computed(() => props.step.inputs.filter((input) => input.location === 'body'))
+const properties = computed(() => bodyFieldEntries(schema.value, value.value, bodyBindings.value, props.path))
+const descendantFields = computed(() => new Set(bodyBindingsUnder(bodyBindings.value, props.path)))
+const visibleProperties = computed(() => properties.value.filter(([name], index) =>
+  index < visible.value || descendantFields.value.has(name)))
+const arrayRows = computed(() => {
+  if (!Array.isArray(value.value)) return []
+  const indices = new Set(value.value.slice(0, itemsVisible.value).map((_, index) => index))
+  for (const field of descendantFields.value) {
+    if (/^(?:0|[1-9]\d*)$/.test(field) && Number(field) < value.value.length) indices.add(Number(field))
+  }
+  return [...indices].sort((left, right) => left - right)
+})
+watch(() => descendantFields.value.size, (count) => { if (count) open.value = true }, { immediate: true })
 const type = computed(() => {
   const t = schema.value.type
   return Array.isArray(t)
     ? t.find((t) => t !== 'null')
     : (t ??
-        (Object.keys(schema.value.properties ?? {}).length
+        (properties.value.length
           ? 'object'
           : schema.value.items
             ? 'array'
@@ -100,10 +117,8 @@ const type = computed(() => {
               : 'string'))
 })
 const nullable = computed(() => schema.value.nullable || schema.value.type?.includes?.('null'))
-const value = computed(current),
-  binding = computed(() => bindingAt(props.step, props.path)),
-  source = computed(() => binding.value?.source ?? 'static')
-const properties = computed(() => Object.entries(schema.value.properties ?? {}))
+const binding = computed(() => bindingAt(props.step, props.path))
+const source = computed(() => binding.value?.source ?? 'static')
 const recursive = computed(
   () => props.depth >= 16 || props.ancestors.includes(props.raw?.$ref ?? props.raw)
 )
@@ -193,11 +208,9 @@ function hints() {
 }
 function changeVariant(index, element) {
   attempt(() => {
-    if (!window.confirm('Replace this field with the selected schema variant?')) return
-    const selected = schemaView(props.operation, props.raw, Number(index))
+    if (!window.confirm('Replace static values with the selected schema variant and keep configured value sources?')) return
     const next = variantTemplate(props.operation, props.raw, Number(index))
     writeBody(props.step, props.operation, props.path, next)
-    sourceFor(props.step, props.operation, props.path, 'static', selected)
     props.step.request.bodyVariants = {
       ...props.step.request.bodyVariants,
       [pointer(props.path)]: Number(index),
@@ -212,6 +225,7 @@ function changeVariant(index, element) {
     :data-body-path="pointer(path)"
     :class="{
       'root-field': !path.length,
+      'runtime-field': source !== 'static',
       'omitted-field': path.length && value === undefined && source === 'static',
     }"
   >
@@ -257,6 +271,7 @@ function changeVariant(index, element) {
           :description="schema.description"
         /><span v-if="value === undefined && source === 'static'" class="sr-only"
           >Not included in request</span
+        ><span v-if="descendantFields.size && !open" class="field-badge">{{ descendantFields.size }} run-time inputs</span
         ><span v-if="schema.readOnly" class="field-badge">read only</span>
       </div>
       <fieldset :disabled="disabled" class="field-editor">
@@ -433,7 +448,8 @@ function changeVariant(index, element) {
       <RandomSourceEditor :source="binding" :step="step" :steps="steps" :disabled="disabled" />
     </details>
     <details v-if="source === 'expression'" class="expression-details" open>
-      <summary>Configure expression</summary>
+      <summary>Expression <code>{{ pointer(path) || '(whole body)' }}</code></summary>
+      <p class="field-note">This value is calculated before sending the request.</p>
       <ExpressionEditor
         :input="binding"
         :step="step"
@@ -442,7 +458,7 @@ function changeVariant(index, element) {
         :disabled="disabled"
       />
     </details>
-    <div v-if="source === 'static' && open && value !== null" class="schema-children">
+    <div v-if="source === 'static' && open && (value !== null || descendantFields.size)" class="schema-children">
       <label v-if="variants.length"
         >Schema variant<select
           :value="variant"
@@ -471,8 +487,8 @@ function changeVariant(index, element) {
       </template>
       <template v-else-if="type === 'object' && properties.length">
         <BodySchemaField
-          v-for="([key, property], index) in properties.slice(0, visible)"
-          :last="index === properties.length - 1"
+          v-for="([key, property], index) in visibleProperties"
+          :last="index === visibleProperties.length - 1"
           :key="key"
           :raw="property"
           :operation="operation"
@@ -490,12 +506,12 @@ function changeVariant(index, element) {
           @raw="emit('raw')"
         />
         <button
-          v-if="visible < properties.length"
+          v-if="visibleProperties.length < properties.length"
           type="button"
           class="secondary"
           @click="visible += 50"
         >
-          Show next fields ({{ visible }} / {{ properties.length }})
+          Show next fields ({{ visibleProperties.length }} / {{ properties.length }})
         </button>
         <button
           v-if="schema.additionalProperties"
@@ -508,7 +524,7 @@ function changeVariant(index, element) {
       </template>
       <template v-else-if="type === 'array'"
         ><div
-          v-for="(item, index) in (Array.isArray(value) ? value : []).slice(0, itemsVisible)"
+          v-for="index in arrayRows"
           :key="index"
           class="array-item"
         >
@@ -539,12 +555,12 @@ function changeVariant(index, element) {
           </button>
         </div>
         <button
-          v-if="Array.isArray(value) && value.length > itemsVisible"
+          v-if="Array.isArray(value) && value.length > arrayRows.length"
           type="button"
           class="secondary"
           @click="itemsVisible += 10"
         >
-          Show more items ({{ itemsVisible }} / {{ value.length }})</button
+          Show more items ({{ arrayRows.length }} / {{ value.length }})</button
         ><button
           type="button"
           class="secondary"
@@ -583,6 +599,9 @@ function changeVariant(index, element) {
   </section>
 </template>
 <style scoped>
+.runtime-field > .json-line { border-inline-start: 2px solid var(--accent); padding-inline-start: .45rem; }
+.expression-details summary code { margin-inline-start: .25rem; overflow-wrap: anywhere; }
+
 .expression-details {
   margin: 0.3rem 0 0.5rem 1rem;
   font: 0.72rem system-ui;
