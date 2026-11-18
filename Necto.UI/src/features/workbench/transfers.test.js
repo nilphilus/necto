@@ -1,3 +1,4 @@
+import { newBlueprint } from '../scenario-builder/model.js';
 import { exportWorkspace } from './workspace.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -177,4 +178,30 @@ test('saved-request export preserves the structured API/operation scope key', ()
     })
   });
   assert.equal(exportWorkspace(store).entries[0].key, sampleKey);
+});
+
+test('workspace transfer imports Builder definitions by ID and preserves unrelated definitions', () => {
+  const builderKey = 'necto:scenario-builder:https://api.test/openapi.json';
+  const first = { ...newBlueprint(), name: 'First' };
+  const second = { ...newBlueprint(), name: 'Second' };
+  const source = storage({
+    [builderKey]: JSON.stringify({ version: 1, blueprints: [first, second] })
+  });
+  const destination = storage();
+  const plan = planTransfer(exportWorkspace(source, true), destination);
+  assert.deepEqual(plan.map(({ id, label }) => [id, label]), [
+    [first.id, 'First'], [second.id, 'Second']
+  ]);
+  applyTransfer(plan, destination);
+
+  source.setItem(builderKey, JSON.stringify({
+    version: 1, blueprints: [{ ...first, name: 'First updated' }]
+  }));
+  const replacement = planTransfer(exportWorkspace(source, true), destination);
+  assert.equal(replacement[0].action, 'keep');
+  replacement[0].action = 'replace';
+  applyTransfer(replacement, destination);
+  assert.deepEqual(JSON.parse(destination.getItem(builderKey)).blueprints, [
+    { ...first, name: 'First updated' }, second
+  ]);
 });
