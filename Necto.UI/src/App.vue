@@ -2,7 +2,8 @@
 import { useScenarioFolder } from './features/scenario-folder/useScenarioFolder.js'
 import OperationTasks from './features/api-catalog/OperationTasks.vue'
 import DescriptionHelp from './features/workbench/DescriptionHelp.vue'
-import { scenarioTargets } from './features/workbench/scenarioTargets.js'
+import { scenarioTargets } from './features/scenarios/scenarioTargets.js'
+import { useScenarioEditing } from './features/scenarios/useScenarioEditing.js'
 import { workspaceIdentity } from './features/workbench/workspaceIdentity.js'
 import { usePresets } from './features/presets/usePresets.js'
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
@@ -28,7 +29,7 @@ import EntityGraph from './features/entity-graph/EntityGraph.vue'
 import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
 import ScenarioBuilder from './features/scenario-builder/ScenarioBuilder.vue'
 import { useScenarios } from './features/scenarios/useScenarios.js'
-import { rememberBinding, snapshotScenario } from './features/scenarios/scenario.js'
+import { rememberBinding } from './features/scenarios/scenario.js'
 import { readRoute, routePath } from './features/routing/routes.js'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
 import { buildRequest, fieldKey, contextKey, hasPresetFor, presetInputs } from './features/request-runner/request.js'
@@ -54,20 +55,11 @@ const builderPending = ref(false)
 const builderVisited = ref(false)
 const scenarioStore = useScenarios(configuration)
 const { scenarios, state: scenarioState, runs: scenarioRuns, pending: scenarioPending, error: scenarioError } = scenarioStore
-const scenarioName = ref('')
 const scenarioDialog = ref(null)
 const requestSamples = ref(null)
-const editingScenarioId = ref(''), editingFolderSource = shallowRef(null)
-watch(editingScenarioId,()=>{editingFolderSource.value=null},{flush:'sync'})
-const editingScenario = computed(() => scenarios.value.find(scenario => scenario.id === editingScenarioId.value))
-const scenarioDirty = computed(() => {
-  const saved = editingScenario.value
-  if (!saved) return false
-  try { return JSON.stringify(snapshotScenario(chain.value, saved.name, saved.id, valuesFor).steps) !== JSON.stringify(saved.steps) }
-  catch { return true }
-})
-const overwriteScenario = computed(() => scenarios.value.find(scenario =>
-  scenario.id === editingScenarioId.value && scenario.name === scenarioName.value.trim()))
+const { scenarioName, editingScenarioId, editingFolderSource, editingScenario,
+  scenarioDirty, overwriteScenario, saveEditing, selectOriginalName, suggestCopyName } =
+  useScenarioEditing(scenarioStore, () => chain.value, (...args) => valuesFor(...args))
 const scenarioFolder = useScenarioFolder(configuration,operations,computed(()=>scenarioPending.value||builderPending.value))
 const workspaceLocked = computed(() => scenarioPending.value || builderPending.value || scenarioFolder.pending)
 const scenarioBusy = computed(() => workspaceLocked.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
@@ -620,10 +612,7 @@ function builderPresetContext(names) {
 }
 function saveScenario() {
   try {
-    const saved = scenarioStore.save(chain.value, scenarioName.value, overwriteScenario.value?.id, valuesFor, overwriteScenario.value?.id===editingScenarioId.value?editingFolderSource.value:undefined)
-    editingScenarioId.value = saved.id
-    editingFolderSource.value = saved._sharedSource??null
-    scenarioName.value = saved.name
+    saveEditing()
     writeRoute(activeRoute, { replace: true, preserveUrl: true })
     scenarioDialog.value?.close()
   }
@@ -631,11 +620,11 @@ function saveScenario() {
 }
 function updateEditingScenario() {
   if (!editingScenario.value) return
-  scenarioName.value = editingScenario.value.name
+  selectOriginalName()
   saveScenario()
 }
 function copyEditingScenario() {
-  scenarioName.value = editingScenario.value.name + ' copy'
+  suggestCopyName()
   scenarioDialog.value.showModal()
 }
 

@@ -47,7 +47,7 @@ test('a canceled request from the previous workspace cannot repopulate the new h
 })
 
 test('scenario preflight resolves the currently selected server without executing',async()=>{
- const { scenarioTargets }=await import('./scenarioTargets.js')
+ const { scenarioTargets }=await import('../scenarios/scenarioTargets.js')
  const operation={key:'GET /lookup',apiId:'local',apiName:'Partner',method:'GET',path:'/lookup',parameters:[],tags:['Other'],servers:[{url:'https://partner.test/v2'}]}
  const scenario={version:1,id:'s',name:'s',steps:[{operationKey:operation.key,apiId:'local',method:'GET',path:'/lookup',name:'Lookup',fields:{},body:'',bindings:[],serverIndex:0}]}
  const targets=scenarioTargets(scenario,{operations:[operation],links:[],configuration:{openApiUrl:'https://example.test/openapi.json'},createSession:()=>({}),valuesFor:()=>new Map()})
