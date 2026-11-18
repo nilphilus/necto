@@ -1,11 +1,11 @@
 import { notifyWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { sharedOrigin } from './origin.js'
 
-export function teamCollection({ keyForWorkspace, property, canonical }) {
+export function teamCollection({ keyForWorkspace, property, collection, canonical }) {
   function importDefinition({ storage, workspace, definition, confirmReplace, guard, byteLimit }) {
     const collectionKey = keyForWorkspace(workspace)
     const before = storage.getItem(collectionKey)
-    const stored = before ? JSON.parse(before) : { version: 1, [property]: [] }
+    const stored = before ? JSON.parse(before) : collection()
     if (stored.version !== 1 || !Array.isArray(stored[property]))
       throw new Error(
         'The saved browser collection is invalid. Export or repair it before importing.'
@@ -29,7 +29,7 @@ export function teamCollection({ keyForWorkspace, property, canonical }) {
     const next = [...existing.filter((item) => item.id !== definition.id), definition]
     if (next.length > 100)
       throw new Error('A browser scenario collection supports at most 100 definitions.')
-    const text = JSON.stringify({ version: 1, [property]: next })
+    const text = JSON.stringify(collection(next))
     if (new TextEncoder().encode(text).length > byteLimit)
       throw new Error(
         'The browser collection would exceed 2 MiB. Remove or export some saved definitions first.'

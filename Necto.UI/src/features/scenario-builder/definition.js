@@ -75,9 +75,19 @@ export function sharedBlueprint(scenario) {
   return definition
 }
 
+export const builderCollectionKey = (workspace) => 'necto:scenario-builder:' + workspace
+export const builderCollection = (blueprints = []) => ({ version: 1, blueprints })
+
+export function readBuilderCollection(text) {
+  const collection = JSON.parse(text) ?? builderCollection()
+  validateBuilderCollection(collection)
+  return collection.blueprints
+}
+
 export const teamDefinitions = teamCollection({
-  keyForWorkspace: (workspace) => 'necto:scenario-builder:' + workspace,
+  keyForWorkspace: builderCollectionKey,
   property: 'blueprints',
+  collection: builderCollection,
   canonical: sharedBlueprint,
 })
 
@@ -90,7 +100,7 @@ export function validateBuilderCollection(value) {
 }
 
 export const builderTransfer = {
-  empty: () => ({ version: 1, blueprints: [] }),
+  empty: builderCollection,
   records: ({ blueprints }) =>
     blueprints.map((value) => ({ id: value.id, label: value.name, value })),
   upsert(collection, id, value) {
