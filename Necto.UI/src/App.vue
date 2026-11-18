@@ -735,69 +735,228 @@ function removeScenario(id) {
   <main class="app">
     <header class="hero" :inert="settingsOpen">
       <nav v-if="spec" class="view-navigation" aria-label="Workspace views">
-        <button type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="!graphView" @click="navigateView('')">API</button>
-        <button v-if="configuration?.agentUrl" type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="graphView === 'agent'" @click="navigateView('agent')">Bring your agent</button>
-        <button type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="graphView === 'scenarios' || graphView === 'builder'" @click="navigateView('scenarios')">Scenarios</button>
-        <button type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="graphView === 'entities'" @click="navigateView('entities')">Entity graph</button>
-        <button type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="graphView === 'endpoints'" @click="navigateView('endpoints')">Endpoint graph</button>
+        <button
+          type="button"
+          class="secondary"
+          :disabled="workspaceLocked"
+          :aria-pressed="!graphView"
+          @click="navigateView('')"
+        >
+          API
+        </button>
+        <button
+          v-if="configuration?.agentUrl"
+          type="button"
+          class="secondary"
+          :disabled="workspaceLocked"
+          :aria-pressed="graphView === 'agent'"
+          @click="navigateView('agent')"
+        >
+          Bring your agent
+        </button>
+        <button
+          type="button"
+          class="secondary"
+          :disabled="workspaceLocked"
+          :aria-pressed="graphView === 'scenarios' || graphView === 'builder'"
+          @click="navigateView('scenarios')"
+        >
+          Scenarios
+        </button>
+        <button
+          type="button"
+          class="secondary"
+          :disabled="workspaceLocked"
+          :aria-pressed="graphView === 'entities'"
+          @click="navigateView('entities')"
+        >
+          Entity graph
+        </button>
+        <button
+          type="button"
+          class="secondary"
+          :disabled="workspaceLocked"
+          :aria-pressed="graphView === 'endpoints'"
+          @click="navigateView('endpoints')"
+        >
+          Endpoint graph
+        </button>
       </nav>
       <label v-if="spec" class="mobile-workspace-view">
         <span class="sr-only">Workspace view</span>
-        <select :value="graphView" :disabled="workspaceLocked" @change="navigateView($event.target.value)">
-          <option value="">API</option><option v-if="configuration?.agentUrl" value="agent">Bring your agent</option><option value="scenarios">Scenarios</option><option value="builder">Scenario Builder</option><option value="entities">Entity graph</option><option value="endpoints">Endpoint graph</option>
+        <select
+          :value="graphView"
+          :disabled="workspaceLocked"
+          @change="navigateView($event.target.value)"
+        >
+          <option value="">API</option>
+          <option v-if="configuration?.agentUrl" value="agent">Bring your agent</option>
+          <option value="scenarios">Scenarios</option>
+          <option value="builder">Scenario Builder</option>
+          <option value="entities">Entity graph</option>
+          <option value="endpoints">Endpoint graph</option>
         </select>
       </label>
       <div class="api-identity">
         <div class="api-info">
-          <DescriptionHelp class="mobile-api-about" label="About API" :trigger-text="spec?.info?.title ?? 'API documentation'" :context="spec?.info?.version ? 'Version ' + spec.info.version : spec?.info?.title" :summary="spec?.info?.summary" :description="spec?.info?.description" />
+          <DescriptionHelp
+            class="mobile-api-about"
+            label="About API"
+            :trigger-text="spec?.info?.title ?? 'API documentation'"
+            :context="spec?.info?.version ? 'Version ' + spec.info.version : spec?.info?.title"
+            :summary="spec?.info?.summary"
+            :description="spec?.info?.description"
+          />
           <div class="api-title">
-            <small v-if="documentSource.kind === 'import'" :title="documentSource.name">Imported</small><h1 :title="spec?.info?.title">{{ spec?.info?.title ?? 'API documentation' }}</h1>
+            <small v-if="documentSource.kind === 'import'" :title="documentSource.name"
+              >Imported</small
+            >
+            <h1 :title="spec?.info?.title">{{ spec?.info?.title ?? 'API documentation' }}</h1>
             <small v-if="spec?.info?.version">Version {{ spec.info.version }}</small>
           </div>
-          <DescriptionHelp class="desktop-api-help" label="About API" :summary="spec?.info?.summary" :description="spec?.info?.description" />
+          <DescriptionHelp
+            class="desktop-api-help"
+            label="About API"
+            :summary="spec?.info?.summary"
+            :description="spec?.info?.description"
+          />
         </div>
-        <button ref="authorizationButton" type="button" class="secondary authorize-button" aria-label="Authorize" :title="authorizedCount ? 'Authorize · configured' : 'Authorize'" :data-configured="authorizedCount > 0" @click="openAuthorization()"><svg class="authorize-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="4"/><path d="m11 11 9 9m-3-3 2-2m-5 2 2-2"/></svg><span class="authorize-label">Authorize<small v-if="authorizedCount"> · configured</small></span></button>
-        <button v-if="spec" ref="settingsButton" type="button" class="secondary settings-icon" :disabled="workspaceLocked"
-          aria-label="Settings" title="Settings" :aria-expanded="settingsOpen" :aria-controls="settingsOpen ? 'settings-panel' : undefined" @click="toggleSettings">
+        <button
+          ref="authorizationButton"
+          type="button"
+          class="secondary authorize-button"
+          aria-label="Authorize"
+          :title="authorizedCount ? 'Authorize · configured' : 'Authorize'"
+          :data-configured="authorizedCount > 0"
+          @click="openAuthorization()"
+        >
+          <svg class="authorize-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="8" cy="8" r="4" />
+            <path d="m11 11 9 9m-3-3 2-2m-5 2 2-2" /></svg
+          ><span class="authorize-label"
+            >Authorize<small v-if="authorizedCount"> · configured</small></span
+          >
+        </button>
+        <button
+          v-if="spec"
+          ref="settingsButton"
+          type="button"
+          class="secondary settings-icon"
+          :disabled="workspaceLocked"
+          aria-label="Settings"
+          title="Settings"
+          :aria-expanded="settingsOpen"
+          :aria-controls="settingsOpen ? 'settings-panel' : undefined"
+          @click="toggleSettings"
+        >
           <span aria-hidden="true">⚙︎</span>
         </button>
       </div>
     </header>
 
-    <AuthorizationDialog v-if="authorizationOpen" :authentication="authentication" :api-id="authorizationApiId" @close="closeAuthorization" :retry-documentation="retryAuthorizedMetadata" />
-    <p v-if="error" class="app-message error" role="alert">{{ error }} <button type="button" class="secondary" @click="retryAuthorizedMetadata">Retry documentation</button></p>
+    <AuthorizationDialog
+      v-if="authorizationOpen"
+      :authentication="authentication"
+      :api-id="authorizationApiId"
+      @close="closeAuthorization"
+      :retry-documentation="retryAuthorizedMetadata"
+    />
+    <p v-if="error" class="app-message error" role="alert">
+      {{ error }}
+      <button type="button" class="secondary" @click="retryAuthorizedMetadata">
+        Retry documentation
+      </button>
+    </p>
     <p v-else-if="!spec" class="app-message" role="status">Loading API documentation…</p>
     <template v-else>
-      <p v-if="spec?.['x-necto-import-warning']" class="app-message" role="status">{{ spec['x-necto-import-warning'] }}</p>
+      <p v-if="spec?.['x-necto-import-warning']" class="app-message" role="status">
+        {{ spec['x-necto-import-warning'] }}
+      </p>
       <p v-if="routeError" class="app-message error" role="alert">{{ routeError }}</p>
       <p v-else-if="pendingRoute" class="app-message" role="status">Loading workspace view…</p>
-      <div v-if="settingsOpen" class="settings-backdrop" aria-hidden="true" @click="closeSettings"></div>
+      <div
+        v-if="settingsOpen"
+        class="settings-backdrop"
+        aria-hidden="true"
+        @click="closeSettings"
+      ></div>
       <Transition name="settings-drawer">
-        <aside v-if="settingsOpen" id="settings-panel" class="work-area settings" :class="{ 'settings-presets': settingsTab === 'presets' }" role="dialog" aria-modal="true" @keydown="trapSettingsFocus" aria-labelledby="settings-title" @keydown.esc.stop="closeSettings">
+        <aside
+          v-if="settingsOpen"
+          id="settings-panel"
+          class="work-area settings"
+          :class="{ 'settings-presets': settingsTab === 'presets' }"
+          role="dialog"
+          aria-modal="true"
+          @keydown="trapSettingsFocus"
+          aria-labelledby="settings-title"
+          @keydown.esc.stop="closeSettings"
+        >
           <div class="settings-header">
             <h2 id="settings-title">Settings</h2>
-            <button ref="settingsCloseButton" type="button" class="secondary settings-icon" aria-label="Close settings" @click="closeSettings">
+            <button
+              ref="settingsCloseButton"
+              type="button"
+              class="secondary settings-icon"
+              aria-label="Close settings"
+              @click="closeSettings"
+            >
               <span aria-hidden="true">×</span>
             </button>
             <nav class="settings-sections" aria-label="Settings sections">
-              <button type="button" class="secondary" :aria-pressed="settingsTab === 'presets'" @click="settingsTab = 'presets'">Presets</button>
-              <button type="button" class="secondary" :aria-pressed="settingsTab === 'connections'" @click="settingsTab = 'connections'">External APIs</button>
-              <button type="button" class="secondary" :aria-pressed="settingsTab === 'workspace'" @click="settingsTab = 'workspace'">Workspace</button>
+              <button
+                type="button"
+                class="secondary"
+                :aria-pressed="settingsTab === 'presets'"
+                @click="settingsTab = 'presets'"
+              >
+                Presets
+              </button>
+              <button
+                type="button"
+                class="secondary"
+                :aria-pressed="settingsTab === 'connections'"
+                @click="settingsTab = 'connections'"
+              >
+                External APIs
+              </button>
+              <button
+                type="button"
+                class="secondary"
+                :aria-pressed="settingsTab === 'workspace'"
+                @click="settingsTab = 'workspace'"
+              >
+                Workspace
+              </button>
             </nav>
           </div>
           <div :inert="workspaceLocked">
-            <section v-show="settingsTab === 'presets'" class="preset-panel" aria-labelledby="presets-title">
+            <section
+              v-show="settingsTab === 'presets'"
+              class="preset-panel"
+              aria-labelledby="presets-title"
+            >
               <header class="preset-intro">
                 <h3 id="presets-title">Request presets</h3>
-                <p class="muted">Save shared values and activate a preset to use them in matching requests.</p>
+                <p class="muted">
+                  Save shared values and activate a preset to use them in matching requests.
+                </p>
               </header>
               <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
               <div class="preset-layout">
                 <div class="preset-picker">
                   <ul v-if="presets.size" ref="presetList" class="preset-list" aria-label="Presets">
                     <li v-for="name in presets.keys()" :key="name">
-                      <button type="button" :aria-current="editedPresetName === name ? 'true' : undefined" @click="editedPresetName = name">
-                        <span class="preset-dot" :style="{ backgroundColor: presetColors.get(name) ?? defaultPresetColor }" aria-hidden="true"></span>
+                      <button
+                        type="button"
+                        :aria-current="editedPresetName === name ? 'true' : undefined"
+                        @click="editedPresetName = name"
+                      >
+                        <span
+                          class="preset-dot"
+                          :style="{ backgroundColor: presetColors.get(name) ?? defaultPresetColor }"
+                          aria-hidden="true"
+                        ></span>
                         <span class="preset-item-name">{{ name }}</span>
                         <small v-if="activePresetNames.includes(name)">Active</small>
                       </button>
@@ -806,8 +965,16 @@ function removeScenario(id) {
                   <form class="preset-create" @submit.prevent="addPreset">
                     <label for="new-preset-name">New preset</label>
                     <div>
-                      <input id="new-preset-name" ref="presetNameInput" v-model="newPresetName" placeholder="e.g. Staging" required>
-                      <button type="submit" :class="presets.size ? 'secondary' : 'primary'">Add</button>
+                      <input
+                        id="new-preset-name"
+                        ref="presetNameInput"
+                        v-model="newPresetName"
+                        placeholder="e.g. Staging"
+                        required
+                      />
+                      <button type="submit" :class="presets.size ? 'secondary' : 'primary'">
+                        Add
+                      </button>
                     </div>
                   </form>
                 </div>
@@ -816,34 +983,85 @@ function removeScenario(id) {
                     <h4>{{ editedPresetName }}</h4>
                     <label class="preset-color-field">
                       Color
-                      <input type="color" :value="presetColors.get(editedPresetName) ?? defaultPresetColor"
-                        @input="savePresetColor($event.target.value)">
+                      <input
+                        type="color"
+                        :value="presetColors.get(editedPresetName) ?? defaultPresetColor"
+                        @input="savePresetColor($event.target.value)"
+                      />
                     </label>
                     <label class="preset-active-field">
-                      <input type="checkbox" :checked="activePresetNames.includes(editedPresetName)"
-                        @change="togglePreset(editedPresetName, $event.target.checked)">
+                      <input
+                        type="checkbox"
+                        :checked="activePresetNames.includes(editedPresetName)"
+                        @change="togglePreset(editedPresetName, $event.target.checked)"
+                      />
                       Use in requests
                     </label>
                   </header>
-                  <ValuesEditor :key="editedPresetName" ref="presetFields" :values="editedPresetValues" label="Preset fields" @save="savePresetValues" />
+                  <ValuesEditor
+                    :key="editedPresetName"
+                    ref="presetFields"
+                    :values="editedPresetValues"
+                    label="Preset fields"
+                    @save="savePresetValues"
+                  />
                   <footer class="preset-detail-footer">
-                    <button v-if="!confirmingPresetDeletion" ref="presetDeleteControl" type="button" class="preset-delete secondary" @click="confirmPresetDeletion(true)">Delete preset</button>
+                    <button
+                      v-if="!confirmingPresetDeletion"
+                      ref="presetDeleteControl"
+                      type="button"
+                      class="preset-delete secondary"
+                      @click="confirmPresetDeletion(true)"
+                    >
+                      Delete preset
+                    </button>
                     <div v-else class="preset-delete-confirmation">
                       <p>Delete this preset and its fields?</p>
-                      <button ref="presetDeleteControl" type="button" class="secondary" @click="confirmPresetDeletion(false)">Cancel</button>
-                      <button type="button" class="preset-delete secondary" @click="removePreset">Delete preset</button>
+                      <button
+                        ref="presetDeleteControl"
+                        type="button"
+                        class="secondary"
+                        @click="confirmPresetDeletion(false)"
+                      >
+                        Cancel
+                      </button>
+                      <button type="button" class="preset-delete secondary" @click="removePreset">
+                        Delete preset
+                      </button>
                     </div>
                   </footer>
                 </div>
                 <div v-else class="preset-empty">
                   <h4>{{ presets.size ? 'Select a preset' : 'No presets yet' }}</h4>
-                  <p class="muted">{{ presets.size ? 'Choose a preset to edit its fields.' : 'Name your first preset to start adding fields.' }}</p>
+                  <p class="muted">
+                    {{
+                      presets.size
+                        ? 'Choose a preset to edit its fields.'
+                        : 'Name your first preset to start adding fields.'
+                    }}
+                  </p>
                 </div>
               </div>
             </section>
-            <WorkspaceSettings :folder="scenarioFolder" v-show="settingsTab === 'workspace'" v-model:catalog-width="catalogWidth" :import-document="importDocument" :document-source="documentSource" :restore-document="restoreServerDocument" :operations="operations" />
-            <ExternalApiSettings v-show="settingsTab === 'connections'" v-model:show="showExternalApis" :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
-              :save="externalApis.saveConnection" :remove="externalApis.removeConnection" :test="externalApis.testConnection" />
+            <WorkspaceSettings
+              :folder="scenarioFolder"
+              v-show="settingsTab === 'workspace'"
+              v-model:catalog-width="catalogWidth"
+              :import-document="importDocument"
+              :document-source="documentSource"
+              :restore-document="restoreServerDocument"
+              :operations="operations"
+            />
+            <ExternalApiSettings
+              v-show="settingsTab === 'connections'"
+              v-model:show="showExternalApis"
+              :connections="connections"
+              :statuses="externalStatuses"
+              :storage-error="externalStorageError"
+              :save="externalApis.saveConnection"
+              :remove="externalApis.removeConnection"
+              :test="externalApis.testConnection"
+            />
           </div>
         </aside>
       </Transition>
