@@ -1,5 +1,5 @@
 import { validateRandom } from './random.js'
-import { validateExpression } from './expression.js'
+import { expressionContext, validateExpression } from './expression.js'
 import { payloadSnapshot, validatePayloadSnapshot, bodyContent, isJson } from '../workbench/body.js'
 import { executionOptions } from '../workbench/executionOptions.js'
 import { validateAssertions } from '../workbench/assertions.js'
@@ -97,8 +97,9 @@ export function validateBlueprint(blueprint) {
       if (input.source === 'expression') {
         if (blueprint.version < 6) throw new Error('Expressions require Scenario Builder version 6.')
         expressionCount++; expressionChars+=typeof input.expression==='string'?input.expression.length:0; expressionBindings+=input.bindings?.length??0
-        if(expressionCount>100||expressionChars>65536||expressionBindings>256)throw new Error('Scenario expression budget exceeded (100 expressions, 64 KiB source characters, 256 bindings).')
-        validateExpression(input)
+        if(expressionCount>100||expressionChars>65536||expressionBindings>256)throw new Error(`${expressionContext(step, input)}. Scenario expression budget exceeded (100 expressions, 64 KiB source characters, 256 bindings).`)
+        try { validateExpression(input) }
+        catch (cause) { throw new Error(`${expressionContext(step, input)}. ${cause.message}`) }
       }
       if (input.source === 'random') { if(blueprint.version<7)throw new Error('Pick random requires Scenario Builder version 7.');validateRandom(input) }
       if (input.source === 'generate') validateGenerator(input)
