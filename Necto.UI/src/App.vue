@@ -1031,7 +1031,10 @@ function removeScenario(id) {
           <details><summary>Targets for this run</summary>
             <ol><li v-for="(target, index) in previewScenarioTargets(scenario, presetNames)" :key="index">
               <span v-if="target.error">{{ target.error }}</span>
-              <template v-else><strong>{{ target.api }}</strong> · {{ target.target }} · <code>{{ target.operation }}</code></template>
+              <template v-else>
+                <strong>{{ target.api }}</strong> · {{ target.target }} · <code>{{ target.operation }}</code>
+                <span v-if="target.responseInputs"> · Inputs from earlier responses: {{ target.responseInputs }}</span>
+              </template>
             </li></ol>
           </details>
         </template>
