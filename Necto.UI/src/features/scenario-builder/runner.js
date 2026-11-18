@@ -1,5 +1,5 @@
 import { pickRandom } from './random.js'
-import { evaluateExpression } from './expression.js'
+import { evaluateExpression, expressionContext } from './expression.js'
 import { applyBodyPresets, buildRequest, contextKey } from '../request-runner/request.js'
 import { effectiveTarget } from '../workbench/target.js'
 import { sentRequest } from './sentRequest.js'
@@ -128,20 +128,33 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
         if (input.source === 'variable' && variableDefinitions.get(input.variableId)?.source === 'human') step.status = 'needs-input'
         let value
         if (input.source === 'expression') {
-          const values=Object.create(null)
-          for (const binding of input.bindings) {
-            combined.throwIfAborted()
-            if(binding.source === 'variable') {
-              if(variableDefinitions.get(binding.variableId)?.source === 'human') step.status='needs-input'
-              values[binding.name]=await resolveVariable(binding.variableId)
-            } else {
-              const producer=byId.get(binding.stepId)
-              if(producer?.status!=='completed') throw new Error('Expression source step is not completed.')
-              values[binding.name]=readPointer(producer.response?.json,binding.responsePointer)
+          try {
+            const values = Object.create(null)
+            for (const binding of input.bindings) {
+              combined.throwIfAborted()
+              if (binding.source === 'variable') {
+                if (variableDefinitions.get(binding.variableId)?.source === 'human') step.status = 'needs-input'
+                values[binding.name] = await resolveVariable(binding.variableId)
+              } else {
+                const producer = byId.get(binding.stepId)
+                if (producer?.status !== 'completed') throw new Error(`Source step "${binding.stepId}" is not completed.`)
+                try { values[binding.name] = readPointer(producer.response?.json, binding.responsePointer) }
+                catch {
+                  throw new Error(`Missing value for "${binding.name}" in step "${binding.stepId}" at ${binding.responsePointer || '(root)'}.`)
+                }
+              }
             }
+            combined.throwIfAborted()
+            value = evaluateExpression(input.expression, values)
+            applyInput(step.session, step.operation, input, value)
+            continue
+          } catch (cause) {
+            combined.throwIfAborted()
+            const alias = cause.code === 'missing' ? cause.path?.match(/^[A-Za-z_$][A-Za-z0-9_$]*/)?.[0] : undefined
+            const origin = alias && input.bindings.find((binding) => binding.name === alias && binding.source === 'response')
+            const source = origin ? ` Source step "${origin.stepId}", binding "${alias}" at ${origin.responsePointer || '(root)'}.` : ''
+            throw new Error(`${expressionContext(step, input)}. ${cause.message}${source} No request was sent for this step.`)
           }
-          combined.throwIfAborted()
-          value=evaluateExpression(input.expression,values)
         } else if(input.source==='random') {
           const producer=byId.get(input.stepId)
           if(producer?.status!=='completed')throw new Error('Pick random source step is not completed.')

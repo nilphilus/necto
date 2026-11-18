@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { validateExpression } from './expression.js'
 const props=defineProps({input:Object,step:Object,steps:Array,variables:{type:Array,default:()=>[]},disabled:Boolean})
-const error=computed(()=>{try{validateExpression(props.input);return ''}catch{return 'Use supported syntax and give each selected input a unique name.'}})
+const error=computed(()=>{try{validateExpression(props.input);return ''}catch(cause){return cause.message}})
 function add(){props.input.bindings.push({name:'value'+(props.input.bindings.length+1),source:'response',stepId:'',responsePointer:''})}
 </script>
 <template>

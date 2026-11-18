@@ -5271,55 +5271,102 @@ var nodes = /* @__PURE__ */ new Set([
 	"BinaryExpression",
 	"UnaryExpression"
 ]);
-var fail = () => {
-	throw new Error("Expression uses unsupported syntax or exceeds its limits.");
+var ExpressionError = class extends Error {
+	constructor(code, message, path) {
+		super(`Expression failed: ${message}`);
+		this.code = code;
+		this.path = path;
+	}
 };
+var syntax = () => {
+	throw new ExpressionError("syntax", "invalid or unsupported syntax.");
+};
+var limit = () => {
+	throw new ExpressionError("limit", "execution or size limit exceeded.");
+};
+var invalid = () => {
+	throw new ExpressionError("runtime", "invalid operation or non-JSON value.");
+};
+var invalidBindings = () => {
+	throw new ExpressionError("binding", "invalid inputs. Check that each binding has a unique name and a valid source.");
+};
+var missingValues = /* @__PURE__ */ new WeakMap();
+function missingValue(path) {
+	const marker = Object.create(null);
+	missingValues.set(marker, path);
+	return marker;
+}
+var unwrap = (value) => missingValues.has(value) ? void 0 : value;
+function requireValue(value) {
+	if (missingValues.has(value)) {
+		const path = missingValues.get(value);
+		throw new ExpressionError("missing", `missing value at ${path} (undefined).`, path);
+	}
+	return value;
+}
+function memberPath(node) {
+	if (node.type === "Identifier") return node.name;
+	if (node.type !== "MemberExpression") return "(value)";
+	const parent = memberPath(node.object);
+	if (!node.computed) return `${parent}.${node.property.name}`;
+	if (node.property.type === "Literal") {
+		const key = node.property.value;
+		if (identifier(key)) return `${parent}.${key}`;
+		if (Number.isSafeInteger(key) && key >= 0) return `${parent}[${key}]`;
+	}
+	return `${parent}[computed]`;
+}
+function expressionContext(step, input) {
+	const target = input.location === "body" ? input.pointer || "(whole body)" : input.name;
+	return `Step "${step.id}", ${input.location}: ${target}`;
+}
 function validateNodeSyntax(node) {
 	switch (node.type) {
 		case "Identifier":
-			if (!identifier(node.name)) fail();
+			if (!identifier(node.name)) syntax();
 			break;
 		case "Literal":
-			if (node.regex || node.bigint !== void 0) fail();
-			if (typeof node.value === "number" && !Number.isFinite(node.value)) fail();
+			if (node.regex || node.bigint !== void 0) syntax();
+			if (typeof node.value === "number" && !Number.isFinite(node.value)) syntax();
 			break;
 		case "VariableDeclaration":
-			if (node.kind !== "const") fail();
+			if (node.kind !== "const") syntax();
 			break;
 		case "VariableDeclarator":
-			if (node.id.type !== "Identifier" || !node.init) fail();
+			if (node.id.type !== "Identifier" || !node.init) syntax();
 			break;
 		case "MemberExpression":
-			if (node.optional) fail();
+			if (node.optional) syntax();
 			break;
 		case "Property":
-			if (node.kind !== "init" || node.method || node.computed) fail();
+			if (node.kind !== "init" || node.method || node.computed) syntax();
 			break;
 		case "BinaryExpression":
-			if (!binary.has(node.operator)) fail();
+			if (!binary.has(node.operator)) syntax();
 			break;
 		case "UnaryExpression":
 			if (![
 				"!",
 				"-",
 				"+"
-			].includes(node.operator)) fail();
+			].includes(node.operator)) syntax();
 			break;
 		case "LogicalExpression":
 			if (![
 				"&&",
 				"||",
 				"??"
-			].includes(node.operator)) fail();
+			].includes(node.operator)) syntax();
 			break;
 		case "BreakStatement":
-			if (node.label) fail();
+			if (node.label) syntax();
 			break;
-		case "ArrayExpression": if (node.elements.some((element) => !element)) fail();
+		case "ArrayExpression": if (node.elements.some((element) => !element)) syntax();
 	}
 }
 function parseExpression(code) {
-	if (typeof code !== "string" || !code.trim() || code.length > EXPRESSION_LIMITS.source) fail();
+	if (typeof code !== "string" || !code.trim()) syntax();
+	if (code.length > EXPRESSION_LIMITS.source) limit();
 	let ast;
 	try {
 		ast = parse(code, {
@@ -5327,8 +5374,9 @@ function parseExpression(code) {
 			sourceType: "script",
 			allowReturnOutsideFunction: true
 		});
-	} catch {
-		fail();
+	} catch (cause) {
+		if (cause instanceof RangeError) limit();
+		syntax();
 	}
 	const stack = [{
 		node: ast,
@@ -5337,7 +5385,8 @@ function parseExpression(code) {
 	let count = 0;
 	while (stack.length) {
 		const { node, depth } = stack.pop();
-		if (!nodes.has(node.type) || ++count > EXPRESSION_LIMITS.astNodes || depth > EXPRESSION_LIMITS.depth) fail();
+		if (++count > EXPRESSION_LIMITS.astNodes || depth > EXPRESSION_LIMITS.depth) limit();
+		if (!nodes.has(node.type)) syntax();
 		validateNodeSyntax(node);
 		for (const value of Object.values(node)) if (Array.isArray(value)) {
 			for (const child of value) if (child?.type) stack.push({
@@ -5353,21 +5402,23 @@ function parseExpression(code) {
 }
 function validateExpression(input) {
 	parseExpression(input.expression);
-	if (!Array.isArray(input.bindings) || input.bindings.length > EXPRESSION_LIMITS.bindings) fail();
+	if (!Array.isArray(input.bindings)) invalidBindings();
+	if (input.bindings.length > EXPRESSION_LIMITS.bindings) limit();
 	const names = /* @__PURE__ */ new Set();
 	for (const binding of input.bindings) {
-		if (!binding || !identifier(binding.name) || names.has(binding.name) || !["response", "variable"].includes(binding.source)) fail();
+		if (!binding || !identifier(binding.name) || names.has(binding.name) || !["response", "variable"].includes(binding.source)) invalidBindings();
 		names.add(binding.name);
 		if (binding.source === "variable") {
-			if (typeof binding.variableId !== "string" || !binding.variableId) fail();
-		} else if (typeof binding.stepId !== "string" || !binding.stepId || typeof binding.responsePointer !== "string" || binding.responsePointer.length > 2048 || binding.responsePointer !== "" && (!binding.responsePointer.startsWith("/") || /~(?![01])/u.test(binding.responsePointer))) fail();
+			if (typeof binding.variableId !== "string" || !binding.variableId) invalidBindings();
+		} else if (typeof binding.stepId !== "string" || !binding.stepId || typeof binding.responsePointer !== "string" || binding.responsePointer.length > 2048 || binding.responsePointer !== "" && (!binding.responsePointer.startsWith("/") || /~(?![01])/u.test(binding.responsePointer))) invalidBindings();
 	}
 }
 function jsonCopy(value, budget, depth = 0) {
-	if (++budget.nodes > EXPRESSION_LIMITS.values || depth > EXPRESSION_LIMITS.depth) fail();
+	requireValue(value);
+	if (++budget.nodes > EXPRESSION_LIMITS.values || depth > EXPRESSION_LIMITS.depth) limit();
 	const spend = (amount) => {
 		budget.bytes += amount;
-		if (budget.bytes > budget.max) fail();
+		if (budget.bytes > budget.max) limit();
 	};
 	if (value === null) {
 		spend(4);
@@ -5382,7 +5433,7 @@ function jsonCopy(value, budget, depth = 0) {
 		return value;
 	}
 	if (typeof value === "number") {
-		if (!Number.isFinite(value)) fail();
+		if (!Number.isFinite(value)) invalid();
 		spend(24);
 		return value;
 	}
@@ -5390,19 +5441,19 @@ function jsonCopy(value, budget, depth = 0) {
 		Object.prototype,
 		null,
 		Array.prototype
-	].includes(Object.getPrototypeOf(value))) fail();
+	].includes(Object.getPrototypeOf(value))) invalid();
 	const array = Array.isArray(value), out = array ? [] : Object.create(null), keys = [];
-	if (array && value.length > EXPRESSION_LIMITS.values - budget.nodes) fail();
+	if (array && value.length > EXPRESSION_LIMITS.values - budget.nodes) limit();
 	for (const key in value) if (Object.hasOwn(value, key)) {
-		if (keys.length >= EXPRESSION_LIMITS.values - budget.nodes) fail();
+		if (keys.length >= EXPRESSION_LIMITS.values - budget.nodes) limit();
 		keys.push(key);
 	}
-	if (array && value.length !== keys.length) fail();
+	if (array && value.length !== keys.length) invalid();
 	spend(2);
 	for (const key of keys) {
-		if (forbidden.has(key)) fail();
+		if (forbidden.has(key)) invalid();
 		const descriptor = Object.getOwnPropertyDescriptor(value, key);
-		if (!descriptor || !Object.hasOwn(descriptor, "value")) fail();
+		if (!descriptor || !Object.hasOwn(descriptor, "value")) invalid();
 		spend(key.length * 3 + 4);
 		Object.defineProperty(out, key, {
 			value: jsonCopy(descriptor.value, budget, depth + 1),
@@ -5424,10 +5475,11 @@ function evaluateExpression(code, values) {
 		const root = new Map(Object.entries(input));
 		let remaining = EXPRESSION_LIMITS.instructions;
 		const tick = () => {
-			if (--remaining < 0) fail();
+			if (--remaining < 0) limit();
 		};
 		const bounded = (value) => {
-			if (typeof value === "number" && !Number.isFinite(value) || typeof value === "string" && value.length > EXPRESSION_LIMITS.outputBytes) fail();
+			if (typeof value === "number" && !Number.isFinite(value)) invalid();
+			if (typeof value === "string" && value.length > EXPRESSION_LIMITS.outputBytes) limit();
 			return value;
 		};
 		const scalar = (value) => {
@@ -5436,7 +5488,7 @@ function evaluateExpression(code, values) {
 				"boolean",
 				"number",
 				"undefined"
-			].includes(typeof value)) fail();
+			].includes(typeof value)) invalid();
 			return value;
 		};
 		function expr(node, scope) {
@@ -5444,64 +5496,73 @@ function evaluateExpression(code, values) {
 			switch (node.type) {
 				case "Literal": return bounded(node.value);
 				case "Identifier":
-					if (!scope.has(node.name)) fail();
+					if (!scope.has(node.name)) throw new ExpressionError("runtime", `unknown input or variable "${node.name}".`);
 					return scope.get(node.name);
 				case "ArrayExpression": return node.elements.map((item) => expr(item, scope));
 				case "ObjectExpression": {
 					const out = Object.create(null);
 					for (const property of node.properties) {
 						const key = property.key.type === "Identifier" ? property.key.name : property.key.value;
-						if (typeof key !== "string" && typeof key !== "number" || forbidden.has(String(key))) fail();
+						if (typeof key !== "string" && typeof key !== "number" || forbidden.has(String(key))) invalid();
 						out[key] = expr(property.value, scope);
 					}
 					return out;
 				}
 				case "MemberExpression": {
-					const object = expr(node.object, scope), key = node.computed ? expr(node.property, scope) : node.property.name;
-					if (typeof key !== "string" && typeof key !== "number" || forbidden.has(String(key))) fail();
+					const object = expr(node.object, scope), key = node.computed ? requireValue(expr(node.property, scope)) : node.property.name;
+					if (typeof key !== "string" && typeof key !== "number" || forbidden.has(String(key))) invalid();
 					if ((Array.isArray(object) || typeof object === "string") && key === "length") return object.length;
-					if (!object || typeof object !== "object") fail();
-					return Object.hasOwn(object, key) ? object[key] : void 0;
+					requireValue(object);
+					if (object === null) {
+						const path = memberPath(node);
+						throw new ExpressionError("missing", `cannot read ${path} because its parent is null.`, path);
+					}
+					if (!object || typeof object !== "object") invalid();
+					return Object.hasOwn(object, key) ? object[key] : missingValue(memberPath(node));
 				}
-				case "ConditionalExpression": return expr(node.test, scope) ? expr(node.consequent, scope) : expr(node.alternate, scope);
+				case "ConditionalExpression": return unwrap(expr(node.test, scope)) ? expr(node.consequent, scope) : expr(node.alternate, scope);
 				case "LogicalExpression": {
 					const left = expr(node.left, scope);
-					return node.operator === "&&" ? left ? expr(node.right, scope) : left : node.operator === "||" ? left ? left : expr(node.right, scope) : left === null || left === void 0 ? expr(node.right, scope) : left;
+					const value = unwrap(left);
+					return node.operator === "&&" ? value ? expr(node.right, scope) : left : node.operator === "||" ? value ? left : expr(node.right, scope) : value === null || value === void 0 ? expr(node.right, scope) : left;
 				}
 				case "UnaryExpression": {
 					const value = expr(node.argument, scope);
-					if (node.operator === "!") return !value;
-					if (typeof value !== "number") fail();
+					if (node.operator === "!") return !unwrap(value);
+					requireValue(value);
+					if (typeof value !== "number") invalid();
 					return bounded(node.operator === "-" ? -value : +value);
 				}
 				case "BinaryExpression": {
-					const left = scalar(expr(node.left, scope)), right = scalar(expr(node.right, scope));
+					const left = expr(node.left, scope), right = expr(node.right, scope);
+					if (node.operator === "===") return scalar(unwrap(left)) === scalar(unwrap(right));
+					if (node.operator === "!==") return scalar(unwrap(left)) !== scalar(unwrap(right));
+					scalar(requireValue(left));
+					scalar(requireValue(right));
 					let result;
 					switch (node.operator) {
-						case "===": return left === right;
-						case "!==": return left !== right;
 						case "+":
 							if (typeof left === "string" && typeof right === "string") {
-								if (left.length + right.length > EXPRESSION_LIMITS.outputBytes) fail();
+								if (left.length + right.length > EXPRESSION_LIMITS.outputBytes) limit();
 								return left + right;
 							}
-							if (typeof left !== "number" || typeof right !== "number") fail();
+							if (typeof left !== "number" || typeof right !== "number") invalid();
 							result = left + right;
 							break;
 						case "-":
 						case "*":
 						case "/":
 						case "%":
-							if (typeof left !== "number" || typeof right !== "number") fail();
+							if (typeof left !== "number" || typeof right !== "number") invalid();
 							result = node.operator === "-" ? left - right : node.operator === "*" ? left * right : node.operator === "/" ? left / right : left % right;
 							break;
 						default:
-							if (typeof left !== typeof right || !["number", "string"].includes(typeof left)) fail();
+							if (typeof left !== typeof right || !["number", "string"].includes(typeof left)) invalid();
 							return node.operator === "<" ? left < right : node.operator === "<=" ? left <= right : node.operator === ">" ? left > right : left >= right;
 					}
 					return bounded(result);
 				}
-				default: fail();
+				default: invalid();
 			}
 		}
 		function sequence(body, scope) {
@@ -5516,22 +5577,22 @@ function evaluateExpression(code, values) {
 				case "EmptyStatement": return;
 				case "BlockStatement": return sequence(node.body, new Map(scope));
 				case "ReturnStatement":
-					if (!node.argument) fail();
+					if (!node.argument) invalid();
 					return {
 						kind: "return",
 						value: expr(node.argument, scope)
 					};
 				case "VariableDeclaration":
 					for (const item of node.declarations) {
-						if (scope.has(item.id.name)) fail();
+						if (scope.has(item.id.name)) invalid();
 						scope.set(item.id.name, expr(item.init, scope));
 					}
 					return;
-				case "IfStatement": return expr(node.test, scope) ? statement(node.consequent, scope) : node.alternate ? statement(node.alternate, scope) : void 0;
+				case "IfStatement": return unwrap(expr(node.test, scope)) ? statement(node.consequent, scope) : node.alternate ? statement(node.alternate, scope) : void 0;
 				case "BreakStatement": return { kind: "break" };
 				case "SwitchStatement": {
-					const value = expr(node.discriminant, scope);
-					let start = node.cases.findIndex((item) => item.test && expr(item.test, scope) === value);
+					const value = unwrap(expr(node.discriminant, scope));
+					let start = node.cases.findIndex((item) => item.test && unwrap(expr(item.test, scope)) === value);
 					if (start < 0) start = node.cases.findIndex((item) => !item.test);
 					if (start < 0) return;
 					const local = new Map(scope);
@@ -5541,15 +5602,16 @@ function evaluateExpression(code, values) {
 					}
 					return;
 				}
-				default: fail();
+				default: invalid();
 			}
 		}
 		const result = sequence(ast.body, root);
-		if (result?.kind !== "return") fail();
+		if (result?.kind !== "return") throw new ExpressionError("runtime", "no return value was reached.");
 		const copy = jsonCopy(result.value, budget(EXPRESSION_LIMITS.outputBytes));
 		return JSON.parse(JSON.stringify(copy));
-	} catch {
-		throw new Error("Expression failed: check syntax, selected inputs and limits. No request was sent for this step.");
+	} catch (cause) {
+		if (cause instanceof ExpressionError) throw cause;
+		invalid();
 	}
 }
 // Necto.UI/src/features/workbench/body.js
@@ -5862,8 +5924,12 @@ function validateBlueprint(blueprint) {
 				expressionCount++;
 				expressionChars += typeof input.expression === "string" ? input.expression.length : 0;
 				expressionBindings += input.bindings?.length ?? 0;
-				if (expressionCount > 100 || expressionChars > 65536 || expressionBindings > 256) throw new Error("Scenario expression budget exceeded (100 expressions, 64 KiB source characters, 256 bindings).");
-				validateExpression(input);
+				if (expressionCount > 100 || expressionChars > 65536 || expressionBindings > 256) throw new Error(`${expressionContext(step, input)}. Scenario expression budget exceeded (100 expressions, 64 KiB source characters, 256 bindings).`);
+				try {
+					validateExpression(input);
+				} catch (cause) {
+					throw new Error(`${expressionContext(step, input)}. ${cause.message}`);
+				}
 			}
 			if (input.source === "random") {
 				if (blueprint.version < 7) throw new Error("Pick random requires Scenario Builder version 7.");

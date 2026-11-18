@@ -164,6 +164,51 @@ test('enforces source, AST, data, result and finite arithmetic limits with paylo
   }
   assert.throws(() => evaluateExpression('return value;', { value: deep }))
 })
+test('reports missing fields separately from syntax and limits without revealing computed keys', () => {
+  const withRange = { item: { key: 'ignored', range: { min: 3, max: 6 } } }
+  const withoutRange = { item: { key: 'PRIVATE_RESPONSE_VALUE' } }
+  assert.equal(evaluateExpression('return item.range.min;', withRange), 3)
+  assert.throws(() => evaluateExpression('return item.range.min;', withoutRange), {
+    code: 'missing', path: 'item.range',
+  })
+  assert.throws(() => evaluateExpression('return {min: item.range.min};', { item: { range: {} } }), {
+    code: 'missing', path: 'item.range.min',
+  })
+  assert.throws(() => evaluateExpression('return item[item.key];', withoutRange), (error) =>
+    error.code === 'missing' && error.path === 'item[computed]' && !error.message.includes('PRIVATE_RESPONSE_VALUE'))
+  assert.throws(() => evaluateExpression('return item.;', withoutRange), { code: 'syntax' })
+  assert.throws(() => evaluateExpression('return "' + 'x'.repeat(4100) + '";', {}), { code: 'limit' })
+  assert.equal(evaluateExpression('const range = item.range; return range ?? null;', withoutRange), null)
+  assert.equal(evaluateExpression('if (item.range) return 1; return 0;', withoutRange), 0)
+  assert.equal(evaluateExpression('return item.range === item.other;', withoutRange), true)
+  assert.equal(evaluateExpression('return item.range && 1 || 0;', withoutRange), 0)
+})
+
+test('run and preflight failures identify the step, target and missing response source', async () => {
+  const blueprint = make()
+  blueprint.steps[2].inputs = [input('return row.range.min;', [binding('row', 'a')])]
+  const calls = []
+  const execute = async (operation) => {
+    calls.push(operation.path)
+    return { ok: true, status: 200, json: { key: 'PRIVATE_RESPONSE_VALUE' } }
+  }
+  const plan = prepareBlueprint(blueprint, context)
+  const result = await executeBlueprint(plan, { signal: new AbortController().signal, execute })
+  assert.equal(result.status, 'failed')
+  assert.match(plan[2].error, /Step "join", query: result.*missing value at row\.range.*Source step "a"/)
+  assert.match(result.error, /No request was sent for this step/)
+  assert.ok(!result.error.includes('PRIVATE_RESPONSE_VALUE'))
+  assert.ok(!calls.includes('/join'))
+
+  blueprint.steps[2].inputs = [input('return row;', [binding('row', 'a', '/range/max')])]
+  const missingBinding = await executeBlueprint(prepareBlueprint(blueprint, context), {
+    signal: new AbortController().signal, execute,
+  })
+  assert.match(missingBinding.error, /query: result.*Missing value for "row" in step "a" at \/range\/max/)
+  blueprint.steps[2].inputs[0].expression = 'return row.;'
+  assert.throws(() => prepareBlueprint(blueprint, context), /Step "join", query: result.*unsupported syntax/)
+})
+
 test('bindings are bounded, unique and typed', () => {
   for (const bindings of [
     [binding('same', 'a'), binding('same', 'b')],
