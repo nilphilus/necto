@@ -4,7 +4,7 @@ import OperationTasks from './features/api-catalog/OperationTasks.vue'
 import DescriptionHelp from './features/workbench/DescriptionHelp.vue'
 import { scenarioTargets } from './features/workbench/scenarioTargets.js'
 import { workspaceIdentity } from './features/workbench/workspaceIdentity.js'
-import { onWorkspaceImport } from './features/workbench/workspaceUpdates.js'
+import { usePresets } from './features/presets/usePresets.js'
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import WorkspaceSettings from './features/workbench/WorkspaceSettings.vue'
 import CurlImport from './features/workbench/CurlImport.vue'
@@ -31,7 +31,7 @@ import { useScenarios } from './features/scenarios/useScenarios.js'
 import { rememberBinding, snapshotScenario } from './features/scenarios/scenario.js'
 import { readRoute, routePath } from './features/routing/routes.js'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
-import { buildRequest, fieldKey, contextKey, hasPresetFor, migratePreset, presetInputs, resolveNamedRequestValues } from './features/request-runner/request.js'
+import { buildRequest, fieldKey, contextKey, hasPresetFor, presetInputs } from './features/request-runner/request.js'
 
 const authentication = useAuthentication()
 const authorizationOpen = ref(false)
@@ -71,8 +71,6 @@ const overwriteScenario = computed(() => scenarios.value.find(scenario =>
 const scenarioFolder = useScenarioFolder(configuration,operations,computed(()=>scenarioPending.value||builderPending.value))
 const workspaceLocked = computed(() => scenarioPending.value || builderPending.value || scenarioFolder.pending)
 const scenarioBusy = computed(() => workspaceLocked.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
-const presets = ref(new Map())
-const presetColors = ref(new Map())
 const catalogMedia = matchMedia('(max-width: 760px)')
 const catalogOpen = ref(!catalogMedia.matches)
 const catalogWidth = ref(240)
@@ -86,7 +84,6 @@ function selectCatalogOperation(operation, group) {
   if (catalogMedia.matches) catalogOpen.value = false
 }
 const defaultPresetColor = '#287557'
-const activePresetNames = ref([])
 const settingsOpen = ref(false)
 const settingsTab = ref('presets')
 const skeletonWalking = ref(false)
@@ -107,13 +104,10 @@ const routeError = ref('')
 let activeRoute
 const editedPresetName = ref('')
 const newPresetName = ref('')
-const presetError = ref('')
 const confirmingPresetDeletion = ref(false)
-const activePresetValues = computed(() => activePresetNames.value.map(name => presets.value.get(name)))
+const { presets, presetColors, activePresetNames, presetError, storageKey, savePresets, valuesFor } = usePresets(configuration)
 const editedPresetValues = computed(() => presets.value.get(editedPresetName.value))
 watch([editedPresetName, settingsOpen, settingsTab], () => { confirmingPresetDeletion.value = false })
-// Keep the original storage key so saved environments carry over to presets.
-const storageKey = computed(() => 'necto:environments:' + workspaceIdentity(configuration.value))
 const endpointHeading = ref(null)
 const workArea = ref(null)
 const chain = computed(() => {
@@ -201,11 +195,6 @@ function releasePresetOrder() {
 
 watch([graphView, settingsOpen, storageKey], releasePresetOrder)
 
-function valuesFor(operation, layers = activePresetValues.value) {
-  if (operation.apiId && operation.apiId !== 'local' && !operation.usePresets) return new Map()
-  return resolveNamedRequestValues(operation, ...layers.map(values => ({ name: [...presets.value].find(([, stored]) => stored === values)?.[0], values })))
-}
-
 function sampleStorageKey(operation) {
   return 'necto:request-samples:' + JSON.stringify([
     workspaceIdentity(operation.configuration ?? configuration.value),
@@ -266,39 +255,6 @@ watch(externalApis.revision, () => {
   if (index >= 0) resetChain(chain.value.slice(0, index))
   }
 })
-
-function loadPresets() {
-  presets.value = new Map(); presetColors.value = new Map(); activePresetNames.value = []
-  try {
-    const saved = JSON.parse(localStorage.getItem(storageKey.value))
-    if (!saved) return
-    presets.value = new Map((saved.presets ?? saved.environments).map(([name, values]) =>
-      [name, saved.version === 2 ? new Map(values) : migratePreset(values)]))
-    presetColors.value = new Map(Object.entries(saved.colors ?? {}).filter(([name, color]) =>
-      presets.value.has(name) && /^#[0-9a-f]{6}$/i.test(color)))
-    const active = Array.isArray(saved.active) ? saved.active : [saved.active]
-    activePresetNames.value = [...new Set(active.filter(name => presets.value.has(name)))]
-  } catch {
-    presetError.value = 'Could not load saved presets in this browser.'
-  }
-}
-watch(configuration, loadPresets)
-onWorkspaceImport(storageKey, loadPresets)
-
-function savePresets() {
-  try {
-    const entries = Array.from(presets.value, ([name, values]) => [name, [...values]])
-    localStorage.setItem(storageKey.value, JSON.stringify({
-      version: 2,
-      active: activePresetNames.value,
-      presets: entries,
-      colors: Object.fromEntries(presetColors.value)
-    }))
-    presetError.value = ''
-  } catch {
-    presetError.value = 'Could not save presets in this browser.'
-  }
-}
 
 function resetPresetSessions() {
   const selected = current.value
