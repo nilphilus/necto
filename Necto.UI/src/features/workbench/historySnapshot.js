@@ -1,6 +1,6 @@
 import { retainPayload } from './sensitiveSchema.js'
 import { executionOptions } from './executionOptions.js';
-import { safeRequest, sensitiveName } from './privacy.js';
+import { safeRequest, sensitiveName, sensitiveTransport } from './privacy.js';
 import { payloadSnapshot } from './body.js';
 function withoutSecrets(value, depth = 0) {
   if (depth > 64) return undefined;
@@ -14,7 +14,7 @@ function withoutSecrets(value, depth = 0) {
     );
   return value;
 }
-export function historySnapshot(request, draft) {
+export function historySnapshot(request, draft, operation) {
   draft = retainPayload(draft, request.bodyPolicy);
   const safe = safeRequest(request),
     body = safe.options.body;
@@ -60,6 +60,17 @@ export function historySnapshot(request, draft) {
     editor.formFields = editor.formFields.map((row) =>
       sensitiveName(row.name) ? { ...row, value: '' } : row
     );
+  if (editor && operation) {
+    editor.fields = Object.fromEntries(Object.entries(editor.fields).filter(([key]) => {
+      const separator = key.indexOf(':')
+      return !sensitiveTransport(operation, key.slice(0, separator), key.slice(separator + 1))
+    }))
+    if (editor.extraHeaders)
+      editor.extraHeaders = Object.fromEntries(Object.entries(editor.extraHeaders).filter(([name]) =>
+        !sensitiveTransport(operation, 'header', name)))
+    if (editor.extraQuery)
+      editor.extraQuery = editor.extraQuery.filter(([name]) => !sensitiveTransport(operation, 'query', name))
+  }
   return {
     request: {
       url: safe.url.href,
@@ -102,4 +113,8 @@ export function restoreHistoryDraft(session, snapshot) {
     error: '',
     resultStale: Boolean(session.result)
   });
+}
+
+export function canCaptureHistory(entry) {
+  return entry?.status >= 200 && entry.status < 300 && Boolean(entry.snapshot?.draft)
 }

@@ -4,7 +4,7 @@ import { sharedChain } from '../scenarios/definition.js'
 import { pointerPath } from '../workbench/assertions.js'
 import { expectedValue } from '../scenario-builder/waiting.js'
 import { redactSchema } from '../workbench/sensitiveSchema.js'
-import { sensitiveName } from '../workbench/privacy.js'
+import { sensitiveName, sensitiveTransport } from '../workbench/privacy.js'
 import { retainDraft, bodyPolicy, sensitiveFields } from '../workbench/sensitiveSchema.js'
 import { pointerParts } from '../scenario-builder/pointers.js'
 export const FILE_LIMIT = 2 * 1024 * 1024
@@ -37,10 +37,6 @@ function shapes(raws,resolve) {
  const stack=[...raws],seen=new Set(),result=[]
  while(stack.length){const schema=resolve(stack.pop());if(!schema||typeof schema!=='object'||seen.has(schema))continue;if(seen.size>=256)throw new Error('Sensitive schema is too complex to share safely.');seen.add(schema);result.push(schema);for(const key of ['allOf','anyOf','oneOf'])stack.push(...(schema[key]??[]))}
  return result
-}
-function sensitiveTransport(operation,location,name) {
- const normalized=location==='header'?String(name).trim().toLowerCase():name
- return sensitiveName(name)||Object.values(operation.securitySchemes??{}).some(scheme=>scheme?.type==='apiKey'&&scheme.in===location&&(location==='header'?String(scheme.name).trim().toLowerCase():scheme.name)===normalized)||operation.parameters?.some(parameter=>parameter.in===location&&(location==='header'?parameter.name?.toLowerCase():parameter.name)===normalized&&(parameter['x-necto-sensitive']===true||operation.resolve(parameter.schema)?.['x-necto-sensitive']===true))
 }
 function schemaLocation(raws,parts,resolve) {
  let schemas=shapes(raws,resolve),sensitive=false

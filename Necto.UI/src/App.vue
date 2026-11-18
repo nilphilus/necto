@@ -27,6 +27,8 @@ import ExternalApiSettings from './features/external-apis/ExternalApiSettings.vu
 import EndpointGraph from './features/endpoint-graph/EndpointGraph.vue'
 import EntityGraph from './features/entity-graph/EntityGraph.vue'
 import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
+import CaptureRequestsDialog from './features/scenario-builder/CaptureRequestsDialog.vue'
+import { appendHistoryRequests } from './features/scenario-builder/captureHistory.js'
 import { useBuilder } from './features/scenario-builder/useBuilder.js'
 import ScenarioBuilder from './features/scenario-builder/ScenarioBuilder.vue'
 import { useScenarios } from './features/scenarios/useScenarios.js'
@@ -60,6 +62,7 @@ const scenarioPanel = ref(null)
 const builderStore = useBuilder(configuration)
 const { saved: builderScenarios, pending: builderPending, error: builderError } = builderStore
 const builderView = ref(null)
+const captureDialog = ref(null)
 const builderVisited = ref(false)
 const scenarioStore = useScenarios(configuration)
 const { scenarios, state: scenarioState, runs: scenarioRuns, pending: scenarioPending, error: scenarioError } = scenarioStore
@@ -446,6 +449,21 @@ async function openBuilderScenario(id, review = false) {
   navigateView('builder')
   await nextTick()
   if (review && graphView.value === 'builder' && !scenarioBusy.value) builderView.value?.reviewRun()
+}
+
+function captureRequests(entries) {
+  if (scenarioBusy.value || !current.value || !entries.length) return
+  captureDialog.value?.show(current.value.operation, entries, workspaceIdentity(configuration.value))
+}
+
+function saveCapturedRequests({ operation, entries, workspace, id, name }) {
+  const target = operations.value.find((item) => item.key === operation.key &&
+    item.apiId === operation.apiId && item.method === operation.method && item.path === operation.path)
+  if (scenarioBusy.value || workspace !== workspaceIdentity(configuration.value) || !target)
+    throw new Error('The API or workspace changed. Reopen the request capture.')
+  const existing = id ? builderScenarios.value.find((item) => item.id === id) : undefined
+  if (id && !existing) throw new Error('This scenario is no longer saved.')
+  builderStore.saveCaptured(appendHistoryRequests(existing, name, target, entries))
 }
 
 function enterScenario(steps, id, name, index, replace = false, folderSource) {
@@ -1152,7 +1170,8 @@ function removeScenario(id) {
                 </div>
               </form>
             </dialog>
-            <OperationRunner :prepare="prepareRequest" :cancel="cancelRequest" :history="requestHistory" :configuration="configuration" :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :preset-colors="presetColors" :default-preset-color="defaultPresetColor" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" @edit-preset="editActivePreset">
+            <CaptureRequestsDialog ref="captureDialog" :scenarios="builderScenarios" :save="saveCapturedRequests" />
+            <OperationRunner @capture-requests="captureRequests" :prepare="prepareRequest" :cancel="cancelRequest" :history="requestHistory" :configuration="configuration" :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :preset-colors="presetColors" :default-preset-color="defaultPresetColor" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" @edit-preset="editActivePreset">
               <template #request-actions>
                 <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">
                   Save request
