@@ -25,7 +25,11 @@ function assignPointer(value, parts, replacement) {
     if (Array.isArray(value) && (!/^(0|[1-9]\d*)$/.test(part) || Number(part) >= value.length)) throw new Error('Target array index must already exist in the request body.')
     if (index === parts.length - 1) Object.defineProperty(value, part, { value: replacement, writable: true, enumerable: true, configurable: true })
     else {
-      if (!Object.hasOwn(value, part)) Object.defineProperty(value, part, { value: {}, writable: true, enumerable: true, configurable: true })
+      if (!Object.hasOwn(value, part)) {
+        if (/^(?:0|[1-9]\d*)$/.test(parts[index + 1]))
+          throw new Error('Create the array or object in the saved JSON before setting an indexed input.')
+        Object.defineProperty(value, part, { value: {}, writable: true, enumerable: true, configurable: true })
+      }
       value = value[part]
     }
   }

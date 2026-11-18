@@ -62,6 +62,9 @@ const selectedId = ref(''),
   runDialog = ref(null),
   fileInput = ref(null)
 const selectedPresets = ref([])
+const allowExpressionOverrides = ref(false)
+const hasBodyExpressions = computed(() => draft.value.steps.some(step =>
+  step.inputs.some(input => input.location === 'body' && input.source === 'expression')))
 const review = ref([]),
   allowHuman = ref(true),
   runProblem = ref(''),
@@ -470,7 +473,8 @@ function removeConnection() {
 function runContext() {
   if (selectedPresets.value.some((name) => !props.presetNames.includes(name)))
     throw new Error('A selected preset is no longer available. Reopen the run review.')
-  return props.presetContext ? props.presetContext(selectedPresets.value) : props.context()
+  const context = props.presetContext ? props.presetContext(selectedPresets.value) : props.context()
+  return { ...context, protectBodyExpressions: !allowExpressionOverrides.value }
 }
 function refreshReview() {
   runProblem.value = ''
@@ -482,11 +486,12 @@ function refreshReview() {
   }
 }
 function reviewRun() {
+  allowExpressionOverrides.value = false
   selectedPresets.value = props.activePresetNames.filter((name) => props.presetNames.includes(name))
   refreshReview()
   runDialog.value.showModal()
 }
-watch(allowHuman, () => {
+watch([allowHuman, allowExpressionOverrides], () => {
   if (runDialog.value?.isOpen()) refreshReview()
 })
 watch(
@@ -1272,6 +1277,8 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
     <ScenarioRunReview
       ref="runDialog"
       v-model:selected-presets="selectedPresets"
+      v-model:allow-expression-overrides="allowExpressionOverrides"
+      :has-body-expressions="hasBodyExpressions"
       v-model:concurrency.number="draft.concurrency"
       v-model:allow-human="allowHuman"
       :name="draft.name"

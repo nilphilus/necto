@@ -13,7 +13,7 @@ function hints(input) {
 const targets = computed(() => (props.bodyOnly ? [] : props.operation?.parameters ?? []).filter(parameter => ['path', 'query', 'header'].includes(parameter.in)))
 function sourceChanged(input) {
   if (input.source === 'random') { input.stepId ??= '';input.responsePointer ??= '';input.itemPointer ??= '' }
-  if (input.source === 'expression') { input.expression ??= 'return null;'; input.bindings ??= [] }
+  if (input.source === 'expression') { input.expression ??= ''; input.bindings ??= [] }
   if (input.source === 'variable') input.variableId ||= props.variables[0]?.id ?? ''
   if (input.source === 'response') { input.stepId ??= ''; input.responsePointer ??= '' }
   if (input.source === 'human') { input.prompt ??= 'Enter ' + (input.name || 'a value'); input.valueType ??= 'text' }

@@ -12,11 +12,13 @@ defineProps({
   validation: String,
   runProblem: String,
   review: Array,
+  hasBodyExpressions: Boolean,
 })
 defineEmits(['start'])
 
 const selectedPresets = defineModel('selectedPresets', { type: Array, required: true })
 const concurrency = defineModel('concurrency', { type: [Number, String], required: true })
+const allowExpressionOverrides = defineModel('allowExpressionOverrides', { type: Boolean, required: true })
 const allowHuman = defineModel('allowHuman', { type: Boolean, required: true })
 const runDialog = ref(null)
 
@@ -51,7 +53,11 @@ defineExpose({
         <label v-for="name in presetNames" :key="name"
           ><input v-model="selectedPresets" type="checkbox" :value="name" />{{ name }}</label
         >
-        <p>Presets override matching static and dynamic fields. Last selected wins.</p>
+        <p>Presets override matching values. Last selected wins.</p>
+        <label v-if="hasBodyExpressions && selectedPresets.length" class="expression-override">
+          <input v-model="allowExpressionOverrides" type="checkbox">
+          Allow presets to override payload expressions
+        </label>
         <small v-if="selectedPresets.length"
           >Applied in order: {{ selectedPresets.join(' → ') }}</small
         ><small v-else>No presets. Use the scenario's own inputs.</small>
@@ -90,7 +96,9 @@ defineExpose({
               ? 'Preset fields: ' + step.presetOverrides.join(', ')
               : 'No matching preset fields (or shared presets disabled for this API).'
           }}</small
-          ><small
+          ><small v-for="expression in step.bodyExpressions" :key="expression.pointer" class="review-expression">
+            <code>{{ expression.pointer || '(whole body)' }}</code> · {{ expression.overridden ? 'Expression overridden by preset' : 'Expression evaluated before send' }}
+          </small><small
             >{{
               step.inputs
                 .flatMap(inputSources)
@@ -134,6 +142,9 @@ defineExpose({
 </template>
 
 <style scoped>
+.expression-override { margin-block: .35rem; }
+.review-expression { color: var(--accent); }
+
 .repeat-warning { padding: .5rem; border-inline-start: 3px solid #b79b55; background: var(--subtle); }
 .builder-dialog {
   width: min(42rem, calc(100% - 2rem));
