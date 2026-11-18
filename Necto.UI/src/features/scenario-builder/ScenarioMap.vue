@@ -1,12 +1,18 @@
 <script setup>
 import { createEdgeRouter } from './edgeRouting.js'
-import { computed, onScopeDispose, ref, watch } from 'vue'
+import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
 import { inputProducers } from './variables.js'
 import { layers } from './model.js'
 import { allConnections, connectionKey, hasTiming } from './connections.js'
 const props = defineProps({ blueprint: Object, selected: String, steps: Array, disabled: Boolean })
 const emit = defineEmits(['select', 'connect', 'configure', 'create-next'])
 const zoom = ref(1), canvas = ref(null), drag = ref(null), fromChoice = ref(''), toChoice = ref('')
+const connectionsList = ref(null)
+async function showUnroutedConnections() {
+  connectionsList.value.open = true
+  await nextTick()
+  connectionsList.value.querySelector('[data-unrouted]')?.focus()
+}
 const states = computed(() => new Map((props.steps ?? []).map(step => [step.id, step])))
 const layout = computed(() => {
   let columns
@@ -85,7 +91,7 @@ watch(() => props.blueprint.steps.map(step => step.id).join('|'), cancel)
 <template>
   <section class="scenario-map" aria-label="Scenario map">
     <header><strong>Scenario map</strong><span>Drag ● to a request or empty space. ⚙ configures a connection.</span><label>Zoom <select v-model.number="zoom"><option :value=".65">65%</option><option :value=".8">80%</option><option :value="1">100%</option></select></label></header>
-    <p v-if="layout.edges.some(edge=>!edge.routed)" class="route-notice" role="status">Some connections cannot be drawn without crossing a request. Use the Connections list below.</p>
+    <p v-if="layout.edges.some(edge=>!edge.routed)" class="route-notice" role="status">Some connections cannot be drawn without crossing a request. <button type="button" class="secondary" @click="showUnroutedConnections">Show connections</button></p>
     <p v-if="drag" class="connect-hint" role="status">Connect to a request or release on empty space. Source: {{ blueprint.steps.find(step => step.id === drag.from)?.label ?? 'Start' }}. <button type="button" @click="cancel">Cancel (Esc)</button></p>
     <div class="map-scroll" tabindex="0" aria-label="Scroll scenario map">
       <p v-if="!blueprint.steps.length" class="map-empty">Add requests, then drag between their connection handles.<br>Independent requests start in parallel.</p>
@@ -110,9 +116,9 @@ watch(() => props.blueprint.steps.map(step => step.id).join('|'), cancel)
         </div>
       </div>
     </div>
-    <details class="map-connections"><summary>Connections ({{ layout.edges.length }}) · Add without dragging</summary>
+    <details ref="connectionsList" class="map-connections"><summary>Connections ({{ layout.edges.length }}) · Add without dragging</summary>
       <form @submit.prevent="connectByForm"><label>From<select v-model="fromChoice" :disabled="disabled" aria-label="Connection from"><option value="">Start</option><option v-for="step in blueprint.steps" :key="step.id" :value="step.id">{{ step.label }}</option></select></label><label>To<select v-model="toChoice" :disabled="disabled" aria-label="Connection to"><option value="" disabled>Choose request</option><option v-for="step in blueprint.steps" :key="step.id" :value="step.id">{{ step.label }}</option></select></label><button type="submit" class="secondary" :disabled="disabled || !toChoice">Connect</button><button type="button" class="secondary" :disabled="disabled || blueprint.steps.length >= 100" @click="cancel(); emit('create-next', {from:fromChoice || null})">Add connected request</button></form>
-      <ul><li v-for="edge in layout.edges" :key="edge.key"><button type="button" @click="configure(edge, $event)">{{ edge.fromLabel }} → {{ edge.toLabel }}<span v-if="edge.delayMs !== undefined"> · Delay {{ edge.delayMs }} ms</span><span v-if="edge.waitFor"> · Wait for {{ edge.waitFor.pointer || '(root)' }}</span></button></li></ul>
+      <ul><li v-for="edge in layout.edges" :key="edge.key"><button type="button" :data-unrouted="edge.routed ? undefined : ''" @click="configure(edge, $event)">{{ edge.fromLabel }} → {{ edge.toLabel }}<span v-if="edge.delayMs !== undefined"> · Delay {{ edge.delayMs }} ms</span><span v-if="edge.waitFor"> · Wait for {{ edge.waitFor.pointer || '(root)' }}</span></button></li></ul>
     </details>
   </section>
 </template>
