@@ -22,7 +22,7 @@ import {
   newStep,
   validateBlueprint,
 } from './model.js'
-import { emptyStep, configureEndpoint } from './stepDraft.js'
+import { configureEndpoint } from './stepDraft.js'
 import { prepareBlueprint } from './runner.js'
 import { allConnections, connectionKey, connectionSummary } from './connections.js'
 import { waitOptions } from './waiting.js'
@@ -47,6 +47,7 @@ const props = defineProps({
 const emit = defineEmits(['back', 'folder-settings'])
 const store = props.store
 const { draft, saved, dirty, error, notice, execution, pending, questions } = store
+const nextRequest = ref(null)
 const pickingStepId = ref(''),
   removedStep = ref(null)
 const stepDialog = ref(null)
@@ -66,6 +67,8 @@ const review = ref([]),
   runProblem = ref(''),
   picker = ref(''),
   quick = ref('')
+const edgeFromList = ref(false)
+let openedEdgeSettings
 const edgeDialog = ref(null),
   edgeEdit = ref(null),
   mappingEdit = ref(null),
@@ -240,28 +243,19 @@ function save() {
 function removeSaved() {
   if (window.confirm(`Delete “${draft.value.name}” from this browser?`)) attempt(store.remove)
 }
-async function openAdd(stepId = '') {
+async function openAdd(stepId = '', connection = null) {
+  nextRequest.value = connection
   pickingStepId.value = typeof stepId === 'string' ? stepId : ''
   search.value = ''
   addDialog.value.showModal()
   await nextTick()
   addDialog.value.querySelector('input')?.focus()
 }
-async function createNext({ from, position }) {
+function createNext({ from, position }) {
   if (pending.value || draft.value.steps.length >= 100) return
   if (from !== null && !draft.value.steps.some((step) => step.id === from)) return
-  const step = emptyStep(position)
-  draft.value.steps.push(step)
-  if (from !== null) draft.value.connections.push({ from, to: step.id })
-  selectedId.value = step.id
-  tab.value = 'configure'
-  await showStep()
-  await nextTick()
-  const card = [...document.querySelectorAll('.map-node')].find(
-    (card) => card.dataset.stepId === step.id
-  )
-  card?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  await openAdd(step.id)
+  stepDialog.value?.close()
+  void openAdd('', { from, position })
 }
 function add(operation) {
   if (pickingStepId.value) {
@@ -296,8 +290,12 @@ function add(operation) {
     addDialog.value.close()
     return
   }
+  const connection = nextRequest.value
+  if (connection?.from && !draft.value.steps.some((step) => step.id === connection.from)) return
   const step = newStep(operation, props.context().createSession(operation))
+  if (connection?.position) step.position = connection.position
   draft.value.steps.push(step)
+  if (connection?.from) draft.value.connections.push({ from: connection.from, to: step.id })
   selectedId.value = step.id
   tab.value = 'configure'
   addDialog.value.close()
@@ -373,7 +371,9 @@ async function openConnection(edge, event) {
       )
     ),
   }
+  openedEdgeSettings = JSON.stringify([edgeEdit.value, mappingEdit.value.inputs])
   const opener = event?.currentTarget
+  edgeFromList.value = Boolean(opener?.closest('.map-connections'))
   await nextTick()
   const element =
     opener ??
@@ -386,7 +386,7 @@ async function openConnection(edge, event) {
     top: innerHeight / 3,
   }
   const width = Math.min(420, innerWidth - 24)
-  popupPosition.value = {
+  popupPosition.value = edgeFromList.value ? { inset: '0', margin: 'auto' } : {
     left:
       Math.max(
         12,
@@ -421,6 +421,21 @@ function connect(edge) {
     void openConnection(edge)
   })
 }
+async function editConnectionTarget(input) {
+  const target = edgeTarget.value
+  if (!target) return
+  if (openedEdgeSettings !== JSON.stringify([edgeEdit.value, mappingEdit.value.inputs]) &&
+      !window.confirm('Discard unapplied connection settings?')) return
+  edgeDialog.value.close()
+  selectedId.value = target.id
+  tab.value = 'configure'
+  await showStep()
+  const key = input.location + ':' + input.name
+  const row = [...stepDialog.value.querySelectorAll('[data-parameter]')]
+    .find((element) => element.dataset.parameter === key)
+  row?.querySelector('input, select, button')?.focus()
+}
+
 function saveConnection() {
   if (pending.value) return
   try {
@@ -1005,44 +1020,21 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
               </div>
               <p v-if="suggestionProblem" class="error" role="alert">{{ suggestionProblem }}</p>
             </details>
-            <StepInputs
-              v-if="
-                operation?.parameters.some((parameter) =>
-                  ['path', 'query', 'header'].includes(parameter.in)
-                )
-              "
-              :parameters-only="true"
-              :step="selected"
-              :operation="operation"
-              :steps="draft.steps"
-              :variables="draft.variables"
-              :operations="operations"
-              :results="execution.steps"
-              :disabled="pending"
-            />
-            <details class="static-request" open>
-              <summary>Request · static inputs</summary>
-              <fieldset :disabled="pending || !operation">
-                <template v-if="operation"
-                  ><label
-                    v-for="parameter in operation.parameters.filter((parameter) =>
-                      ['path', 'query', 'header'].includes(parameter.in)
-                    )"
-                    :key="parameter.in + ':' + parameter.name"
-                    >{{ parameter.in }} · {{ parameter.name
-                    }}<span
-                      v-if="dynamicTargets.has(parameter.in + ':' + parameter.name)"
-                      class="input-tag"
-                      >Filled at run time</span
-                    ><input
-                      v-model="selected.request.fields[parameter.in + ':' + parameter.name]"
-                      :disabled="dynamicTargets.has(parameter.in + ':' + parameter.name)"
-                      :placeholder="
-                        parameter.required || parameter.in === 'path' ? 'Required' : 'Optional'
-                      " /></label
-                ></template>
-              </fieldset>
-            </details>
+            <section v-if="operation" class="request-parameters" aria-label="Request parameters">
+              <div v-for="parameter in operation.parameters.filter(item => ['path', 'query', 'header'].includes(item.in))"
+                :key="parameter.in + ':' + parameter.name" class="request-parameter" :data-parameter="parameter.in + ':' + parameter.name">
+                <label class="parameter-label">
+                  <span><small>{{ parameter.in }}</small> <strong>{{ parameter.name }}</strong></span>
+                  <input v-if="!dynamicTargets.has(parameter.in + ':' + parameter.name)"
+                    v-model="selected.request.fields[parameter.in + ':' + parameter.name]"
+                    :disabled="pending"
+                    :placeholder="parameter.required || parameter.in === 'path' ? 'Required' : 'Optional'">
+                </label>
+                <StepInputs :parameter="parameter" :parameters-only="true" :step="selected"
+                  :operation="operation" :steps="draft.steps" :variables="draft.variables"
+                  :operations="operations" :results="execution.steps" :disabled="pending" />
+              </div>
+            </section>
             <ScenarioBodyEditor
               v-if="operation?.requestBody"
               :key="selected.id"
@@ -1170,6 +1162,11 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
             complete; all response conditions must match the same target response.
           </p>
           <StepWaiting :step="edgeEdit" :operation="edgeOperation" :disabled="pending" />
+          <div v-if="edgeEdit.from !== null" class="connection-target-actions">
+            <button v-for="input in edgeTarget.inputs.filter(input => input.location !== 'body' && inputProducers(input, draft).includes(edgeEdit.from))"
+              :key="input.location + ':' + input.name" type="button" class="secondary"
+              @click="editConnectionTarget(input)">Edit {{ input.name }} in target request</button>
+          </div>
           <StepInputs
             v-if="edgeEdit.from !== null"
             :step="mappingEdit"
@@ -1206,7 +1203,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
             class="muted"
           >
             This connection also carries shared response variables. Edit those bindings in the
-            target request’s Dynamic inputs.
+            target request’s parameter or body editor.
           </p>
           <p v-if="edgeProblem" class="error" role="alert">{{ edgeProblem }}</p>
           <p v-if="pending" class="muted">Run in progress. Connection settings are read only.</p>
@@ -1219,7 +1216,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
             @click="removeConnection"
           >
             {{ edgeEdit.from === null ? 'Reset start connection' : 'Remove connection' }}</button
-          ><button type="button" class="secondary" @click="edgeDialog.close()">Cancel</button
+          ><button type="button" class="secondary" @click="edgeDialog.close()">{{ edgeFromList ? 'Back to connections' : 'Cancel' }}</button
           ><button type="submit" class="primary" :disabled="pending">Apply connection</button>
         </footer>
       </form>
@@ -1229,10 +1226,11 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       class="builder-dialog"
       aria-labelledby="add-request-title"
       @click="(event) => event.target === addDialog && addDialog.close()"
+      @close="nextRequest = null"
     >
       <header>
         <h3 id="add-request-title">
-          {{ pickingStepId ? 'Choose endpoint for this request' : 'Add any endpoint' }}
+          {{ pickingStepId ? 'Choose endpoint for this request' : nextRequest ? 'Add connected request' : 'Add any endpoint' }}
         </h3>
         <button
           type="button"
@@ -1250,7 +1248,8 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         @keydown.enter.prevent="filtered.length === 1 && add(filtered[0])"
         placeholder="Search name, route or API"
       />
-      <p class="muted">
+      <p v-if="nextRequest" class="muted">Add after: {{ draft.steps.find((step) => step.id === nextRequest.from)?.label ?? 'Start' }}</p>
+      <p v-else class="muted">
         {{
           pickingStepId
             ? 'The connection is already in place. Choose an endpoint, or close and finish this request later.'
@@ -1288,6 +1287,11 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
   </section>
 </template>
 <style scoped>
+.request-parameters { display: grid; gap: .45rem; }
+.request-parameter { padding: .55rem; border: 1px solid var(--line); border-radius: .45rem; }
+.parameter-label { display: grid; gap: .25rem; font-size: .8rem; margin-bottom: .25rem; }
+.parameter-label small { color: var(--muted); }
+
 .scenario-description {
   flex: 1 1 13rem;
   min-width: 0;
@@ -1671,7 +1675,6 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
   color: var(--muted);
   font-size: 0.65rem;
 }
-.static-request,
 .request-limits {
   font-size: 0.78rem;
   margin-top: 0.8rem;
@@ -1681,7 +1684,6 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 summary {
   cursor: pointer;
 }
-.static-request fieldset,
 .request-limits fieldset {
   padding: 0;
   border: 0;
@@ -1690,15 +1692,10 @@ summary {
   gap: 0.6rem;
   margin: 0.7rem 0;
 }
-.static-request label,
 .request-limits label {
   display: grid;
   gap: 0.3rem;
   font-size: 0.75rem;
-}
-.static-request input {
-  width: 100%;
-  min-width: 0;
 }
 .input-tag {
   font-size: 0.65rem;

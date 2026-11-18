@@ -106,6 +106,7 @@ const document = {
     await p.getByRole('button', { name: '+ Add request', exact: true }).click()
     await p.getByRole('searchbox', { name: 'Find endpoint', exact: true }).fill(name)
     await p.locator('.endpoint-options button').filter({ hasText: name }).click()
+    await p.locator('.step-dialog[open]').getByRole('button', { name: 'Done', exact: true }).click()
   }
   const drag = async (from, to) => {
     const source = p.getByRole('button', { name: 'Connect from ' + from, exact: true }),
@@ -201,18 +202,18 @@ const document = {
   await popup.getByRole('button', { name: 'Remove connection', exact: true }).click()
   assert.equal(await p.locator('.edge-settings').count(), 3)
   // Keyboard-only connection via the list form, followed by Escape discarding edits.
-  await p.locator('.map-connections summary').click()
+  await p.getByRole('button', { name: /^Connections \(/ }).click()
   await p.getByLabel('Connection from', { exact: true }).selectOption({ label: 'Create job' })
   await p.getByLabel('Connection to', { exact: true }).selectOption({ label: 'Read report' })
   await p.getByRole('button', { name: 'Connect', exact: true }).focus()
   await p.keyboard.press('Enter')
   await popup.waitFor()
   await p.keyboard.press('Escape')
+  await p.getByRole('dialog', { name: 'Connections', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
   await configure('Create job', 'Read report')
   await popup.getByRole('button', { name: 'Remove connection', exact: true }).click()
   assert.equal(await p.locator('.edge-settings').count(), 3)
   await p.getByLabel('Zoom', { exact: false }).selectOption('1')
-  await p.locator('.map-connections summary').click()
   await p.getByRole('button', { name: 'Save', exact: true }).click()
   await shot('connected-map')
   const saved = await p.evaluate(

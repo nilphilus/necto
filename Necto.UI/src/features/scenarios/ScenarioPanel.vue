@@ -9,10 +9,25 @@ import ScenarioExport from './ScenarioExport.vue'
 import { nextTick, ref } from 'vue'
 import { pathLabel } from './scenario.js'
 import ScenarioTrace from './ScenarioTrace.vue'
-const props = defineProps({ scenarios: Array, builderScenarios: Array, builderError: String, state: Object, pending: Boolean, busy: Boolean, error: String,
+const props = defineProps({ scenarios: Array, builderScenarios: Array, builderError: String, importScenario: Function, state: Object, pending: Boolean, busy: Boolean, error: String,
   presetNames: Array, activePresetNames: Array, runs: Map, document: Object, mappings: Array, configuration: Object, deleted: Object, folder:Object })
 
 const emit = defineEmits(['open', 'run', 'remove', 'stop', 'inspect', 'undo-remove', 'builder', 'open-builder-scenario', 'folder-settings'])
+const importInput = ref(null)
+const importResult = ref(null)
+const importError = ref('')
+const importing = ref(false)
+async function importFile(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file || importing.value) return
+  importing.value = true
+  importResult.value = null
+  importError.value = ''
+  try { importResult.value = await props.importScenario(file) }
+  catch (cause) { importError.value = cause.message }
+  finally { importing.value = false }
+}
 const runId = ref('')
 const selectedPresets = ref([])
 const list = ref(null), undoButton = ref(null), title = ref(null)
@@ -49,7 +64,20 @@ function runScenario(scenario) {
 </script>
 <template>
   <section class="scenario-panel work-area" aria-labelledby="scenarios-title">
-    <div class="scenarios-heading"><h2 id="scenarios-title" ref="title" tabindex="-1">Scenarios</h2><button type="button" class="secondary" :disabled="busy" @click="emit('builder')">Scenario Builder →</button></div><p class="builder-intro muted">Save a quick request chain from the API view, or use Builder for parallel branches, manual connections and run-time inputs.</p>
+    <div class="scenarios-heading">
+      <h2 id="scenarios-title" ref="title" tabindex="-1">Scenarios</h2>
+      <div class="library-actions">
+        <button type="button" class="primary" :disabled="busy || importing" @click="importInput.click()">Import scenario</button>
+        <input ref="importInput" hidden type="file" accept=".json,application/json" @change="importFile">
+        <button type="button" class="secondary" :disabled="busy" @click="emit('builder')">Scenario Builder →</button>
+      </div>
+    </div>
+    <p class="builder-intro muted">Import a scenario from the Necto skill or create one manually in Builder.</p>
+    <p v-if="importError" class="error" role="alert">{{ importError }}</p>
+    <p v-if="importResult" class="import-result" role="status">
+      Imported “{{ importResult.scenario.name }}” · {{ importResult.scenario.steps.length }} steps.
+      <span v-if="importResult.missing.length">Unavailable endpoints: {{ importResult.missing.join(', ') }}.</span>
+    </p>
     <FolderFeedback :folder="folder" />
     <FolderLibrary :folder="folder" />
     <div v-if="deleted" class="deletion-feedback" role="status">Deleted “{{ deleted.name }}”.
@@ -128,6 +156,9 @@ function runScenario(scenario) {
   </section>
 </template>
 <style scoped>
+.library-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.scenario-panel .import-result { margin: .5rem 0; overflow-wrap: anywhere; }
+
 .deletion-feedback { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-bottom: .75rem; font-size: .85rem; }
 .scenarios-heading { display:flex; align-items:baseline; justify-content:space-between; gap:.6rem; flex-wrap:wrap; }.scenario-panel .builder-intro { margin-bottom:.8rem; }.scenario-panel { flex: 1; min-height: 0; }
 .scenario-panel h2 { margin: 0 0 1rem; }

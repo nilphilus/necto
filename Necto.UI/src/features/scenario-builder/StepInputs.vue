@@ -4,7 +4,7 @@ import ExpressionEditor from './ExpressionEditor.vue'
 import { computed, useId } from 'vue'
 import { pointerHints } from './pointerHints.js'
 import { generators } from './generation.js'
-const props = defineProps({ step: Object, operation: Object, steps: Array, operations: Array, results: Array, disabled: Boolean, fixedSource: String, variables: { type: Array, default: () => [] }, parametersOnly: Boolean, bodyOnly: Boolean })
+const props = defineProps({ step: Object, operation: Object, steps: Array, operations: Array, results: Array, disabled: Boolean, fixedSource: String, variables: { type: Array, default: () => [] }, parametersOnly: Boolean, bodyOnly: Boolean, parameter: Object })
 const prefix = useId()
 function hints(input) {
   const step = props.steps.find(step => step.id === input.stepId)
@@ -20,7 +20,7 @@ function sourceChanged(input) {
   if (input.source === 'generate') { input.generator ??= 'uuid'; input.pattern ??= 'INV-[A-Z]{3}-\\d{4}' }
 }
 function add() {
-  const target = targets.value[0]
+  const target = props.parameter ?? targets.value[0]
   props.step.inputs.push({ location: target?.in ?? 'body', name: target?.name ?? '', pointer: '', source: props.fixedSource ? 'response' : 'human',
     prompt: 'Enter ' + (target?.name ?? 'a value'), valueType: 'text', generator: 'uuid', pattern: 'INV-[A-Z]{3}-\\d{4}', stepId: props.fixedSource ?? '', responsePointer: '' })
 }
@@ -30,13 +30,19 @@ function setTarget(input, value) {
 }
 </script>
 <template>
-  <section class="step-inputs" aria-label="Dynamic inputs">
+  <section class="step-inputs" :aria-label="parameter ? 'Value for ' + parameter.name : 'Dynamic inputs'">
+    <template v-if="parameter">
+      <button v-if="!step.inputs.some(input => input.location === parameter.in && input.name === parameter.name)"
+        type="button" class="secondary" :disabled="disabled" @click="add">Use a run-time value</button>
+    </template>
+    <template v-else>
     <header><h4>Dynamic inputs</h4><button type="button" class="secondary" :disabled="disabled || !targets.length && (parametersOnly || !operation?.requestBody)" @click="add">Add input</button></header>
-    <p v-if="!step.inputs.length" class="muted">Static values come from the request below. Add a source to fill a field at run time.</p>
-    <template v-for="(input, index) in step.inputs" :key="index"><fieldset v-if="(!parametersOnly || input.location !== 'body') && (!bodyOnly || input.location === 'body')" :disabled="disabled" class="input-card">
-      <legend>Input {{ index + 1 }}</legend>
-      <div class="input-row"><label>Target<select aria-label="Target" :value="input.location === 'body' ? 'body' : targets.findIndex(target => target.in === input.location && target.name === input.name)" @change="setTarget(input, $event.target.value)"><option v-for="(target, i) in targets" :key="i" :value="i">{{ target.in }} · {{ target.name }}</option><option v-if="!parametersOnly && operation?.requestBody" value="body">Body</option></select></label>
-        <button type="button" class="remove-input secondary" :aria-label="'Remove input ' + (index + 1)" @click="step.inputs.splice(index, 1)">×</button></div>
+    <p v-if="!step.inputs.length" class="muted">Static values come from the request. Add a source to fill a field at run time.</p>
+    </template>
+    <template v-for="(input, index) in step.inputs" :key="index"><fieldset v-if="(!parameter || (input.location === parameter.in && input.name === parameter.name)) && (!parametersOnly || input.location !== 'body') && (!bodyOnly || input.location === 'body')" :disabled="disabled" class="input-card">
+      <legend>{{ parameter ? 'Run-time value' : `Input ${index + 1}` }}</legend>
+      <div class="input-row"><label v-if="!parameter">Target<select aria-label="Target" :value="input.location === 'body' ? 'body' : targets.findIndex(target => target.in === input.location && target.name === input.name)" @change="setTarget(input, $event.target.value)"><option v-for="(target, i) in targets" :key="i" :value="i">{{ target.in }} · {{ target.name }}</option><option v-if="!parametersOnly && operation?.requestBody" value="body">Body</option></select></label>
+        <button type="button" class="remove-input secondary" :aria-label="'Remove input ' + (index + 1)" @click="step.inputs.splice(index, 1)">{{ parameter ? 'Use static value' : '×' }}</button></div>
       <label v-if="input.location === 'body'">Target JSON Pointer<input aria-label="Target JSON Pointer" v-model="input.pointer" placeholder="/customer/id · empty = whole body"><small>For text/XML, leave empty to replace the whole body.</small></label>
       <label v-if="!fixedSource">Value source<select aria-label="Value source" v-model="input.source" @change="sourceChanged(input)"><option value="response">Earlier response</option><option value="variable">Shared variable</option><option value="preset">Run preset</option><option value="generate">Generate data</option><option value="expression">Expression</option><option value="random">Pick random</option><option value="human">Ask at run time</option></select></label>
       <ExpressionEditor v-if="input.source === 'expression'" :input="input" :step="step" :steps="steps" :variables="variables" :disabled="disabled" />
