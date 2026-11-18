@@ -88,3 +88,14 @@ export function validateBuilderCollection(value) {
   if (new Set(value.blueprints.map((item) => item.id)).size !== value.blueprints.length)
     throw new Error('Duplicate builder IDs.')
 }
+
+export const builderTransfer = {
+  empty: () => ({ version: 1, blueprints: [] }),
+  records: ({ blueprints }) =>
+    blueprints.map((value) => ({ id: value.id, label: value.name, value })),
+  upsert(collection, id, value) {
+    const index = collection.blueprints.findIndex((blueprint) => blueprint.id === id)
+    if (index < 0) collection.blueprints.push(value)
+    else collection.blueprints[index] = value
+  },
+}

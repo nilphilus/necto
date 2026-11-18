@@ -1,3 +1,4 @@
+import { builderTransfer } from '../scenario-builder/definition.js';
 import { exportWorkspace, inspectWorkspace } from './workspace.js';
 const clone = (value) => JSON.parse(JSON.stringify(value));
 function type(key) {
@@ -7,6 +8,7 @@ function type(key) {
 function records(entry) {
   const value = entry.value,
     kind = type(entry.key);
+  if (kind === 'scenario-builder') return builderTransfer.records(value);
   if (kind === 'scenarios')
     return value.scenarios.map((item) => ({
       id: item.id,
@@ -87,7 +89,9 @@ export function applyTransfer(items, storage) {
       updates.set(
         item.key,
         JSON.parse(
-          storage.getItem(item.key) ?? JSON.stringify(defaults[item.kind])
+          storage.getItem(item.key) ?? JSON.stringify(
+            item.kind === 'scenario-builder' ? builderTransfer.empty() : defaults[item.kind]
+          )
         )
       );
     const destination = updates.get(item.key),
@@ -122,7 +126,9 @@ export function applyTransfer(items, storage) {
       if (index < 0) list.push(next);
       else list[index] = next;
     };
-    if (item.kind === 'scenarios')
+    if (item.kind === 'scenario-builder')
+      builderTransfer.upsert(destination, id, value);
+    else if (item.kind === 'scenarios')
       upsert(destination.scenarios, (record) => record.id === id, value);
     else if (item.kind === 'samples')
       upsert(destination.samples, (record) => record.name === id, value);
