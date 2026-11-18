@@ -76,6 +76,10 @@ defineExpose({
           </li>
         </ul>
       </details>
+      <p v-if="review.some(step => !['GET', 'HEAD', 'OPTIONS'].includes(step.operation.method) &&
+        step.entryPolicies.some(policy => policy.waitFor?.retryCount > 0))" class="repeat-warning" role="alert">
+        A wait condition can repeat requests that change server data. Check the call limits below.
+      </p>
       <ol class="review-targets">
         <li v-for="step in review" :key="step.id">
           <strong>{{ step.label }}</strong
@@ -130,6 +134,7 @@ defineExpose({
 </template>
 
 <style scoped>
+.repeat-warning { padding: .5rem; border-inline-start: 3px solid #b79b55; background: var(--subtle); }
 .builder-dialog {
   width: min(42rem, calc(100% - 2rem));
   max-height: 85dvh;

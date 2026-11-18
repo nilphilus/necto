@@ -12,10 +12,29 @@ const zoom = ref(1),
   fromChoice = ref(''),
   toChoice = ref('')
 const connectionsList = ref(null)
-async function showUnroutedConnections() {
-  connectionsList.value.open = true
+const connectionFilter = ref('')
+const visibleConnections = computed(() => {
+  const query = connectionFilter.value.trim().toLowerCase()
+  return layout.value.edges.filter((edge) =>
+    `${edge.fromLabel} → ${edge.toLabel}`.toLowerCase().includes(query))
+})
+async function showConnections(unrouted = false) {
+  cancel()
+  if (unrouted) connectionFilter.value = ''
+  if (!connectionsList.value.open) connectionsList.value.showModal()
+  if (!unrouted) return
   await nextTick()
   connectionsList.value.querySelector('[data-unrouted]')?.focus()
+}
+function connectionDetails(edge) {
+  const target = props.blueprint.steps.find((step) => step.id === edge.to)
+  const inputs = (target?.inputs ?? []).filter((input) =>
+    edge.from !== null && inputProducers(input, props.blueprint).includes(edge.from))
+  return [
+    inputs.length ? `Passes ${inputs.map((input) => input.name || input.pointer || 'body').join(', ')}` : '',
+    edge.delayMs !== undefined ? `Delay ${edge.delayMs} ms` : '',
+    edge.waitFor ? `Repeat ${target?.method ?? 'request'} until ${edge.waitFor.pointer || '(root)'} matches` : '',
+  ].filter(Boolean).join(' · ')
 }
 const states = computed(() => new Map((props.steps ?? []).map((step) => [step.id, step])))
 const layout = computed(() => {
@@ -190,6 +209,8 @@ watch(
     cancel()
     fromChoice.value = ''
     toChoice.value = ''
+    connectionFilter.value = ''
+    connectionsList.value?.close()
   }
 )
 watch(zoom, cancel)
@@ -200,7 +221,9 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
     <header>
       <strong>Scenario map</strong
       ><span>Drag ● to a request or empty space. ⚙ configures a connection.</span
-      ><label
+      ><button type="button" class="secondary" aria-haspopup="dialog" @click="showConnections()">
+        Connections ({{ layout.edges.length }})
+      </button><label
         >Zoom
         <select v-model.number="zoom">
           <option :value="0.65">65%</option>
@@ -211,7 +234,7 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
     </header>
     <p v-if="layout.edges.some((edge) => !edge.routed)" class="route-notice" role="status">
       Some connections cannot be drawn without crossing a request.
-      <button type="button" class="secondary" @click="showUnroutedConnections">
+      <button type="button" class="secondary" @click="showConnections(true)">
         Show connections
       </button>
     </p>
@@ -350,10 +373,11 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
             class="edge-settings"
             :class="{ timed: hasTiming(edge) }"
             :data-connection="edge.key"
-            :style="{ left: edge.x + 'px', top: edge.y + 'px' }"
+            :style="{ left: edge.x + 'px', top: edge.y + 'px', width: 32 / zoom + 'px', height: 32 / zoom + 'px' }"
             :aria-label="'Configure connection ' + edge.fromLabel + ' → ' + edge.toLabel"
+            :aria-description="connectionDetails(edge) || undefined"
             :title="
-              edge.fromLabel + ' → ' + edge.toLabel + (hasTiming(edge) ? ' · Delay / Wait for' : '')
+              [edge.fromLabel + ' → ' + edge.toLabel, connectionDetails(edge)].filter(Boolean).join(' · ')
             "
             @click="configure(edge, $event)"
           >
@@ -362,8 +386,14 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
         </div>
       </div>
     </div>
-    <details ref="connectionsList" class="map-connections">
-      <summary>Connections ({{ layout.edges.length }}) · Add without dragging</summary>
+    <dialog ref="connectionsList" class="map-connections" aria-label="Connections">
+      <header>
+        <h3>Connections ({{ layout.edges.length }})</h3>
+        <button type="button" class="secondary" @click="connectionsList.close()">Close</button>
+      </header>
+      <label>Filter connections
+        <input v-model="connectionFilter" type="search" placeholder="Search by step name">
+      </label>
       <form @submit.prevent="connectByForm">
         <label
           >From<select v-model="fromChoice" :disabled="disabled" aria-label="Connection from">
@@ -386,26 +416,27 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
           :disabled="disabled || blueprint.steps.length >= 100"
           @click="() => {
             cancel()
+            connectionsList.close()
             emit('create-next', { from: fromChoice || null })
           }"
         >
           Add connected request
         </button>
       </form>
-      <ul>
-        <li v-for="edge in layout.edges" :key="edge.key">
+      <ul class="connection-list" aria-label="Connection list">
+        <li v-for="edge in visibleConnections" :key="edge.key">
           <button
             type="button"
             :data-unrouted="edge.routed ? undefined : ''"
             @click="configure(edge, $event)"
           >
-            {{ edge.fromLabel }} → {{ edge.toLabel
-            }}<span v-if="edge.delayMs !== undefined"> · Delay {{ edge.delayMs }} ms</span
-            ><span v-if="edge.waitFor"> · Wait for {{ edge.waitFor.pointer || '(root)' }}</span>
+            <strong>{{ edge.fromLabel }} → {{ edge.toLabel }}</strong>
+            <small v-if="connectionDetails(edge)">{{ connectionDetails(edge) }}</small>
           </button>
         </li>
       </ul>
-    </details>
+      <p v-if="!visibleConnections.length">No matching connections.</p>
+    </dialog>
   </section>
 </template>
 <style scoped>
@@ -652,28 +683,31 @@ marker path {
   text-align: center;
 }
 .map-connections {
-  padding: 0.5rem 0.8rem;
-  font-size: 0.75rem;
-  border-top: 1px solid var(--line);
+  width: min(38rem, calc(100vw - 1.5rem));
+  max-height: calc(100dvh - 1.5rem);
+  overflow: auto;
+  padding: .85rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: .65rem;
+  font-size: .8rem;
 }
-.map-connections ul {
-  margin: 0.4rem 0;
-  padding-left: 1rem;
+.map-connections::backdrop { background: #0006; }
+.map-connections header { justify-content: space-between; padding: 0 0 .65rem; margin-bottom: .65rem; }
+.map-connections h3 { margin: 0; font-size: 1rem; }
+.connection-list {
+  max-height: min(45dvh, 24rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  padding: .15rem;
+  margin: .55rem 0 0;
 }
-.map-connections form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 0.5rem;
-  margin: 0.5rem 0;
-}
-.map-connections label {
-  display: grid;
-  gap: 0.25rem;
-  min-width: 0;
-}
-.map-connections select {
-  max-width: 14rem;
-  padding: 0.3rem;
-}
+.connection-list li + li { border-top: 1px solid var(--line); }
+.connection-list button { display: grid; gap: .2rem; padding: .5rem; width: 100%; text-align: left; overflow-wrap: anywhere; }
+.connection-list small { color: var(--muted); }
+.map-connections form { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin: .55rem 0; }
+.map-connections label { display: grid; gap: .25rem; min-width: 0; margin: 0; }
+.map-connections select { max-width: min(14rem, 100%); padding: .3rem; }
 </style>

@@ -29,6 +29,8 @@ import EntityGraph from './features/entity-graph/EntityGraph.vue'
 import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
 import CaptureRequestsDialog from './features/scenario-builder/CaptureRequestsDialog.vue'
 import { appendHistoryRequests } from './features/scenario-builder/captureHistory.js'
+import { parseBuilderImport } from './features/scenario-builder/definitionImport.js'
+import { FILE_LIMIT } from './features/scenario-folder/format.js'
 import { useBuilder } from './features/scenario-builder/useBuilder.js'
 import ScenarioBuilder from './features/scenario-builder/ScenarioBuilder.vue'
 import { useScenarios } from './features/scenarios/useScenarios.js'
@@ -449,6 +451,36 @@ async function openBuilderScenario(id, review = false) {
   navigateView('builder')
   await nextTick()
   if (review && graphView.value === 'builder' && !scenarioBusy.value) builderView.value?.reviewRun()
+}
+
+async function importLibraryScenario(file) {
+  const workspace = workspaceIdentity(configuration.value)
+  if (scenarioBusy.value || !workspace) throw new Error('Load an API and wait for active requests before importing.')
+  if (file.size > FILE_LIMIT) throw new Error('Scenario imports are limited to 2 MiB.')
+  const text = await file.text()
+  const content = new Blob([text], { type: 'application/json' })
+  let format
+  try { format = JSON.parse(text)?.format } catch { throw new Error('Invalid JSON in scenario file.') }
+  if (scenarioBusy.value || workspace !== workspaceIdentity(configuration.value))
+    throw new Error('The API workspace changed. Import the scenario again.')
+  let scenario
+  if (format === 'necto-shared-scenario') {
+    const imported = await scenarioFolder.importFile(content)
+    if (!imported) {
+      if (scenarioFolder.error) throw new Error(scenarioFolder.error)
+      return null
+    }
+    scenario = imported.scenario
+  } else {
+    scenario = await parseBuilderImport(content)
+    if (scenarioBusy.value || workspace !== workspaceIdentity(configuration.value))
+      throw new Error('The API workspace changed. Import the scenario again.')
+    builderStore.saveCaptured(scenario)
+  }
+  const missing = [...new Set(scenario.steps.filter((step) => !operations.value.some((operation) =>
+    operation.key === step.operationKey && (operation.apiId ?? 'local') === step.apiId
+  )).map((step) => step.operationKey))]
+  return { scenario, missing }
 }
 
 function captureRequests(entries) {
@@ -1040,7 +1072,7 @@ function removeScenario(id) {
         @back="navigateView('scenarios')"
       />
       <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="navigateView('builder')" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios"
-        :builder-scenarios="builderScenarios" :builder-error="builderError" @open-builder-scenario="openBuilderScenario" :state="scenarioState" :runs="scenarioRuns"
+        :import-scenario="importLibraryScenario" :builder-scenarios="builderScenarios" :builder-error="builderError" @open-builder-scenario="openBuilderScenario" :state="scenarioState" :runs="scenarioRuns"
 
         :deleted="scenarioStore.deleted.value" @undo-remove="undoRemoveScenario" :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"
