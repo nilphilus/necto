@@ -1006,7 +1006,7 @@ function removeScenario(id) {
         @pending="builderPending = $event"
         @back="navigateView('scenarios')"
       />
-      <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="navigateView('builder')" :api-url="configuration?.openApiUrl" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
+      <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="navigateView('builder')" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
 
         :deleted="scenarioStore.deleted.value" @undo-remove="undoRemoveScenario" :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"

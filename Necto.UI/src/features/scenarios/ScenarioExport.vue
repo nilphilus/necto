@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue';
-import { exportScenario } from './transfers.js';
-const props = defineProps({ scenario: Object, apiUrl: String });
+import { exportScenario } from './export.js';
+const props = defineProps({ scenario: Object, workspace: String });
 const dialog = ref(null),
   bodies = ref(false),
   error = ref('');
@@ -10,7 +10,7 @@ function download() {
     const data = exportScenario(
       localStorage,
       props.scenario.id,
-      props.apiUrl,
+      props.workspace,
       bodies.value
     );
     const url = URL.createObjectURL(
@@ -28,7 +28,7 @@ function download() {
 }
 </script>
 <template>
-  <button type="button" :disabled="!apiUrl" @click="dialog.showModal()">
+  <button type="button" :disabled="!workspace" @click="dialog.showModal()">
     Export
   </button>
   <dialog ref="dialog" aria-label="Export scenario">
