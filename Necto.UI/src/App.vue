@@ -18,7 +18,7 @@ import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
 import OperationRunner from './features/request-runner/OperationRunner.vue'
 import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
 import RequestSamples from './features/request-runner/RequestSamples.vue'
-import { applySample, readSamples } from './features/request-runner/samples.js'
+import { createSampleDrafts } from './features/request-runner/samples.js'
 import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
 import ValueInput from './features/related-endpoints/ValueInput.vue'
 import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
@@ -44,6 +44,11 @@ authentication.register({ id: 'local', name: 'Local API', bootstrap: true, schem
 }, origins: [location.origin] })
 const { spec, configuration, error, operations, groups, externalApis, reload: reloadCatalog, importDocument, documentSource, restoreServerDocument } = useCatalog(authentication)
 const { sessions, sessionFor, createSession, run, prepare: prepareRequest, cancel: cancelRequest, history: requestHistory } = useRequestRunner(configuration, authentication)
+const { sampleStorageKey, createDraft } = createSampleDrafts({
+  createSession,
+  getConfiguration: () => configuration.value,
+  storage: localStorage,
+})
 const { error: mappingError, targetsFor, choicesFor, selectablePaths, mappings: endpointMappings, links: mappingLinks, pending: mappingPending } = useRelatedEndpoints(configuration, operations, externalApis.contexts, authentication)
 
 const { connections, show: showExternalApis, statuses: externalStatuses, storageError: externalStorageError } = externalApis
@@ -186,25 +191,6 @@ function releasePresetOrder() {
 }
 
 watch([graphView, settingsOpen, storageKey], releasePresetOrder)
-
-function sampleStorageKey(operation) {
-  return 'necto:request-samples:' + JSON.stringify([
-    workspaceIdentity(operation.configuration ?? configuration.value),
-    operation.key,
-  ])
-}
-
-function createDraft(operation) {
-  const session = createSession(operation)
-  try {
-    const { samples, defaultName } = readSamples(localStorage, sampleStorageKey(operation))
-    const sample = samples.find(sample => sample.name === defaultName)
-    if (sample) applySample(operation, session, sample)
-  } catch {
-    // The sample controls report storage errors when the operation is opened.
-  }
-  return session
-}
 
 function draftFor(operation) {
   return sessionFor(operation, createDraft)
