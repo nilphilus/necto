@@ -2,7 +2,8 @@ import { newBlueprint } from '../scenario-builder/model.js';
 import { exportWorkspace } from './workspace.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planTransfer, applyTransfer, exportScenario } from './transfers.js';
+import { planTransfer, applyTransfer } from './transfers.js';
+import { exportScenario } from '../scenarios/export.js';
 const scenario = (id, name) => ({
   version: 1,
   id,
@@ -73,6 +74,19 @@ test('single-scenario export excludes other scenarios and omits bodies by defaul
   assert.equal(exported.entries[0].value.scenarios.length, 1);
   assert.equal(exported.entries[0].value.scenarios[0].steps[0].body, '');
 });
+test('scenario export uses the logical workspace and ignores unrelated invalid storage', () => {
+  const workspace = 'https://api.test/openapi.json#necto-workspace=QA';
+  const workspaceKey = 'necto:scenarios:' + workspace;
+  const store = storage({
+    [key]: '{',
+    [workspaceKey]: JSON.stringify({ version: 1, scenarios: [scenario('a', 'A')] })
+  });
+  const exported = exportScenario(store, 'a', workspace, true);
+  assert.equal(exported.entries[0].key, workspaceKey);
+  assert.equal(exported.entries[0].value.scenarios[0].steps[0].body, '{"id":42}');
+  assert.throws(() => exportScenario(store, 'missing', workspace), /no longer saved/);
+});
+
 test('merging does not erase credentials from unrelated existing local items', () => {
   const env = 'necto:environments:api',
     store = storage({

@@ -1,15 +1,16 @@
 <script setup>
+import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import FolderSave from '../scenario-folder/FolderSave.vue'
 import FolderLibrary from '../scenario-folder/FolderLibrary.vue'
 import FolderFeedback from '../scenario-folder/FolderFeedback.vue'
 import ScenarioCi from '../workbench/ScenarioCi.vue'
-import ScenarioExport from '../workbench/ScenarioExport.vue'
+import ScenarioExport from './ScenarioExport.vue'
 
 import { nextTick, ref } from 'vue'
 import { pathLabel } from './scenario.js'
 import ScenarioTrace from './ScenarioTrace.vue'
 const props = defineProps({ scenarios: Array, state: Object, pending: Boolean, busy: Boolean, error: String,
-  presetNames: Array, activePresetNames: Array, runs: Map, apiUrl: String, document: Object, mappings: Array, configuration: Object, deleted: Object, folder:Object })
+  presetNames: Array, activePresetNames: Array, runs: Map, document: Object, mappings: Array, configuration: Object, deleted: Object, folder:Object })
 
 const emit = defineEmits(['open', 'run', 'remove', 'stop', 'inspect', 'undo-remove', 'builder', 'folder-settings'])
 const runId = ref('')
@@ -50,7 +51,7 @@ function runScenario(scenario) {
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <ul ref="list" class="saved-list">
       <li v-for="scenario in scenarios" :key="scenario.id" :data-scenario-id="scenario.id">
-        <div class="saved-title"><strong>{{ scenario.name }}</strong><span class="muted">{{ scenario.steps.length }} steps</span><ScenarioExport :scenario="scenario" :api-url="apiUrl" /><ScenarioCi :scenario="scenario" :document="document" :mappings="mappings" :configuration="configuration" /></div>
+        <div class="saved-title"><strong>{{ scenario.name }}</strong><span class="muted">{{ scenario.steps.length }} steps</span><ScenarioExport :scenario="scenario" :workspace="workspaceIdentity(configuration)" /><ScenarioCi :scenario="scenario" :document="document" :mappings="mappings" :configuration="configuration" /></div>
 
         <FolderSave :folder="folder" kind="chain" :scenario="scenario" :disabled="busy" @configure="emit('folder-settings')" />
         <details class="review"><summary>Review steps</summary>
