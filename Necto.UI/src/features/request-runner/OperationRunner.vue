@@ -56,6 +56,7 @@ const parameterFields = computed(() => parameters.value.map(parameter => {
     source: presetSource(props.values, key),
     type: types.length === 1 ? types[0] : undefined,
     format: schema?.format,
+    enumValues: schema?.enum,
   }
 }))
 const parameterIdPrefix = useId()
@@ -245,7 +246,7 @@ function sendShortcut(event) {
         <ImportedInputs :session="session" />
         <p v-if="!parameters.length && !operation.requestBody" class="muted empty">Ready to send. This endpoint has no inputs.</p>
 
-        <div v-for="({ parameter, key, source, type, format }, index) in parameterFields" :key="fieldKey(parameter)" class="field">
+        <div v-for="({ parameter, key, source, type, format, enumValues }, index) in parameterFields" :key="fieldKey(parameter)" class="field">
           <div class="parameter-heading">
             <component
               :is="type === 'boolean' && !values.has(key) ? 'span' : 'label'"
@@ -281,6 +282,7 @@ function sendShortcut(event) {
               :label="parameter.name"
               :type="type"
               :format="format"
+              :enum-values="enumValues"
               :choices="parameterChoices?.(parameter)"
               :required="parameter.required || parameter.in === 'path'"
               @choose="emit('choose-parameter', parameter.in, $event)"

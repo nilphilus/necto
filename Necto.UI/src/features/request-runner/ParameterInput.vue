@@ -7,11 +7,28 @@ const props = defineProps({
   label: { type: String, required: true },
   type: String,
   format: String,
+  enumValues: Array,
   choices: Array,
   required: Boolean,
 })
 const model = defineModel()
 const emit = defineEmits(['choose'])
+
+const enumOptions = computed(() => [...new Set((props.enumValues ?? [])
+  .filter((value) => ['string', 'number', 'boolean'].includes(typeof value) && value !== '')
+  .map(String))])
+const enumChoices = computed(() => [
+  ...(props.choices ?? []).filter((choice) => enumOptions.value.includes(String(choice.value))),
+  ...enumOptions.value.map((value) => ({ value })),
+])
+const shortEnum = computed(() => props.type !== 'boolean' && enumOptions.value.length > 0 && enumOptions.value.length <= 8)
+const longEnum = computed(() => props.type !== 'boolean' && enumOptions.value.length > 8)
+
+function chooseValue(value) {
+  model.value = value
+  const choice = props.choices?.find((item) => value && String(item.value) === value)
+  if (choice) emit('choose', choice)
+}
 
 const booleanOptions = [
   { value: '', label: 'Unset' },
@@ -24,12 +41,6 @@ watchPostEffect(() => {
   const valid = booleanValue.value === 'true' || booleanValue.value === 'false'
   unsetRadio.value?.setCustomValidity(props.required && !valid ? 'Select True or False.' : '')
 })
-
-function selectBoolean(value) {
-  model.value = value
-  const choice = props.choices?.find((item) => value && String(item.value) === value)
-  if (choice) emit('choose', choice)
-}
 
 const format = computed(() => props.type === 'string' ? props.format : undefined)
 const hasDate = computed(() => ['date', 'date-time'].includes(format.value))
@@ -86,21 +97,27 @@ function applyPicker() {
         type="radio"
         :name="id"
         :checked="booleanValue === option.value"
-        @change="selectBoolean(option.value)"
+        @change="chooseValue(option.value)"
       >
       <span>{{ option.label }}</span>
     </label>
   </div>
+  <select v-else-if="shortEnum" :id="id" :value="model ?? ''" :required="required"
+    @change="chooseValue($event.target.value)">
+    <option value="">Unset</option>
+    <option v-if="model && !enumOptions.includes(String(model))" :value="model">{{ model }}</option>
+    <option v-for="value in enumOptions" :key="value" :value="value">{{ value }}</option>
+  </select>
   <div v-else class="parameter-input">
     <div class="parameter-value">
       <ValueInput
         :id="id"
         :model-value="model"
-        :choices="choices"
+        :choices="longEnum ? enumChoices : choices"
         :required="required"
         :placeholder="placeholder"
         @update:model-value="model = $event; pickerOpen = false"
-        @choose="emit('choose', $event)"
+        @choose="choice => { if (!longEnum || choices?.includes(choice)) emit('choose', choice) }"
       />
       <button v-if="hasDate || hasTime" ref="pickerButton" type="button" class="secondary"
         :aria-expanded="pickerOpen" :aria-controls="pickerOpen ? id + '-picker' : undefined"
