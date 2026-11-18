@@ -8,7 +8,7 @@ on:
         required: false
         type: string
       publish:
-        description: 'Publish to nuget.org'
+        description: 'Publish to nuget.org and create a GitHub Release'
         default: false
         type: boolean
 
@@ -101,10 +101,19 @@ jobs:
       - run: dotnet test Tests/Tests.csproj -c Release
       - run: dotnet pack Necto/Necto.csproj -c Release -p:PackageVersion="$PACKAGE_VERSION" -o artifacts
 
+      - name: Package the scenario skill
+        run: node tools/package-scenario-skill.mjs "artifacts/necto-scenarios-${PACKAGE_VERSION}.zip"
+
       - uses: actions/upload-artifact@v4
         with:
           name: nuget-package
           path: artifacts/Necto.OpenApi.*.nupkg
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-skills
+          path: artifacts/necto-scenarios-${{ env.PACKAGE_VERSION }}.zip
           if-no-files-found: error
 
   publish:
@@ -115,6 +124,7 @@ jobs:
       contents: write
       id-token: write
     env:
+      PACKAGE_VERSION: ${{ needs.version.outputs.version }}
       RELEASE_TAG: v${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
@@ -134,6 +144,16 @@ jobs:
           name: nuget-package
           path: artifacts
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-skills
+          path: artifacts
+
+      - name: Verify release assets
+        run: |
+          test -s "artifacts/Necto.OpenApi.${PACKAGE_VERSION}.nupkg"
+          test -s "artifacts/necto-scenarios-${PACKAGE_VERSION}.zip"
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
@@ -146,7 +166,16 @@ jobs:
       - name: Push package to nuget.org
         env:
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
-        run: dotnet nuget push artifacts/Necto.OpenApi.*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
+        run: dotnet nuget push "artifacts/Necto.OpenApi.${PACKAGE_VERSION}.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
 
-      - name: Tag the published version
-        run: git push origin "$GITHUB_SHA:refs/tags/$RELEASE_TAG"
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_options=(--target "$GITHUB_SHA" --generate-notes)
+          if [[ "$PACKAGE_VERSION" == *-* ]]; then
+            release_options+=(--prerelease)
+          fi
+          gh release create "$RELEASE_TAG" "${release_options[@]}" \
+            "artifacts/Necto.OpenApi.${PACKAGE_VERSION}.nupkg" \
+            "artifacts/necto-scenarios-${PACKAGE_VERSION}.zip"
