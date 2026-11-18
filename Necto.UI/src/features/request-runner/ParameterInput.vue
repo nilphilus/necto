@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watchPostEffect } from 'vue'
 import { numericError } from './numericParameter.js'
+import ArrayParameterEditor from './ArrayParameterEditor.vue'
 import ValueInput from '../related-endpoints/ValueInput.vue'
 
 const props = defineProps({
@@ -10,6 +11,7 @@ const props = defineProps({
   format: String,
   enumValues: Array,
   numberRules: Array,
+  itemSchema: Object,
   choices: Array,
   required: Boolean,
 })
@@ -139,6 +141,10 @@ function applyPicker() {
         {{ hasDate && hasTime ? 'Date & time' : hasDate ? 'Date' : 'Time' }}
       </button>
     </div>
+    <ArrayParameterEditor
+      v-if="type === 'array' && ['string', 'integer', 'number', 'boolean'].includes(itemSchema?.type)"
+      :id="id" v-model="model" :item-schema="itemSchema"
+    />
     <small v-if="numericHint" :id="id + '-bounds'" class="muted">{{ numericHint }}</small>
     <div v-if="pickerOpen" :id="id + '-picker'" class="picker">
       <label v-if="hasDate">Date <input v-model="date" type="date"></label>
