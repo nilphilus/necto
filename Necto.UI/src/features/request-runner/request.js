@@ -181,7 +181,9 @@ export function hasPresetFor(operation, body, values) {
 }
 
 function parameterValue(operation, parameter, input) {
-  const type = operation.resolve(parameter.schema)?.type
+  const declaredType = operation.resolve(parameter.schema)?.type
+  const types = Array.isArray(declaredType) ? declaredType.filter((type) => type !== 'null') : [declaredType]
+  const type = types.length === 1 ? types[0] : undefined
   if (type !== 'array' && type !== 'object') return input
   try {
     const value = JSON.parse(input)
