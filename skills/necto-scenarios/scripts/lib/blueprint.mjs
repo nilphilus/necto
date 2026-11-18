@@ -5274,6 +5274,50 @@ var nodes = /* @__PURE__ */ new Set([
 var fail = () => {
 	throw new Error("Expression uses unsupported syntax or exceeds its limits.");
 };
+function validateNodeSyntax(node) {
+	switch (node.type) {
+		case "Identifier":
+			if (!identifier(node.name)) fail();
+			break;
+		case "Literal":
+			if (node.regex || node.bigint !== void 0) fail();
+			if (typeof node.value === "number" && !Number.isFinite(node.value)) fail();
+			break;
+		case "VariableDeclaration":
+			if (node.kind !== "const") fail();
+			break;
+		case "VariableDeclarator":
+			if (node.id.type !== "Identifier" || !node.init) fail();
+			break;
+		case "MemberExpression":
+			if (node.optional) fail();
+			break;
+		case "Property":
+			if (node.kind !== "init" || node.method || node.computed) fail();
+			break;
+		case "BinaryExpression":
+			if (!binary.has(node.operator)) fail();
+			break;
+		case "UnaryExpression":
+			if (![
+				"!",
+				"-",
+				"+"
+			].includes(node.operator)) fail();
+			break;
+		case "LogicalExpression":
+			if (![
+				"&&",
+				"||",
+				"??"
+			].includes(node.operator)) fail();
+			break;
+		case "BreakStatement":
+			if (node.label) fail();
+			break;
+		case "ArrayExpression": if (node.elements.some((element) => !element)) fail();
+	}
+}
 function parseExpression(code) {
 	if (typeof code !== "string" || !code.trim() || code.length > EXPRESSION_LIMITS.source) fail();
 	let ast;
@@ -5294,15 +5338,7 @@ function parseExpression(code) {
 	while (stack.length) {
 		const { node, depth } = stack.pop();
 		if (!nodes.has(node.type) || ++count > EXPRESSION_LIMITS.astNodes || depth > EXPRESSION_LIMITS.depth) fail();
-		if (node.type === "Identifier" && !identifier(node.name) || node.type === "Literal" && (node.regex || node.bigint !== void 0 || typeof node.value === "number" && !Number.isFinite(node.value)) || node.type === "VariableDeclaration" && node.kind !== "const" || node.type === "VariableDeclarator" && (node.id.type !== "Identifier" || !node.init) || node.type === "MemberExpression" && node.optional || node.type === "Property" && (node.kind !== "init" || node.method || node.computed) || node.type === "BinaryExpression" && !binary.has(node.operator) || node.type === "UnaryExpression" && ![
-			"!",
-			"-",
-			"+"
-		].includes(node.operator) || node.type === "LogicalExpression" && ![
-			"&&",
-			"||",
-			"??"
-		].includes(node.operator) || node.type === "BreakStatement" && node.label || node.type === "ArrayExpression" && node.elements.some((value) => !value)) fail();
+		validateNodeSyntax(node);
 		for (const value of Object.values(node)) if (Array.isArray(value)) {
 			for (const child of value) if (child?.type) stack.push({
 				node: child,
