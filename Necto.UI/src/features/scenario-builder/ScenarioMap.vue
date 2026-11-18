@@ -5,7 +5,7 @@ import { inputProducers } from './variables.js'
 import { layers } from './model.js'
 import { allConnections, connectionKey, hasTiming } from './connections.js'
 const props = defineProps({ blueprint: Object, selected: String, steps: Array, disabled: Boolean })
-const emit = defineEmits(['select', 'connect', 'configure', 'create-next'])
+const emit = defineEmits(['select', 'inspect', 'add-first', 'connect', 'configure', 'create-next'])
 const zoom = ref(1),
   canvas = ref(null),
   drag = ref(null),
@@ -220,10 +220,13 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
   <section class="scenario-map" aria-label="Scenario map">
     <header>
       <strong>Scenario map</strong
-      ><span>Drag ● to a request or empty space. ⚙ configures a connection.</span
-      ><button type="button" class="secondary" aria-haspopup="dialog" @click="showConnections()">
+      ><span v-if="blueprint.steps.length">Drag ● to a request or empty space. ⚙ configures a connection.</span
+      ><button v-if="selected && blueprint.steps.some(step => step.id === selected)" type="button" class="secondary"
+        :disabled="disabled || blueprint.steps.length >= 100"
+        @click="emit('create-next', { from: selected })">Add next request</button>
+      <button v-if="blueprint.steps.length" type="button" class="secondary" aria-haspopup="dialog" @click="showConnections()">
         Connections ({{ layout.edges.length }})
-      </button><label
+      </button><label v-if="blueprint.steps.length"
         >Zoom
         <select v-model.number="zoom">
           <option :value="0.65">65%</option>
@@ -244,10 +247,10 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
       <button type="button" @click="cancel">Cancel (Esc)</button>
     </p>
     <div class="map-scroll" tabindex="0" aria-label="Scroll scenario map">
-      <p v-if="!blueprint.steps.length" class="map-empty">
-        Add requests, then drag between their connection handles.<br />Independent requests start in
-        parallel.
-      </p>
+      <div v-if="!blueprint.steps.length" class="map-empty">
+        <p>Choose the first endpoint in your scenario.</p>
+        <button type="button" class="primary" :disabled="disabled" @click="emit('add-first')">+ Add request</button>
+      </div>
       <div
         v-else
         :style="{ width: layout.width * zoom + 'px', height: layout.height * zoom + 'px' }"
@@ -338,7 +341,7 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
                 ><span class="method" :data-method="node.step.method">{{
                   node.step.method || '?'
                 }}</span
-                ><span class="node-state">{{
+                ><span v-if="drag || !states.has(node.step.id)" class="node-state">{{
                   states.get(node.step.id)?.status ?? 'Request'
                 }}</span></span
               >
@@ -351,6 +354,10 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
                   · Human input</span
                 ></span
               >
+            </button>
+            <button v-if="!drag && states.has(node.step.id)" type="button" class="node-response"
+              :aria-label="'View response for ' + node.step.label" @click="emit('inspect', node.step.id)">
+              {{ states.get(node.step.id).httpStatus ?? states.get(node.step.id).status }}
             </button>
             <button
               type="button"
@@ -563,6 +570,17 @@ marker path {
   align-items: center;
   justify-content: space-between;
   gap: 0.3rem;
+}
+.node-response {
+  position: absolute;
+  right: .45rem;
+  top: .35rem;
+  border: 1px solid var(--line);
+  border-radius: .3rem;
+  background: var(--surface);
+  color: var(--accent);
+  font-size: .7rem;
+  padding: .15rem .4rem;
 }
 .node-state,
 .node-inputs {

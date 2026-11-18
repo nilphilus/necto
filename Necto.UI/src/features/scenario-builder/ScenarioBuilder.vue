@@ -62,6 +62,8 @@ const selectedId = ref(''),
   runDialog = ref(null),
   fileInput = ref(null)
 const selectedPresets = ref([])
+const runConcurrency = ref(4)
+const runIssue = ref(null)
 const allowExpressionOverrides = ref(false)
 const hasBodyExpressions = computed(() => draft.value.steps.some(step =>
   step.inputs.some(input => input.location === 'body' && input.source === 'expression')))
@@ -150,14 +152,16 @@ const filtered = computed(() =>
     )
     .slice(0, 100)
 )
-const validation = computed(() => {
+const validationIssue = computed(() => {
   try {
     validateBlueprint(draft.value)
-    return ''
+    return null
   } catch (cause) {
-    return cause.message
+    return cause
   }
 })
+const validation = computed(() => validationIssue.value?.message ?? '')
+const failedStep = computed(() => execution.steps.find(step => step.status === 'failed'))
 const requestParameters = computed(() => (operation.value?.parameters ?? []).filter(
   parameter => ['path', 'query', 'header'].includes(parameter.in)
 ))
@@ -481,20 +485,24 @@ function runContext() {
 }
 function refreshReview() {
   runProblem.value = ''
+  runIssue.value = null
   try {
-    review.value = prepareBlueprint(draft.value, runContext())
+    review.value = prepareBlueprint({ ...draft.value, concurrency: runConcurrency.value }, runContext())
   } catch (cause) {
     review.value = []
     runProblem.value = cause.message
+    runIssue.value = cause
   }
 }
 function reviewRun() {
+  runConcurrency.value = draft.value.concurrency
+  allowHuman.value = true
   allowExpressionOverrides.value = false
   selectedPresets.value = props.activePresetNames.filter((name) => props.presetNames.includes(name))
   refreshReview()
   runDialog.value.showModal()
 }
-watch([allowHuman, allowExpressionOverrides], () => {
+watch([allowHuman, allowExpressionOverrides, runConcurrency], () => {
   if (runDialog.value?.isOpen()) refreshReview()
 })
 watch(
@@ -512,33 +520,43 @@ watch(
 )
 async function startRun() {
   runProblem.value = ''
+  runIssue.value = null
   try {
-    const promise = store.run(runContext(), props.execute, allowHuman.value)
+    const promise = store.run(runContext(), props.execute, allowHuman.value, runConcurrency.value)
     // run() is async; initial errors are reported by awaiting below.
     if (pending.value) runDialog.value.close()
     await promise
     if (runDialog.value.isOpen()) runDialog.value.close()
   } catch (cause) {
     runProblem.value = cause.message
+    runIssue.value = cause
     if (!runDialog.value.isOpen()) error.value = cause.message
   }
 }
-let preferredStepTab
 function chooseStepTab(value) {
-  preferredStepTab = value
   tab.value = value
 }
-watch(
-  () => draft.value.id,
-  () => {
-    preferredStepTab = undefined
-  }
-)
 function select(id, showResult = false) {
   selectedId.value = id
-  const hasResult = execution.steps.some((step) => step.id === id)
-  tab.value = hasResult ? (showResult ? 'response' : (preferredStepTab ?? 'response')) : 'configure'
-  void showStep()
+  tab.value = showResult ? 'response' : 'configure'
+  return showStep()
+}
+async function goToIssue(issue, showResult = false) {
+  if (!issue?.stepId || !draft.value.steps.some(step => step.id === issue.stepId)) return
+  runDialog.value?.close()
+  await select(issue.stepId, showResult)
+  if (!issue.target) return
+  const { location, name } = issue.target
+  const attribute = location === 'body' ? 'data-body-path' : 'data-parameter'
+  const key = location === 'body' ? name : location + ':' + name
+  const row = [...stepDialog.value.querySelectorAll(`[${attribute}]`)].find(
+    element => element.getAttribute(attribute) === key && element.getClientRects().length
+  )
+  const focus = row?.querySelector('.expression-editor textarea:not([disabled])') ??
+    row?.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled])') ??
+    stepDialog.value.querySelector('.request-inputs > h4')
+  focus?.scrollIntoView({ block: 'nearest' })
+  focus?.focus({ preventScroll: true })
 }
 function exportDefinition() {
   attempt(() => {
@@ -653,7 +671,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
           aria-label="Scenario name"
       /></label>
       <details class="scenario-description">
-        <summary>Description</summary>
+        <summary>Scenario details</summary>
         <textarea
           v-model="draft.description"
           :disabled="pending"
@@ -662,6 +680,9 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
           aria-label="Scenario description"
           placeholder="What does this scenario do?"
         />
+        <label class="scenario-parallelism">Default parallel requests
+          <input v-model.number="draft.concurrency" :disabled="pending" type="number" min="1" max="8" step="1">
+        </label>
       </details>
       <label
         >Saved<select
@@ -678,6 +699,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         type="button"
         class="secondary"
         :disabled="pending || draft.steps.length >= 100"
+        v-if="draft.steps.length"
         @click="openAdd"
       >
         + Add request
@@ -745,6 +767,8 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
     <FolderLibrary :folder="folder" />
     <p v-if="error || validation" class="builder-message error" role="alert">
       {{ error || validation }}
+      <button v-if="!error && validationIssue?.stepId" type="button" class="secondary"
+        @click="goToIssue(validationIssue)">Go to step</button>
     </p>
     <p v-if="removedStep" class="builder-message muted" role="status">
       Step removed: {{ removedStep.step.label }}.
@@ -769,6 +793,10 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         {{ execution.steps.length }} completed</span
       ><span v-if="questions.size">{{ questions.size }} awaiting your input</span
       ><span class="error">{{ execution.error }}</span>
+      <button v-if="failedStep && !execution.stale" type="button" class="secondary"
+        @click="goToIssue({ stepId: failedStep.id, target: failedStep.problemTarget }, !failedStep.problemTarget)">
+        Go to failed step
+      </button>
     </div>
     <section v-if="questions.size" class="human-queue" aria-label="Human input required">
       <form
@@ -823,6 +851,8 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         :steps="execution.stale ? [] : execution.steps"
         :disabled="pending"
         @select="select"
+        @inspect="id => select(id, true)"
+        @add-first="openAdd"
         @connect="connect"
         @configure="openConnection"
         @create-next="createNext"
@@ -947,91 +977,72 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
             <p v-else-if="!operation" class="error">
               Endpoint unavailable. Enable its API connection before running.
             </p>
-            <section class="incoming-links" aria-label="Incoming connections">
-              <h4>Incoming connections</h4>
-              <button
-                v-for="edge in inbound"
-                :key="connectionKey(edge.from, edge.to)"
-                type="button"
-                class="secondary"
-                @click="openConnection(edge, $event)"
-              >
-                {{ connectionSummary(edge, draft.steps)
-                }}<small v-if="edge.delayMs !== undefined || edge.waitFor">
-                  · Delay / Wait for</small
-                >
-              </button>
-              <p class="muted">
-                Drag between handles on the map. Configure timing and response bindings using ⚙ on
-                the line.
-              </p>
-            </section>
-            <details
-              v-if="operation"
-              :key="selected.id"
-              class="input-suggestions"
-              @toggle="suggestionsOpen = $event.target.open"
-            >
-              <summary>Suggested inputs</summary>
-              <div class="suggestion-content">
-                <p class="suggestion-hint">Choose a suggestion to add a response binding to this request.</p>
-                <div
-                  v-if="appliedToSelected.length"
-                  ref="suggestionSummary"
-                  tabindex="-1"
-                  role="status"
-                  class="applied-suggestions"
-                >
-                  <strong>Applied suggestions</strong>
-                  <ul>
-                    <li
-                      v-for="{ input, added } in appliedToSelected"
-                      :key="input.pointer ?? input.location + ':' + input.name"
-                    >
-                      {{ input.pointer || input.name || 'Whole body' }} ←
-                      {{ draft.steps.find((step) => step.id === input.stepId)?.label }} ·
-                      {{ input.responsePointer || 'whole response' }} ·
-                      {{ added ? 'Step added' : 'Existing step' }}
-                    </li>
-                  </ul>
-                </div>
-                <p v-if="!suggestions.length && appliedToSelected.length" class="muted">
-                  No further suggestions for unbound fields.
-                </p>
-                <p v-else-if="!suggestions.length" class="muted">
-                  No available scalar or whole-value mappings for unbound inputs. Set array selection in Request inputs.
-                </p>
-                <div v-for="group in suggestions" :key="group.field">
-                  <strong>{{ group.field }}</strong>
-                  <ul>
-                    <li v-for="(option, index) in group.options" :key="index">
-                      <button
-                        type="button"
-                        class="secondary"
-                        :disabled="pending"
-                        @click="useSuggestion(option)"
-                      >
-                        {{
-                          option.stepId
-                            ? draft.steps.find((step) => step.id === option.stepId)?.label
-                            : 'Add ' + option.from.name
-                        }}
-                        · {{ option.input.responsePointer || 'whole response' }}
-                      </button>
-                      <small
-                        >{{ option.evidence
-                        }}<template v-if="option.expectedStatus">
-                          · HTTP {{ option.expectedStatus }}</template
-                        ></small
-                      >
-                    </li>
-                  </ul>
-                </div>
-                <p v-if="suggestionProblem" class="error" role="alert">{{ suggestionProblem }}</p>
-              </div>
-            </details>
             <section v-if="requestParameters.length || operation?.requestBody" class="request-inputs" aria-label="Request inputs">
-              <h4>Request inputs</h4>
+              <h4 tabindex="-1">Request inputs</h4>
+              <details
+                v-if="operation"
+                :key="selected.id"
+                class="input-suggestions"
+                @toggle="suggestionsOpen = $event.target.open"
+              >
+                <summary>Suggested inputs</summary>
+                <div class="suggestion-content">
+                  <p class="suggestion-hint">Choose a suggestion to add a response binding to this request.</p>
+                  <div
+                    v-if="appliedToSelected.length"
+                    ref="suggestionSummary"
+                    tabindex="-1"
+                    role="status"
+                    class="applied-suggestions"
+                  >
+                    <strong>Applied suggestions</strong>
+                    <ul>
+                      <li
+                        v-for="{ input, added } in appliedToSelected"
+                        :key="input.pointer ?? input.location + ':' + input.name"
+                      >
+                        {{ input.pointer || input.name || 'Whole body' }} ←
+                        {{ draft.steps.find((step) => step.id === input.stepId)?.label }} ·
+                        {{ input.responsePointer || 'whole response' }} ·
+                        {{ added ? 'Step added' : 'Existing step' }}
+                      </li>
+                    </ul>
+                  </div>
+                  <p v-if="!suggestions.length && appliedToSelected.length" class="muted">
+                    No further suggestions for unbound fields.
+                  </p>
+                  <p v-else-if="!suggestions.length" class="muted">
+                    No available scalar or whole-value mappings for unbound inputs. Set array selection in Request inputs.
+                  </p>
+                  <div v-for="group in suggestions" :key="group.field">
+                    <strong>{{ group.field }}</strong>
+                    <ul>
+                      <li v-for="(option, index) in group.options" :key="index">
+                        <button
+                          type="button"
+                          class="secondary"
+                          :disabled="pending"
+                          @click="useSuggestion(option)"
+                        >
+                          {{
+                            option.stepId
+                              ? draft.steps.find((step) => step.id === option.stepId)?.label
+                              : 'Add ' + option.from.name
+                          }}
+                          · {{ option.input.responsePointer || 'whole response' }}
+                        </button>
+                        <small
+                          >{{ option.evidence
+                          }}<template v-if="option.expectedStatus">
+                            · HTTP {{ option.expectedStatus }}</template
+                          ></small
+                        >
+                      </li>
+                    </ul>
+                  </div>
+                  <p v-if="suggestionProblem" class="error" role="alert">{{ suggestionProblem }}</p>
+                </div>
+              </details>
               <div v-if="requestParameters.length" class="request-parameters">
                 <div v-for="parameter in requestParameters"
                   :key="parameter.in + ':' + parameter.name" class="request-parameter" :data-parameter="parameter.in + ':' + parameter.name">
@@ -1059,6 +1070,21 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
                 :disabled="pending"
               />
             </section>
+            <details v-if="inbound.length" class="incoming-links" aria-label="Incoming connections">
+              <summary>Incoming connections ({{ inbound.length }})</summary>
+              <button
+                v-for="edge in inbound"
+                :key="connectionKey(edge.from, edge.to)"
+                type="button"
+                class="secondary"
+                @click="openConnection(edge, $event)"
+              >
+                {{ connectionSummary(edge, draft.steps)
+                }}<small v-if="edge.delayMs !== undefined || edge.waitFor">
+                  · Delay / Wait for</small
+                >
+              </button>
+            </details>
             <details class="step-checks">
               <summary>Response checks ({{ selected.request.assertions?.length ?? 0 }})</summary>
               <ResponseChecksEditor :session="selected.request" :disabled="pending" />
@@ -1108,6 +1134,8 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
           role="alert"
         >
           {{ validation || error }}
+          <button v-if="validation && validationIssue?.stepId" type="button" class="secondary"
+            @click="goToIssue(validationIssue)">Go to step</button>
         </p>
         <div v-if="tab === 'configure' && folder?.connected" class="step-folder-feedback">
           <FolderFeedback :folder="folder" />
@@ -1287,7 +1315,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       v-model:selected-presets="selectedPresets"
       v-model:allow-expression-overrides="allowExpressionOverrides"
       :has-body-expressions="hasBodyExpressions"
-      v-model:concurrency.number="draft.concurrency"
+      v-model:concurrency.number="runConcurrency"
       v-model:allow-human="allowHuman"
       :name="draft.name"
       :step-count="draft.steps.length"
@@ -1296,13 +1324,16 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       :pending="pending"
       :validation="validation"
       :run-problem="runProblem"
+      :problem-step="runIssue?.stepId"
+      @go-to-step="goToIssue(runIssue)"
       :review="review"
       @start="startRun"
     />
   </section>
 </template>
 <style scoped>
-.request-inputs { border-top: 1px solid var(--line); padding-block-start: .7rem; }
+.request-inputs { padding-block-start: .15rem; }
+.scenario-parallelism { margin-top: .45rem; }
 .request-inputs > h4 { margin: 0 0 .55rem; font-size: .9rem; }
 .request-parameters { display: grid; gap: .45rem; }
 .request-parameter { padding: .55rem; border: 1px solid var(--line); border-radius: .45rem; }
@@ -1355,13 +1386,13 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 }
 .input-suggestions {
   font-size: 0.78rem;
-  margin-block: 0.7rem 0.85rem;
+  margin-block: 0.35rem .55rem;
   border: 1px solid var(--line);
   border-inline-start: 3px solid var(--accent);
   border-radius: 0.45rem;
   background: var(--accent-soft);
 }
-.input-suggestions > summary { padding: .5rem .65rem; font-weight: 600; }
+.input-suggestions > summary { padding: .35rem .55rem; font-weight: 600; }
 .input-suggestions[open] > summary { border-bottom: 1px solid var(--line); }
 .suggestion-content { padding: .5rem .65rem; overflow-wrap: anywhere; }
 .suggestion-hint { margin: 0 0 .5rem; color: var(--muted); }
@@ -1503,7 +1534,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
   display: grid;
   gap: 0.4rem;
 }
-.incoming-links h4 {
+.incoming-links summary {
   margin: 0;
   font-size: 0.8rem;
 }
