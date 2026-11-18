@@ -102,7 +102,8 @@ let activeRoute
 const editedPresetName = ref('')
 const newPresetName = ref('')
 const confirmingPresetDeletion = ref(false)
-const { presets, presetColors, activePresetNames, presetError, storageKey, savePresets, valuesFor } = usePresets(configuration)
+const presetStore = usePresets(configuration)
+const { presets, presetColors, activePresetNames, presetError, storageKey, valuesFor } = presetStore
 const editedPresetValues = computed(() => presets.value.get(editedPresetName.value))
 watch([editedPresetName, settingsOpen, settingsTab], () => { confirmingPresetDeletion.value = false })
 const endpointHeading = ref(null)
@@ -250,11 +251,7 @@ function resetPresetSessions() {
 }
 
 function togglePreset(name, enabled) {
-  activePresetNames.value = enabled
-    ? [...activePresetNames.value, name]
-    : activePresetNames.value.filter(activeName => activeName !== name)
-  resetPresetSessions()
-  savePresets()
+  if (presetStore.setActive(name, enabled)) resetPresetSessions()
 }
 
 async function configureScenarioFolder(){settingsTab.value='workspace';if(!settingsOpen.value)await toggleSettings()}
@@ -312,39 +309,26 @@ function trapSettingsFocus(event) {
 }
 
 async function addPreset() {
-  const name = newPresetName.value.trim()
+  const name = presetStore.add(newPresetName.value)
   if (!name) return
-  if (presets.value.has(name)) {
-    presetError.value = 'A preset with that name already exists.'
-    return
-  }
-  presets.value.set(name, new Map())
   newPresetName.value = ''
   editedPresetName.value = name
-  savePresets()
   await nextTick()
   presetFields.value?.addRow()
 }
 
 function savePresetValues(values) {
-  const name = editedPresetName.value
-  presets.value.set(name, values)
-  if (activePresetNames.value.includes(name)) resetPresetSessions()
-  savePresets()
+  if (presetStore.setValues(editedPresetName.value, values)) resetPresetSessions()
 }
 
 function savePresetColor(color) {
-  presetColors.value.set(editedPresetName.value, color)
-  savePresets()
+  presetStore.setColor(editedPresetName.value, color)
 }
 
 async function removePreset() {
-  const name = editedPresetName.value
-  presets.value.delete(name)
-  presetColors.value.delete(name)
+  const wasActive = presetStore.remove(editedPresetName.value)
   editedPresetName.value = presets.value.keys().next().value ?? ''
-  if (activePresetNames.value.includes(name)) togglePreset(name, false)
-  else savePresets()
+  if (wasActive) resetPresetSessions()
   await nextTick()
   const nextControl = presetList.value?.querySelector('[aria-current="true"]') ?? presetNameInput.value
   nextControl?.focus()

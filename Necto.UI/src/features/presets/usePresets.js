@@ -60,6 +60,50 @@ export function usePresets(configuration) {
     }
   }
 
+  function add(rawName) {
+    const name = rawName.trim()
+    if (!name) return
+    if (presets.value.has(name)) {
+      presetError.value = 'A preset with that name already exists.'
+      return
+    }
+    presets.value.set(name, new Map())
+    savePresets()
+    return name
+  }
+
+  function setActive(name, enabled) {
+    const active = activePresetNames.value.includes(name)
+    if (!presets.value.has(name) || active === enabled) return false
+    activePresetNames.value = enabled
+      ? [...activePresetNames.value, name]
+      : activePresetNames.value.filter((activeName) => activeName !== name)
+    savePresets()
+    return true
+  }
+
+  function setValues(name, values) {
+    if (!presets.value.has(name)) return false
+    presets.value.set(name, values)
+    savePresets()
+    return activePresetNames.value.includes(name)
+  }
+
+  function setColor(name, color) {
+    if (!presets.value.has(name)) return
+    presetColors.value.set(name, color)
+    savePresets()
+  }
+
+  function remove(name) {
+    if (!presets.value.delete(name)) return false
+    presetColors.value.delete(name)
+    const wasActive = activePresetNames.value.includes(name)
+    activePresetNames.value = activePresetNames.value.filter((activeName) => activeName !== name)
+    savePresets()
+    return wasActive
+  }
+
   function valuesFor(operation, layers = activePresetValues.value) {
     if (operation.apiId && operation.apiId !== 'local' && !operation.usePresets) return new Map()
     return resolveNamedRequestValues(
@@ -77,7 +121,11 @@ export function usePresets(configuration) {
     activePresetNames,
     presetError,
     storageKey,
-    savePresets,
+    add,
+    setActive,
+    setValues,
+    setColor,
+    remove,
     valuesFor,
   }
 }
