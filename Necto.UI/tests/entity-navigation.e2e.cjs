@@ -11,9 +11,35 @@ let browser,server,page,base
  await map.waitFor();assert.equal(await canvas.locator('.entity-node').count(),80)
  const state=()=>canvas.evaluate(el=>({x:el.scrollLeft,y:el.scrollTop,w:el.clientWidth,h:el.clientHeight,sw:el.scrollWidth,sh:el.scrollHeight,scale:el.querySelector('svg').width.baseVal.value/el.querySelector('svg').viewBox.baseVal.width}))
  const box=await canvas.boundingBox(),x=Math.round(box.width*.55),y=Math.round(box.height*.4)
- await page.mouse.move(box.x+x,box.y+y);const before=await state();await page.mouse.wheel(0,-100);await page.waitForFunction(old=>document.querySelector('.graph-canvas > svg').width.baseVal.value>old,await svg.evaluate((el,scale)=>el.viewBox.baseVal.width*scale,before.scale));await page.waitForTimeout(100)
+ await page.mouse.move(box.x+x,box.y+y)
+ const before=await state()
+ await page.mouse.wheel(0,-100)
+ await page.waitForTimeout(100)
+ assert.equal((await state()).scale,before.scale)
+ await page.keyboard.down('Control')
+ await page.mouse.wheel(0,-100);await page.waitForFunction(old=>document.querySelector('.graph-canvas > svg').width.baseVal.value>old,await svg.evaluate((el,scale)=>el.viewBox.baseVal.width*scale,before.scale));await page.waitForTimeout(100)
  const after=await state();assert.ok(after.scale>before.scale);assert.ok(Math.abs(after.x-Math.max(0,Math.min(after.sw-after.w,(before.x+x)/before.scale*after.scale-x)))<2);assert.ok(Math.abs(after.y-Math.max(0,Math.min(after.sh-after.h,(before.y+y)/before.scale*after.scale-y)))<2)
  for(let i=0;i<6;i++){await page.mouse.wheel(0,-100);await page.waitForTimeout(40)}
+ await page.keyboard.up('Control')
+ await canvas.evaluate(el=>el.scrollTo(0,0))
+ const panStart=await canvas.evaluate(el=>{
+   const rect=el.getBoundingClientRect()
+   for(let y=120;y<el.clientHeight-140;y+=20){
+     for(let x=120;x<el.clientWidth-180;x+=20){
+       const target=document.elementFromPoint(rect.left+x,rect.top+y)
+       if(el.contains(target)&&!target.closest('button'))return {x:rect.left+x,y:rect.top+y}
+     }
+   }
+ })
+ assert.ok(panStart)
+ await page.mouse.move(panStart.x,panStart.y)
+ await page.mouse.down()
+ await page.mouse.move(panStart.x-70,panStart.y-60,{steps:5})
+ await page.mouse.up()
+ const panned=await state()
+ assert.deepEqual([panned.x,panned.y],[Math.min(70,panned.sw-panned.w),Math.min(60,panned.sh-panned.h)])
+ assert.ok(panned.x>0||panned.y>0)
+ assert.equal(await canvas.locator('.entity-node.active').count(),0)
  const mini=map.locator('svg'),bounds=await mini.boundingBox();await mini.click({position:{x:bounds.width*.85,y:bounds.height*.85}});await page.waitForTimeout(100);const moved=await state();assert.ok(moved.x>0||moved.y>0)
  const viewport=map.locator('.map-viewport');assert.ok(Number(await viewport.getAttribute('width'))<Number(await mini.getAttribute('viewBox').then(v=>v.split(' ')[2])))
  await page.mouse.move(bounds.x+bounds.width*.8,bounds.y+bounds.height*.8);await page.mouse.down();await page.mouse.move(bounds.x+bounds.width*.3,bounds.y+bounds.height*.3,{steps:5});await page.mouse.up();await page.waitForTimeout(100);const dragged=await state();assert.ok(dragged.x<moved.x||dragged.y<moved.y)

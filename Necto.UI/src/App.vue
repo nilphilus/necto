@@ -21,7 +21,6 @@ import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
 import RequestSamples from './features/request-runner/RequestSamples.vue'
 import { createSampleDrafts } from './features/request-runner/samples.js'
 import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
-import ValueInput from './features/related-endpoints/ValueInput.vue'
 import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
 import RelatedTargets from './features/related-endpoints/RelatedTargets.vue'
 import ExternalApiSettings from './features/external-apis/ExternalApiSettings.vue'
@@ -38,7 +37,7 @@ import { useScenarios } from './features/scenarios/useScenarios.js'
 import { rememberBinding } from './features/scenarios/scenario.js'
 import { readRoute, routePath } from './features/routing/routes.js'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
-import { buildRequest, fieldKey, contextKey, hasPresetFor, presetInputs } from './features/request-runner/request.js'
+import { buildRequest, contextKey, hasPresetFor, presetInputs } from './features/request-runner/request.js'
 
 const authentication = useAuthentication()
 const authorizationOpen = ref(false)
@@ -1230,7 +1229,8 @@ function removeScenario(id) {
               </form>
             </dialog>
             <CaptureRequestsDialog ref="captureDialog" :scenarios="builderScenarios" :save="saveCapturedRequests" />
-            <OperationRunner @capture-requests="captureRequests" :prepare="prepareRequest" :cancel="cancelRequest" :history="requestHistory" :configuration="configuration" :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :preset-colors="presetColors" :default-preset-color="defaultPresetColor" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" @edit-preset="editActivePreset">
+            <OperationRunner @capture-requests="captureRequests" :prepare="prepareRequest" :cancel="cancelRequest" :history="requestHistory" :configuration="configuration" :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :preset-colors="presetColors" :default-preset-color="defaultPresetColor" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" :parameter-choices="parameter => choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
+              @choose-parameter="(location, choice) => choose(current.session, location, choice)" @edit-preset="editActivePreset">
               <template #request-actions>
                 <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">
                   Save request
@@ -1239,12 +1239,6 @@ function removeScenario(id) {
               <template #samples>
                 <RequestSamples :key="sampleStorageKey(current.operation)" ref="requestSamples" :storage-key="sampleStorageKey(current.operation)"
                   :operation="current.operation" :session="current.session" :values="requestValues" />
-              </template>
-              <template #parameter-input="{ parameter, hint, id }">
-                <ValueInput :id="id" v-model="current.session.fields[fieldKey(parameter)]"
-                  :choices="choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
-                  :required="parameter.required || parameter.in === 'path'" :placeholder="hint"
-                  @choose="choose(current.session, parameter.in, $event)" />
               </template>
               <template #choices="{ location, parameterName }">
                 <RelatedChoices v-if="location === 'body'"
