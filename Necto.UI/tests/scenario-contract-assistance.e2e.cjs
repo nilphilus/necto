@@ -21,7 +21,7 @@ require('./qa-fixture.cjs').run(async ({ p, assert, builder, add, save, saved, e
   await toggle.click()
   assert.equal(await suggestions.getByRole('region', { name: 'Request body schema' }).count(), 0)
   const panelBounds = await suggestions.boundingBox()
-  const inputBounds = await inputs.boundingBox()
+  const inputBounds = await inputs.getByRole('region', { name: 'Request body schema' }).boundingBox()
   assert.ok(inputBounds.y >= panelBounds.y + panelBounds.height)
   await toggle.click()
   await inputs.getByRole('region', { name: 'Request body schema' }).waitFor()

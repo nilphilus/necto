@@ -75,16 +75,16 @@ export function useBuilder(configuration) {
       } })
     })
   }
-  async function run(context, execute, allowHuman) {
+  async function run(context, execute, allowHuman, concurrency = draft.value.concurrency) {
     if (pending.value) return
     error.value = ''; notice.value = ''
-    const plan = prepareBlueprint(draft.value, context)
+    const plan = prepareBlueprint({ ...draft.value, concurrency }, context)
     if (!allowHuman && plan.some(step => step.inputs.flatMap(inputSources).some(input => input.source === 'human' || input.source === 'variable' && plan.variables.find(variable => variable.id === input.variableId)?.source === 'human'))) throw new Error('Enable human-in-the-loop for steps that ask for input.')
     const runRevision = revision
     Object.assign(execution, { status: 'running', steps: plan, error: '', stale: false, presetNames: [...(context.presetNames ?? [])] })
     const current = controller = new AbortController(); pending.value = true
     try {
-      const outcome = await executeBlueprint(execution.steps, { concurrency: draft.value.concurrency, execute, signal: current.signal, ask: allowHuman ? ask : undefined })
+      const outcome = await executeBlueprint(execution.steps, { concurrency, execute, signal: current.signal, ask: allowHuman ? ask : undefined })
       if (revision === runRevision) Object.assign(execution, outcome)
     } finally {
       // A canceled run must not retain human answers in its prompt queue.

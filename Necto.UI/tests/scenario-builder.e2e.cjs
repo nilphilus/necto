@@ -57,7 +57,7 @@ const document={openapi:'3.1.0',info:{title:'Commerce API',version:'1'},paths:{
  assert.equal(calls.some(call=>call.path.startsWith('/audit/')),false);await shot('scenario-builder-human')
  await p.getByLabel('Enter dispatch approval code',{exact:false}).fill('RUN-ONLY-9472');await p.getByRole('button',{name:'Continue Approve dispatch',exact:true}).click();await p.locator('.builder-run-status').filter({hasText:'5 / 5 completed'}).waitFor()
  assert.equal(JSON.parse(calls.find(call=>call.path==='/audit/901').body).approvalCode,'RUN-ONLY-9472');assert.equal(calls.length,5);assert.equal(await p.evaluate(()=>Object.values(localStorage).join('').includes('RUN-ONLY-9472')),false)
- await p.locator('.map-node').filter({hasText:'Create order'}).click();await p.locator('.response-content').getByText('901',{exact:false}).waitFor();await shot('scenario-builder-completed');await closeStep()
+ await p.getByRole('button',{name:'View response for Create order',exact:true}).click();await p.locator('.response-content').getByText('901',{exact:false}).waitFor();await shot('scenario-builder-completed');await closeStep()
  // Export includes the definition, never run answers, results or generated values.
  await p.locator('.builder-more summary').click();const downloading=p.waitForEvent('download');await p.getByRole('button',{name:'Export definition',exact:true}).click();const download=await downloading;const exported=await fs.readFile(await download.path(),'utf8');assert.equal(JSON.parse(exported).steps.length,5);assert.ok(!exported.includes('RUN-ONLY-9472'));assert.ok(!exported.includes(body.reference));await p.locator('.builder-more summary').click()
  // Export/save/reload never replay a request and retain only the definition.

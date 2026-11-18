@@ -11,10 +11,11 @@ defineProps({
   pending: Boolean,
   validation: String,
   runProblem: String,
+  problemStep: String,
   review: Array,
   hasBodyExpressions: Boolean,
 })
-defineEmits(['start'])
+defineEmits(['start', 'go-to-step'])
 
 const selectedPresets = defineModel('selectedPresets', { type: Array, required: true })
 const concurrency = defineModel('concurrency', { type: [Number, String], required: true })
@@ -64,7 +65,7 @@ defineExpose({
       </fieldset>
       <p v-else class="muted">No saved presets. Configure them in Settings → Presets.</p>
       <label class="parallel-limit"
-        >Maximum parallel requests<input
+        >Parallel requests for this run<input
           v-model.number="concurrency"
           type="number"
           min="1"
@@ -126,7 +127,10 @@ defineExpose({
           >
         </li>
       </ol>
-      <p v-if="runProblem" class="error" role="alert">{{ runProblem }}</p>
+      <p v-if="runProblem" class="error" role="alert">
+        {{ runProblem }}
+        <button v-if="problemStep" type="button" class="secondary" @click="$emit('go-to-step')">Go to step</button>
+      </p>
       <div class="run-actions">
         <button type="button" class="secondary" @click="runDialog.close()">Cancel</button
         ><button

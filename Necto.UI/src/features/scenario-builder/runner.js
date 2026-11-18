@@ -1,6 +1,7 @@
+import { stepIssue } from './stepIssue.js'
 import { pickRandom } from './random.js'
 import { evaluateExpression, expressionContext } from './expression.js'
-import { applyBodyPresets, buildRequest, contextKey, protectedBodyPaths } from '../request-runner/request.js'
+import { applyBodyPresets, buildRequest, contextKey, fieldKey, protectedBodyPaths } from '../request-runner/request.js'
 import { effectiveTarget } from '../workbench/target.js'
 import { sentRequest } from './sentRequest.js'
 import { applyInput, dependencies, pointerParts, readPointer, validateBlueprint } from './model.js'
@@ -16,58 +17,75 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
   if (!blueprint.steps.length) throw new Error('Add at least one request.')
   const byKey = new Map(operations.map(operation => [operation.key, operation]))
   const plan = blueprint.steps.map(definition => {
-    if (!definition.operationKey) throw new Error(`${definition.label}: choose an endpoint before running.`)
-    const operation = byKey.get(definition.operationKey)
-    if (!operation || (operation.apiId ?? 'local') !== definition.apiId || operation.method !== definition.method || operation.path !== definition.path)
-      throw new Error(`${definition.label}: endpoint unavailable. Check API visibility and connections.`)
-    const request = { ...definition.request, fields: { ...definition.request.fields }, formFields: definition.request.formFields?.map(row => ({ ...row, files: [...(row.files ?? [])] })) }, session = createSession(operation)
-    Object.assign(session, request)
-    const expressions = definition.inputs.filter(input => input.location === 'body' && input.source === 'expression')
-    const reserved = protectBodyExpressions ? expressions.map(input => pointerParts(input.pointer)) : []
-    if (reserved.length) session[protectedBodyPaths] = reserved
-    const context = valuesFor(operation)
-    const presetBody = applyBodyPresets(operation, session.body, context, session.mediaType, reserved)
-    if (presetBody.notice) throw new Error(`${definition.label}: ${presetBody.notice}`)
-    session.body = presetBody.body
-    // Presets are run overrides, including bindings, generated and human inputs.
-    const values = new Map(context)
-    const probe = { ...session, fields: { ...session.fields } }
-    for (const input of definition.inputs) if (input.location === 'body' && input.pointer) {
-      try { applyInput(probe, operation, input, null) } catch { /* Uncovered invalid targets are checked below. */ }
-    }
-    const probed = applyBodyPresets(operation, probe.body, context, session.mediaType, reserved)
-    if (probed.notice) throw new Error(`${definition.label}: ${probed.notice}`)
-    const paths = [...(presetBody.paths ?? []), ...(probed.paths ?? [])]
-    const coveredBody = (input, candidates) => {
-      const target = pointerParts(input.pointer)
-      return candidates.some(path => path.length <= target.length && path.every((part, index) => String(part) === target[index]))
-    }
-    const activeInputs = definition.inputs.filter(input => input.location !== 'body'
-      ? !values.has(contextKey({ in: input.location, name: input.name })) : !coveredBody(input, paths))
-    for (const input of definition.inputs) if (input.location === 'body' && !activeInputs.includes(input) && !coveredBody(input, presetBody.paths ?? [])) {
-      applyInput(session, operation, input, readPointer(JSON.parse(probed.body), input.pointer))
-    }
-    for (const input of activeInputs) if (input.source === 'preset') throw new Error(`${definition.label}: select a matching run preset for ${input.location === 'body' ? input.pointer || '(whole body)' : input.name}, or choose another value source.`)
-    for (const input of definition.inputs) {
-      if (input.location === 'body' && !operation.requestBody || input.location !== 'body' &&
-        !operation.parameters.some(parameter => parameter.in === input.location && parameter.name === input.name)) throw new Error(`${definition.label}: input target is no longer present in the API.`)
-    }
-    const step = { id: definition.id, label: definition.label, operation, session, values,
-      bodyExpressions: expressions.map(input => ({ pointer: input.pointer, overridden: !activeInputs.includes(input) })),
-      entryPolicies: edges.filter(edge => edge.to === definition.id).map(edge => ({ ...edge, label: connectionSummary(edge, blueprint.steps) })), presetOverrides: [...new Set([...values.keys()].filter(key => typeof key === 'string').concat(paths.map(path => 'body:/' + path.map(part => String(part).replaceAll('~','~0').replaceAll('/','~1')).join('/'))))], inputs: JSON.parse(JSON.stringify(activeInputs)), dependencies: dependencies(definition, blueprint), status: 'waiting', error: '' }
-    // Check every static request before sending anything. Dynamic values are checked again at dispatch.
-    const draft = { ...session, fields: { ...session.fields } }
+    let issueInput
     try {
-      for (const input of step.inputs) {
-        const parameter = operation.parameters.find(parameter => parameter.in === input.location && parameter.name === input.name)
-        const schema = operation.resolve(parameter?.schema)
-        const value = schema?.type === 'array' ? [] : schema?.type === 'object' ? {} : schema?.type === 'integer' || schema?.type === 'number' ? 1 : schema?.type === 'boolean' ? true : 'run-value'
-        applyInput(draft, operation, input, value)
+      if (!definition.operationKey) throw new Error(`${definition.label}: choose an endpoint before running.`)
+      const operation = byKey.get(definition.operationKey)
+      if (!operation || (operation.apiId ?? 'local') !== definition.apiId || operation.method !== definition.method || operation.path !== definition.path)
+        throw new Error(`${definition.label}: endpoint unavailable. Check API visibility and connections.`)
+      const request = { ...definition.request, fields: { ...definition.request.fields }, formFields: definition.request.formFields?.map(row => ({ ...row, files: [...(row.files ?? [])] })) }, session = createSession(operation)
+      Object.assign(session, request)
+      const expressions = definition.inputs.filter(input => input.location === 'body' && input.source === 'expression')
+      const reserved = protectBodyExpressions ? expressions.map(input => pointerParts(input.pointer)) : []
+      if (reserved.length) session[protectedBodyPaths] = reserved
+      const context = valuesFor(operation)
+      const presetBody = applyBodyPresets(operation, session.body, context, session.mediaType, reserved)
+      if (presetBody.notice) throw new Error(`${definition.label}: ${presetBody.notice}`)
+      session.body = presetBody.body
+      // Presets are run overrides, including bindings, generated and human inputs.
+      const values = new Map(context)
+      const probe = { ...session, fields: { ...session.fields } }
+      for (const input of definition.inputs) if (input.location === 'body' && input.pointer) {
+        try { applyInput(probe, operation, input, null) } catch { /* Uncovered invalid targets are checked below. */ }
       }
-      buildRequest(operation, configuration, draft, values)
-    } catch (cause) { throw new Error(`${definition.label}: ${cause.message}`) }
-    step.target = effectiveTarget(operation, configuration, draft, values)
-    return step
+      const probed = applyBodyPresets(operation, probe.body, context, session.mediaType, reserved)
+      if (probed.notice) throw new Error(`${definition.label}: ${probed.notice}`)
+      const paths = [...(presetBody.paths ?? []), ...(probed.paths ?? [])]
+      const coveredBody = (input, candidates) => {
+        const target = pointerParts(input.pointer)
+        return candidates.some(path => path.length <= target.length && path.every((part, index) => String(part) === target[index]))
+      }
+      const activeInputs = definition.inputs.filter(input => input.location !== 'body'
+        ? !values.has(contextKey({ in: input.location, name: input.name })) : !coveredBody(input, paths))
+      for (const input of definition.inputs) if (input.location === 'body' && !activeInputs.includes(input) && !coveredBody(input, presetBody.paths ?? [])) {
+        applyInput(session, operation, input, readPointer(JSON.parse(probed.body), input.pointer))
+      }
+      const missingPreset = activeInputs.find(input => input.source === 'preset')
+      if (missingPreset) {
+        issueInput = missingPreset
+        const input = missingPreset
+        throw new Error(`${definition.label}: select a matching run preset for ${input.location === 'body' ? input.pointer || '(whole body)' : input.name}, or choose another value source.`)
+      }
+      for (const input of definition.inputs) {
+        issueInput = input
+        if (input.location === 'body' && !operation.requestBody || input.location !== 'body' &&
+          !operation.parameters.some(parameter => parameter.in === input.location && parameter.name === input.name)) throw new Error(`${definition.label}: input target is no longer present in the API.`)
+      }
+      issueInput = undefined
+      const step = { id: definition.id, label: definition.label, operation, session, values,
+        bodyExpressions: expressions.map(input => ({ pointer: input.pointer, overridden: !activeInputs.includes(input) })),
+        entryPolicies: edges.filter(edge => edge.to === definition.id).map(edge => ({ ...edge, label: connectionSummary(edge, blueprint.steps) })), presetOverrides: [...new Set([...values.keys()].filter(key => typeof key === 'string').concat(paths.map(path => 'body:/' + path.map(part => String(part).replaceAll('~','~0').replaceAll('/','~1')).join('/'))))], inputs: JSON.parse(JSON.stringify(activeInputs)), dependencies: dependencies(definition, blueprint), status: 'waiting', error: '' }
+      // Check every static request before sending anything. Dynamic values are checked again at dispatch.
+      const draft = { ...session, fields: { ...session.fields } }
+      try {
+        for (const input of step.inputs) {
+          issueInput = input
+          const parameter = operation.parameters.find(parameter => parameter.in === input.location && parameter.name === input.name)
+          const schema = operation.resolve(parameter?.schema)
+          const value = schema?.type === 'array' ? [] : schema?.type === 'object' ? {} : schema?.type === 'integer' || schema?.type === 'number' ? 1 : schema?.type === 'boolean' ? true : 'run-value'
+          applyInput(draft, operation, input, value)
+        }
+        issueInput = (operation.parameters ?? []).find(parameter =>
+          (parameter.required || parameter.in === 'path') &&
+          !values.has(contextKey(parameter)) && !draft.fields[fieldKey(parameter)])
+        if (issueInput) issueInput = { location: issueInput.in, name: issueInput.name }
+        buildRequest(operation, configuration, draft, values)
+      } catch (cause) { throw new Error(`${definition.label}: ${cause.message}`) }
+      step.target = effectiveTarget(operation, configuration, draft, values)
+      return step
+    } catch (cause) {
+      throw stepIssue(cause, definition, issueInput)
+    }
   })
   plan.variables = JSON.parse(JSON.stringify(blueprint.variables))
   return plan
@@ -118,7 +136,7 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
   }
   const run = async step => {
     step.status = 'preparing'
-    let releaseSlot
+    let releaseSlot, issueInput
     const policies = step.entryPolicies ?? [step]
     const delayMs = Math.max(0, ...policies.map(policy => policy.delayMs ?? 0))
     const conditions = policies.filter(policy => policy.waitFor)
@@ -130,6 +148,7 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
         step.status = 'preparing'
       }
       for (const input of step.inputs.filter(input => input.source !== 'human')) {
+        issueInput = input
         if (input.source === 'variable' && variableDefinitions.get(input.variableId)?.source === 'human') step.status = 'needs-input'
         let value
         if (input.source === 'expression') {
@@ -168,6 +187,7 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
         combined.throwIfAborted()
         applyInput(step.session, step.operation, input, value)
       }
+      issueInput = undefined
       const questions = step.inputs.filter(input => input.source === 'human')
       if (questions.length) {
         if (!ask) throw new Error('This step needs human input. Enable human-in-the-loop mode.')
@@ -213,7 +233,12 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
     } catch (cause) {
       step.status = combined.aborted ? 'cancelled' : 'failed'
       step.error = combined.aborted ? 'Canceled.' : cause.message
-      if (!combined.aborted && !failure) { failure = { step, cause }; controller.abort(cause) }
+      if (!combined.aborted && !failure) {
+        const issue = stepIssue(cause, step, issueInput)
+        step.problemTarget = issue.target
+        failure = { step, cause }
+        controller.abort(cause)
+      }
     } finally { step.nextAttemptAt = undefined; releaseSlot?.() }
   }
   while (true) {
