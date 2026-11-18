@@ -1,11 +1,11 @@
-import { savedBlueprint } from './definition.js'
+import { builderCollection, builderCollectionKey, readBuilderCollection, savedBlueprint } from './definition.js'
 export { savedBlueprint } from './definition.js'
 import { inputSources } from './variables.js'
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 import { sharedOrigin } from '../scenario-definitions/origin.js'
 import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
-import { newBlueprint, validateBlueprint, parseHuman } from './model.js'
+import { newBlueprint, parseHuman } from './model.js'
 import { prepareBlueprint, executeBlueprint } from './runner.js'
 import { upgradeBlueprint } from './connections.js'
 
@@ -13,7 +13,7 @@ const clone = value => JSON.parse(JSON.stringify(value))
 export function useBuilder(configuration) {
   const draft = ref(newBlueprint()), saved = ref([]), error = ref(''), notice = ref('')
   const execution = reactive({ status: 'idle', steps: [], error: '', stale: false, presetNames: [] }), pending = ref(false), questions = reactive(new Map())
-  const key = computed(() => workspaceIdentity(configuration.value) && 'necto:scenario-builder:' + workspaceIdentity(configuration.value))
+  const key = computed(() => workspaceIdentity(configuration.value) && builderCollectionKey(workspaceIdentity(configuration.value)))
   const dirty = computed(() => JSON.stringify(savedBlueprintSafe(draft.value)) !== JSON.stringify(savedBlueprintSafe(saved.value.find(item => item.id === draft.value.id))))
   let controller, revision = 0
   function savedBlueprintSafe(value) { try { return savedBlueprint(value) } catch { return value } }
@@ -27,12 +27,7 @@ export function useBuilder(configuration) {
     saved.value = []; error.value = ''
     if (!key.value) return
     try {
-      const data = JSON.parse(localStorage.getItem(key.value))
-      if (data !== null && (data.version !== 1 || !Array.isArray(data.blueprints) || data.blueprints.length > 100)) throw new Error('Invalid builder collection.')
-      const next = data?.blueprints ?? []
-      next.forEach(validateBlueprint)
-      if (new Set(next.map(item => item.id)).size !== next.length) throw new Error('Duplicate builder IDs.')
-      saved.value = next
+      saved.value = readBuilderCollection(localStorage.getItem(key.value))
     } catch (cause) { error.value = `Could not load Scenario Builder. ${cause.message}` }
   }
   watch(key, () => { revision++; clearRun(); draft.value = newBlueprint(); notice.value = ''; load() }, { immediate: true, flush: 'sync' })
@@ -40,7 +35,7 @@ export function useBuilder(configuration) {
   onScopeDispose(() => { revision++; stop() })
   function persist(next) {
     if (!key.value) throw new Error('Load an API before saving.')
-    const text = JSON.stringify({ version: 1, blueprints: next })
+    const text = JSON.stringify(builderCollection(next))
     if (next.length > 100 || text.length > 2 * 1024 * 1024) throw new Error('Builder storage is limited to 100 scenarios and 2 MB per workspace.')
     try { localStorage.setItem(key.value, text) } catch { throw new Error('Could not save in this browser. Export the definition instead.') }
     saved.value = next

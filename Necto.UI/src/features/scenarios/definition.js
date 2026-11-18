@@ -48,9 +48,19 @@ export function sharedChain(scenario) {
   return definition
 }
 
+export const scenarioCollectionKey = (workspace) => 'necto:scenarios:' + workspace
+export const scenarioCollection = (scenarios = []) => ({ version: 1, scenarios })
+
+export function readScenarioCollection(text) {
+  const collection = JSON.parse(text) ?? scenarioCollection()
+  validateScenarioCollection(collection)
+  return collection.scenarios
+}
+
 export const teamDefinitions = teamCollection({
-  keyForWorkspace: (workspace) => 'necto:scenarios:' + workspace,
+  keyForWorkspace: scenarioCollectionKey,
   property: 'scenarios',
+  collection: scenarioCollection,
   canonical: sharedChain,
 })
 
@@ -58,4 +68,6 @@ export function validateScenarioCollection(value) {
   if (value.version !== 1 || !Array.isArray(value.scenarios))
     throw new Error('Invalid scenario collection.')
   value.scenarios.forEach(validateScenario)
+  if (new Set(value.scenarios.map((item) => item.id)).size !== value.scenarios.length)
+    throw new Error('Duplicate scenario IDs.')
 }
