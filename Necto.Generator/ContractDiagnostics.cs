@@ -1,6 +1,5 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Operations;
 namespace Necto.Generator;
 
 public sealed partial class EndpointMappingGenerator
@@ -13,16 +12,10 @@ public sealed partial class EndpointMappingGenerator
         var routes = context.SyntaxProvider.CreateSyntaxProvider(static (node, _) => node is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "WithName" } },
             static (ctx, ct) =>
             {
-                var endpoint = ReadEndpoint(ctx, ct);
-                if (endpoint is null) return null;
-                ExpressionSyntax receiver = ((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)ctx.Node).Expression).Expression;
-                while (receiver is InvocationExpressionSyntax call && call.Expression is MemberAccessExpressionSyntax member)
-                {
-                    if (ctx.SemanticModel.GetOperation(call, ct) is IInvocationOperation route && route.TargetMethod.ContainingType.ToDisplayString() == "Microsoft.AspNetCore.Builder.EndpointRouteBuilderExtensions")
-                        return new ContractRegistration(endpoint, ctx.Node.GetLocation(), ReadHandler(route));
-                    receiver = member.Expression;
-                }
-                return null;
+                var registration = MinimalApiRegistration.FromName(ctx, ct);
+                return registration is { Id: { } id, Handler: { } handler }
+                    ? new ContractRegistration(CreateEndpoint(id, handler), registration.Location, handler)
+                    : null;
             }).Where(static item => item is not null);
         context.RegisterSourceOutput(routes.Collect(), static (ctx, items) =>
         {
