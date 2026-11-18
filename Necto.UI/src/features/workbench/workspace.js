@@ -1,10 +1,8 @@
+import { validateSampleCollection } from '../request-runner/samples.js'
 import { validatePresetCollection } from '../presets/presetCollection.js'
-import { executionOptions } from './executionOptions.js'
 import { validateBlueprint } from '../scenario-builder/model.js'
 import { validateScenario } from '../scenarios/scenario.js'
 import { normalizeConnection } from '../external-apis/connections.js'
-import { validatePayloadSnapshot } from './body.js'
-import { validateAssertions } from './assertions.js'
 import { sensitiveName } from './privacy.js'
 function safeUrl(value) {
   try {
@@ -105,27 +103,7 @@ export function inspectWorkspace(text, storage) {
         throw new Error('Invalid scenario collection.')
       value.scenarios.forEach(validateScenario)
     } else if ((entry.key.startsWith('necto:samples:') || entry.key.startsWith('necto:request-samples:'))) {
-      if (
-        !Array.isArray(value.samples) ||
-        typeof value.defaultName !== 'string'
-      )
-        throw new Error('Invalid saved request collection.')
-      for (const sample of value.samples) {
-        if (
-          typeof sample.name !== 'string' ||
-          !sample.fields ||
-          typeof sample.fields !== 'object' ||
-          Array.isArray(sample.fields) ||
-          Object.values(sample.fields).some(
-            (field) => typeof field !== 'string'
-          ) ||
-          (sample.body !== undefined && typeof sample.body !== 'string')
-        )
-          throw new Error('Invalid saved request.')
-        executionOptions(sample)
-        validatePayloadSnapshot(sample)
-        validateAssertions(sample.assertions)
-      }
+      validateSampleCollection(value)
     } else if (entry.key.startsWith('necto:external-apis:')) {
       if (!Array.isArray(value.connections) || typeof value.show !== 'boolean')
         throw new Error('Invalid API connections.')
