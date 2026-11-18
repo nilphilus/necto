@@ -1,6 +1,26 @@
 # Necto UI
 
-Necto UI is a Vue application for browsing and running the operations in an OpenAPI JSON or YAML document. The Necto NuGet package includes the compiled frontend in its assembly.
+Necto UI is a Vue application for browsing and running the operations in an OpenAPI JSON or YAML document. The `Necto.OpenApi` NuGet package includes the compiled frontend in its assembly.
+
+[Product website](https://nilphilus.github.io/necto/) · [Setup and technical guide](https://nilphilus.github.io/necto/technical.html) · [Public source repository](https://github.com/nilphilus/necto)
+
+## Multiple OpenAPI documents
+
+Configure the registered document paths to show a selector in the endpoint catalog:
+
+```csharp
+app.UseNectoUI(
+    openApiPath: "/openapi/v1.json",
+    openApiDocuments: new Dictionary<string, string>
+    {
+        ["v1"] = "/openapi/v1.json",
+        ["v2"] = "/openapi/v2.json",
+    });
+```
+
+Use application-relative paths for ASP.NET Core OpenAPI or NSwag. The default
+remains `openApiPath`. Browser-saved scenarios are scoped to the selected
+document URL, so switching back restores that document's library.
 
 ## Necto 0.3.0
 
@@ -37,7 +57,7 @@ Response data is shown before continuation forms. **Next request** shares the re
 
 XML responses have a colored, collapsible Preview alongside Raw. JSON strings that look like XML offer an opt-in **XML preview** button and **Back to string**. Short scalar elements stay inline; child nodes, attributes and long values are paged locally. Parsing runs in a worker, with cancellation and explicit resource limits. Raw/download and existing JSON mappings retain their original values. XML-internal selection and whole-document XML search are not included.
 
-See the [XML preview guide](../docs/xml-preview/README.md) for examples, screenshots and limits.
+See the [XML preview guide](https://github.com/nilphilus/necto/blob/main/docs/xml-preview/README.md) for examples, screenshots and limits.
 
 ## Large responses
 
@@ -336,7 +356,7 @@ includes **Bring your agent**. Create a connection, add its Streamable HTTP MCP
 configuration to your agent, give the agent the displayed polling instructions,
 and queue a prompt. Progress and results appear in the task panel. Your agent
 uses its own HTTP tools and credentials; Necto supplies API metadata and task
-coordination. See the [full guide](../docs/bring-your-agent/README.md) for host
+coordination. See the [full guide](https://github.com/nilphilus/necto/blob/main/docs/bring-your-agent/README.md) for host
 configuration, client setup, tools, capability lifetime and execution limits.
 
 ## Authentication
@@ -346,5 +366,5 @@ returns HTTP 401. Choose API access / documentation login, provide a token, Basi
 credentials, API key, browser session or OIDC public-client settings, and allow
 the intended origins. Necto retries protected metadata and applies authentication
 to normal, related and scenario requests. Credentials are memory-only and traces
-redact managed secrets. See the [authentication guide](../docs/authentication/README.md)
+redact managed secrets. See the [authentication guide](https://github.com/nilphilus/necto/blob/main/docs/authentication/README.md)
 for protected-document hosting, security requirements, PKCE and session behavior.

@@ -1,4 +1,7 @@
-import { exportWorkspace, inspectWorkspace } from './workspace.js';
+import { builderTransfer } from '../scenario-builder/definition.js';
+import { scenarioCollection } from '../scenarios/definition.js';
+import { inspectWorkspace } from './workspace.js';
+import { workspaceExportEntry } from './workspaceExport.js';
 const clone = (value) => JSON.parse(JSON.stringify(value));
 function type(key) {
   const kind = key.split(':')[1];
@@ -7,6 +10,7 @@ function type(key) {
 function records(entry) {
   const value = entry.value,
     kind = type(entry.key);
+  if (kind === 'scenario-builder') return builderTransfer.records(value);
   if (kind === 'scenarios')
     return value.scenarios.map((item) => ({
       id: item.id,
@@ -38,7 +42,7 @@ function records(entry) {
   }));
 }
 const defaults = {
-  scenarios: { version: 1, scenarios: [] },
+  scenarios: scenarioCollection(),
   samples: { samples: [], defaultName: '' },
   environments: { version: 2, presets: [], active: [], colors: {} },
   'external-apis': { connections: [], show: false },
@@ -51,14 +55,7 @@ export function planTransfer(workspace, storage) {
     const destination = existing
       ? records({ key: entry.key, value: JSON.parse(existing) })
       : [];
-    const safeEntry = exportWorkspace(
-      {
-        length: 1,
-        key: () => entry.key,
-        getItem: () => JSON.stringify(entry.value)
-      },
-      true
-    ).entries[0];
+    const safeEntry = workspaceExportEntry(entry.key, entry.value, true);
     return records(safeEntry).map((record) => ({
       ...clone(record),
       key: entry.key,
@@ -87,7 +84,9 @@ export function applyTransfer(items, storage) {
       updates.set(
         item.key,
         JSON.parse(
-          storage.getItem(item.key) ?? JSON.stringify(defaults[item.kind])
+          storage.getItem(item.key) ?? JSON.stringify(
+            item.kind === 'scenario-builder' ? builderTransfer.empty() : defaults[item.kind]
+          )
         )
       );
     const destination = updates.get(item.key),
@@ -122,7 +121,9 @@ export function applyTransfer(items, storage) {
       if (index < 0) list.push(next);
       else list[index] = next;
     };
-    if (item.kind === 'scenarios')
+    if (item.kind === 'scenario-builder')
+      builderTransfer.upsert(destination, id, value);
+    else if (item.kind === 'scenarios')
       upsert(destination.scenarios, (record) => record.id === id, value);
     else if (item.kind === 'samples')
       upsert(destination.samples, (record) => record.name === id, value);
@@ -163,17 +164,4 @@ export function applyTransfer(items, storage) {
     throw cause;
   }
   return changed;
-}
-export function exportScenario(storage, id, apiUrl, includeBodies = false) {
-  const workspace = exportWorkspace(storage, includeBodies);
-  workspace.entries = workspace.entries.filter(
-    (entry) => entry.key === `necto:scenarios:${apiUrl}`
-  );
-  for (const entry of workspace.entries)
-    entry.value.scenarios = entry.value.scenarios.filter(
-      (scenario) => scenario.id === id
-    );
-  if (!workspace.entries.some((entry) => entry.value.scenarios.length))
-    throw new Error('This scenario is no longer saved.');
-  return workspace;
 }

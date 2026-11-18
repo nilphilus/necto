@@ -26,7 +26,7 @@ export function useRequestHistory() {
         0) + requestSize
     let retained =
       !oversized && size <= MAX_PAYLOAD && !result?.binary && !result?.stream
-    let snapshot = retained && request ? historySnapshot(request, draft) : undefined
+    let snapshot = retained && request ? historySnapshot(request, draft, operation) : undefined
     if (snapshot && size + JSON.stringify(snapshot).length > MAX_PAYLOAD) { retained = false; snapshot = undefined }
     const payload = retained
       ? redactValue(redactResponse(operation, result))

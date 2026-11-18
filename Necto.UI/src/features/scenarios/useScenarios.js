@@ -1,4 +1,5 @@
-import { sharedOrigin } from '../scenario-folder/origin.js'
+import { readScenarioCollection, scenarioCollection, scenarioCollectionKey } from './definition.js'
+import { sharedOrigin } from '../scenario-definitions/origin.js'
 import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
@@ -14,7 +15,7 @@ export function useScenarios(configuration, { undoDuration = 30000 } = {}) {
   function forgetDeletion() { clearTimeout(undoTimer); deletedSnapshot = undefined; deleted.value = null }
   onScopeDispose(forgetDeletion)
   let controller
-  const key = computed(() => workspaceIdentity(configuration.value) && `necto:scenarios:${workspaceIdentity(configuration.value)}`)
+  const key = computed(() => workspaceIdentity(configuration.value) && scenarioCollectionKey(workspaceIdentity(configuration.value)))
   const stop = () => controller?.abort()
   onScopeDispose(stop)
   function loadStored(storageKey, reset = false) {
@@ -22,11 +23,7 @@ export function useScenarios(configuration, { undoDuration = 30000 } = {}) {
     if (reset) { Object.assign(state, { id: '', name: '', status: 'idle', steps: [], error: '' }); stop(); runs.clear(); scenarios.value = []; error.value = '' }
     if (!storageKey) return
     try {
-      const saved = JSON.parse(localStorage.getItem(storageKey))
-      if (saved !== null && (saved.version !== 1 || !Array.isArray(saved.scenarios))) throw new Error('Unsupported scenario file.')
-      const next = saved?.scenarios ?? []
-      for (const scenario of next) validateScenario(scenario)
-      if (new Set(next.map(scenario => scenario.id)).size !== next.length) throw new Error('Duplicate scenario IDs.')
+      const next = readScenarioCollection(localStorage.getItem(storageKey))
       if (!reset) for (const old of previous) {
         const updated = next.find(item => item.id === old.id)
         if (JSON.stringify({...old,_sharedSource:undefined}) !== JSON.stringify(updated?{...updated,_sharedSource:undefined}:undefined)) {
@@ -42,7 +39,7 @@ export function useScenarios(configuration, { undoDuration = 30000 } = {}) {
   onWorkspaceImport(key, storageKey => loadStored(storageKey))
   function persist(next) {
     if (!key.value) throw new Error('Load an API before saving scenarios.')
-    try { localStorage.setItem(key.value, JSON.stringify({ version: 1, scenarios: next })) }
+    try { localStorage.setItem(key.value, JSON.stringify(scenarioCollection(next))) }
     catch { throw new Error('Could not save scenarios in this browser.') }
     scenarios.value = next; error.value = ''
   }

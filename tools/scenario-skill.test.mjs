@@ -6,6 +6,9 @@ import { tmpdir } from 'node:os'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { validateText } from '../skills/necto-scenarios/scripts/validate.mjs'
+import { parseBuilderImport } from '../Necto.UI/src/features/scenario-builder/definitionImport.js'
+import { scanDirectory } from '../Necto.UI/src/features/scenario-folder/directory.js'
+import { memoryFolder } from '../Necto.UI/src/features/scenario-folder/folderFixture.js'
 import { parseShared } from '../Necto.UI/src/features/scenario-folder/format.js'
 import { savedBlueprint } from '../Necto.UI/src/features/scenario-builder/useBuilder.js'
 import { fileURLToPath } from 'node:url'
@@ -17,6 +20,28 @@ test('portable example imports through production parser and has the documented 
  assert.deepEqual(JSON.parse(JSON.stringify(savedBlueprint(a))),JSON.parse(JSON.stringify(b)))
  assert.deepEqual(layers(a).map(group=>group.map(step=>step.id)),[['invoice','weather'],['lines']])
 })
+test('the skill file can be selected in Builder under any filename and opened as a copy', async () => {
+ const { scenario } = parseShared(text)
+ const file = new File([text], 'download.json')
+ const copy = await parseBuilderImport(file)
+ assert.notEqual(copy.id, scenario.id)
+ assert.deepEqual({ ...copy, id: scenario.id }, scenario)
+ const plain = await parseBuilderImport(new File([JSON.stringify(scenario)], 'builder.json'))
+ assert.deepEqual({ ...plain, id: scenario.id }, JSON.parse(JSON.stringify(scenario)))
+})
+
+test('the skill file is discovered from the Git checkout or the selected scenario folder', async () => {
+ const root = memoryFolder()
+ const folder = await root.getDirectoryHandle('necto-scenarios', { create: true })
+ folder.files.set('example.necto.json', text)
+ folder.files.set('example.json', text)
+ const fromRoot = await scanDirectory(root)
+ assert.equal(fromRoot.length, 1)
+ assert.equal(fromRoot[0].name, 'example.necto.json')
+ assert.deepEqual(await scanDirectory(folder), fromRoot)
+ assert.equal(folder.directories.size, 0)
+})
+
 test('portable validator and production import reject cycles, broken bindings and invalid edge waits',()=>{
  for(const edit of [b=>b.connections.push({from:'lines',to:'invoice'}), b=>b.steps[2].inputs[0].stepId='missing', b=>b.connections[0].waitFor={pointer:'/ready',valueType:'boolean',value:'true',retryCount:101,intervalMs:1000}, b=>b.steps[2].inputs.push({...b.steps[2].inputs[0]})]){
   const value=mutate(edit);assert.throws(()=>validateText(value));assert.throws(()=>parseShared(value))

@@ -1,7 +1,9 @@
+import { newBlueprint } from '../scenario-builder/model.js';
 import { exportWorkspace } from './workspace.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planTransfer, applyTransfer, exportScenario } from './transfers.js';
+import { planTransfer, applyTransfer } from './transfers.js';
+import { exportScenario } from '../scenarios/export.js';
 const scenario = (id, name) => ({
   version: 1,
   id,
@@ -72,6 +74,19 @@ test('single-scenario export excludes other scenarios and omits bodies by defaul
   assert.equal(exported.entries[0].value.scenarios.length, 1);
   assert.equal(exported.entries[0].value.scenarios[0].steps[0].body, '');
 });
+test('scenario export uses the logical workspace and ignores unrelated invalid storage', () => {
+  const workspace = 'https://api.test/openapi.json#necto-workspace=QA';
+  const workspaceKey = 'necto:scenarios:' + workspace;
+  const store = storage({
+    [key]: '{',
+    [workspaceKey]: JSON.stringify({ version: 1, scenarios: [scenario('a', 'A')] })
+  });
+  const exported = exportScenario(store, 'a', workspace, true);
+  assert.equal(exported.entries[0].key, workspaceKey);
+  assert.equal(exported.entries[0].value.scenarios[0].steps[0].body, '{"id":42}');
+  assert.throws(() => exportScenario(store, 'missing', workspace), /no longer saved/);
+});
+
 test('merging does not erase credentials from unrelated existing local items', () => {
   const env = 'necto:environments:api',
     store = storage({
@@ -177,4 +192,30 @@ test('saved-request export preserves the structured API/operation scope key', ()
     })
   });
   assert.equal(exportWorkspace(store).entries[0].key, sampleKey);
+});
+
+test('workspace transfer imports Builder definitions by ID and preserves unrelated definitions', () => {
+  const builderKey = 'necto:scenario-builder:https://api.test/openapi.json';
+  const first = { ...newBlueprint(), name: 'First' };
+  const second = { ...newBlueprint(), name: 'Second' };
+  const source = storage({
+    [builderKey]: JSON.stringify({ version: 1, blueprints: [first, second] })
+  });
+  const destination = storage();
+  const plan = planTransfer(exportWorkspace(source, true), destination);
+  assert.deepEqual(plan.map(({ id, label }) => [id, label]), [
+    [first.id, 'First'], [second.id, 'Second']
+  ]);
+  applyTransfer(plan, destination);
+
+  source.setItem(builderKey, JSON.stringify({
+    version: 1, blueprints: [{ ...first, name: 'First updated' }]
+  }));
+  const replacement = planTransfer(exportWorkspace(source, true), destination);
+  assert.equal(replacement[0].action, 'keep');
+  replacement[0].action = 'replace';
+  applyTransfer(replacement, destination);
+  assert.deepEqual(JSON.parse(destination.getItem(builderKey)).blueprints, [
+    { ...first, name: 'First updated' }, second
+  ]);
 });

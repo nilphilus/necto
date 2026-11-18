@@ -29,45 +29,13 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
             Emit(context, data.Left.Left.Concat(data.Left.Right).OfType<Endpoint>(),data.Right));
     }
 
-    private static Endpoint? ReadEndpoint(GeneratorSyntaxContext context, CancellationToken cancellationToken)
-    {
-        var invocation = (InvocationExpressionSyntax)context.Node;
-        var model = context.SemanticModel;
-        if (model.GetOperation(invocation, cancellationToken) is not IInvocationOperation withName
-            || withName.TargetMethod.ContainingType.ToDisplayString() != "Microsoft.AspNetCore.Builder.RoutingEndpointConventionBuilderExtensions"
-            || withName.Arguments.FirstOrDefault(argument => argument.Parameter?.Name == "endpointName")?.Value
-                .ConstantValue is not { HasValue: true, Value: string operationId })
-            return null;
+    private static Endpoint? ReadEndpoint(GeneratorSyntaxContext context, CancellationToken cancellationToken) =>
+        MinimalApiRegistration.FromName(context, cancellationToken) is { Id: { } id, Handler: { } handler }
+            ? CreateEndpoint(id, handler)
+            : null;
 
-        // Follow the receiver of the fluent registration back to MapGet, MapPost, etc.
-        ExpressionSyntax receiver = ((MemberAccessExpressionSyntax)invocation.Expression).Expression;
-        while (receiver is InvocationExpressionSyntax call && call.Expression is MemberAccessExpressionSyntax member)
-        {
-            if (model.GetOperation(call, cancellationToken) is IInvocationOperation route
-                && route.TargetMethod.ContainingType.ToDisplayString() == "Microsoft.AspNetCore.Builder.EndpointRouteBuilderExtensions"
-                && route.TargetMethod.Name is "MapGet" or "MapPost" or "MapPut" or "MapPatch" or "MapDelete" or "MapMethods")
-            {
-                var handlerValue = route.Arguments.FirstOrDefault(argument => argument.Parameter?.Name == "handler")?.Value;
-                while (handlerValue is IConversionOperation conversion)
-                    handlerValue = conversion.Operand;
-                if (handlerValue is IDelegateCreationOperation handler)
-                {
-                    var method = handler.Target switch
-                    {
-                        IAnonymousFunctionOperation lambda => lambda.Symbol,
-                        IMethodReferenceOperation reference => reference.Method,
-                        _ => null
-                    };
-                    if (method is not null)
-                        return new Endpoint(operationId, ReadResponse(method).ToArray(),
-                            method.Parameters.SelectMany(ReadRequest).ToArray());
-                }
-                return null;
-            }
-            receiver = member.Expression;
-        }
-        return null;
-    }
+    private static Endpoint CreateEndpoint(string id, IMethodSymbol handler) =>
+        new(id, ReadResponse(handler).ToArray(), handler.Parameters.SelectMany(ReadRequest).ToArray());
 
     private static IEnumerable<Field> ReadResponse(IMethodSymbol handler) => ReadResponse(handler.ReturnType);
 

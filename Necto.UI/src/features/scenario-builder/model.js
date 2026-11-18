@@ -1,5 +1,6 @@
+import { stepIssue } from './stepIssue.js'
 import { validateRandom } from './random.js'
-import { validateExpression } from './expression.js'
+import { expressionContext, validateExpression } from './expression.js'
 import { payloadSnapshot, validatePayloadSnapshot, bodyContent, isJson } from '../workbench/body.js'
 import { executionOptions } from '../workbench/executionOptions.js'
 import { validateAssertions } from '../workbench/assertions.js'
@@ -25,7 +26,11 @@ function assignPointer(value, parts, replacement) {
     if (Array.isArray(value) && (!/^(0|[1-9]\d*)$/.test(part) || Number(part) >= value.length)) throw new Error('Target array index must already exist in the request body.')
     if (index === parts.length - 1) Object.defineProperty(value, part, { value: replacement, writable: true, enumerable: true, configurable: true })
     else {
-      if (!Object.hasOwn(value, part)) Object.defineProperty(value, part, { value: {}, writable: true, enumerable: true, configurable: true })
+      if (!Object.hasOwn(value, part)) {
+        if (/^(?:0|[1-9]\d*)$/.test(parts[index + 1]))
+          throw new Error('Create the array or object in the saved JSON before setting an indexed input.')
+        Object.defineProperty(value, part, { value: {}, writable: true, enumerable: true, configurable: true })
+      }
       value = value[part]
     }
   }
@@ -63,43 +68,56 @@ export function validateBlueprint(blueprint) {
   if (blueprint?.format !== 'necto-scenario-builder' || ![1, 2, 3, 4, 5, 6, 7].includes(blueprint.version) || typeof blueprint.id !== 'string' || !blueprint.id ||
     typeof blueprint.name !== 'string' || !blueprint.name.trim() || blueprint.name.length > 200 || !Array.isArray(blueprint.steps) || blueprint.steps.length > 100 ||
     !Number.isInteger(blueprint.concurrency) || blueprint.concurrency < 1 || blueprint.concurrency > 8) throw new Error('Invalid Scenario Builder definition (maximum 100 steps; parallelism 1–8).')
+  if (blueprint.description !== undefined &&
+      (typeof blueprint.description !== 'string' || blueprint.description.length > 500))
+    throw new Error('Scenario descriptions are limited to 500 characters.')
   if (blueprint.version < 3 && blueprint.connections !== undefined && (!Array.isArray(blueprint.connections) || blueprint.connections.length)) throw new Error('Connections require Scenario Builder version 3.')
   const ids = new Set()
   let expressionCount=0, expressionChars=0, expressionBindings=0
   for (const step of blueprint.steps) {
-    if (typeof step.id !== 'string' || !step.id || ids.has(step.id) || typeof step.label !== 'string' || !step.label.trim() || step.label.length > 200 ||
-      typeof step.operationKey !== 'string' || typeof step.apiId !== 'string' || typeof step.method !== 'string' || typeof step.path !== 'string' ||
-      !Array.isArray(step.dependsOn) || step.dependsOn.length > 100 || !Array.isArray(step.inputs) || step.inputs.length > 100 || !step.request ||
-      typeof step.request.body !== 'string' || !step.request.fields || Array.isArray(step.request.fields) || typeof step.request.fields !== 'object' ||
-      Object.values(step.request.fields).some(value => typeof value !== 'string')) throw new Error('Invalid scenario step or request.')
-    if (step.position !== undefined && (!step.position || !Number.isFinite(step.position.x) || !Number.isFinite(step.position.y) || step.position.x < 20 || step.position.y < 20 || step.position.x > 20000 || step.position.y > 20000)) throw new Error('Invalid request position.')
-    ids.add(step.id)
-    if (blueprint.version === 1 && (step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('Delay and response waiting require Scenario Builder version 2.')
-    if (blueprint.version >= 3 && (step.dependsOn.length || step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('In version 3+, dependencies and timing belong to connections.')
-    if (Object.keys(step.request.bodyFieldEdits ?? {}).length) throw new Error(`${step.label}: finish entering a number at ${Object.keys(step.request.bodyFieldEdits)[0] || '(body)'} before saving or running. Use Raw JSON for an intentional invalid payload.`)
-    validateWaiting(step)
-    validatePayloadSnapshot(step.request); executionOptions(step.request); validateAssertions(step.request.assertions ?? [])
-    if (step.request.binaryFile && !(step.request.binaryFile instanceof Blob) || step.request.formFields?.some(row => row.files && (!Array.isArray(row.files) || row.files.some(file => !(file instanceof Blob))))) throw new Error('Attach files in the browser; imported file data is not executable.')
-    const targets = []
-    for (const input of step.inputs) {
-      if (!['path', 'query', 'header', 'body'].includes(input.location) || !['response', 'human', 'generate', 'variable', 'preset', 'expression', 'random'].includes(input.source) ||
-        (input.location !== 'body' && (typeof input.name !== 'string' || !input.name || /[\r\n]/.test(input.name)))) throw new Error(`Invalid input in ${step.label}.`)
-      const path = input.location === 'body' ? pointerParts(input.pointer) : [input.location === 'header' ? input.name.toLowerCase() : input.name]
-      if (targets.some(target => target.location === input.location && (input.location !== 'body' ? target.path[0] === path[0] :
-        path.slice(0, Math.min(path.length, target.path.length)).every((part, index) => part === target.path[index])))) throw new Error(`Overlapping input targets in ${step.label}.`)
-      targets.push({ location: input.location, path })
-      if (input.source === 'preset' && input.location === 'body' && input.pointer === '') throw new Error('Presets match named body fields. Choose a field instead of the whole body.')
-      if (input.source === 'preset' && blueprint.version < 5) throw new Error('Explicit preset sources require Scenario Builder version 5.')
-      if (input.source === 'response') { if (typeof input.stepId !== 'string') throw new Error('Choose a source step.'); pointerParts(input.responsePointer) }
-      if (input.source === 'expression') {
-        if (blueprint.version < 6) throw new Error('Expressions require Scenario Builder version 6.')
-        expressionCount++; expressionChars+=typeof input.expression==='string'?input.expression.length:0; expressionBindings+=input.bindings?.length??0
-        if(expressionCount>100||expressionChars>65536||expressionBindings>256)throw new Error('Scenario expression budget exceeded (100 expressions, 64 KiB source characters, 256 bindings).')
-        validateExpression(input)
+    let issueInput
+    try {
+      if (typeof step.id !== 'string' || !step.id || ids.has(step.id) || typeof step.label !== 'string' || !step.label.trim() || step.label.length > 200 ||
+        typeof step.operationKey !== 'string' || typeof step.apiId !== 'string' || typeof step.method !== 'string' || typeof step.path !== 'string' ||
+        !Array.isArray(step.dependsOn) || step.dependsOn.length > 100 || !Array.isArray(step.inputs) || step.inputs.length > 100 || !step.request ||
+        typeof step.request.body !== 'string' || !step.request.fields || Array.isArray(step.request.fields) || typeof step.request.fields !== 'object' ||
+        Object.values(step.request.fields).some(value => typeof value !== 'string')) throw new Error('Invalid scenario step or request.')
+      if (step.position !== undefined && (!step.position || !Number.isFinite(step.position.x) || !Number.isFinite(step.position.y) || step.position.x < 20 || step.position.y < 20 || step.position.x > 20000 || step.position.y > 20000)) throw new Error('Invalid request position.')
+      ids.add(step.id)
+      if (blueprint.version === 1 && (step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('Delay and response waiting require Scenario Builder version 2.')
+      if (blueprint.version >= 3 && (step.dependsOn.length || step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('In version 3+, dependencies and timing belong to connections.')
+      if (Object.keys(step.request.bodyFieldEdits ?? {}).length) {
+        issueInput = { location: 'body', pointer: Object.keys(step.request.bodyFieldEdits)[0] }
+        throw new Error(`${step.label}: finish entering a number at ${Object.keys(step.request.bodyFieldEdits)[0] || '(body)'} before saving or running. Use Raw JSON for an intentional invalid payload.`)
       }
-      if (input.source === 'random') { if(blueprint.version<7)throw new Error('Pick random requires Scenario Builder version 7.');validateRandom(input) }
-      if (input.source === 'generate') validateGenerator(input)
-      if (input.source === 'human' && (typeof input.prompt !== 'string' || !input.prompt.trim() || !['text', 'number', 'boolean', 'json'].includes(input.valueType))) throw new Error('Human inputs need a question and value type.')
+      validateWaiting(step)
+      validatePayloadSnapshot(step.request); executionOptions(step.request); validateAssertions(step.request.assertions ?? [])
+      if (step.request.binaryFile && !(step.request.binaryFile instanceof Blob) || step.request.formFields?.some(row => row.files && (!Array.isArray(row.files) || row.files.some(file => !(file instanceof Blob))))) throw new Error('Attach files in the browser; imported file data is not executable.')
+      const targets = []
+      for (const input of step.inputs) {
+        issueInput = input
+        if (!['path', 'query', 'header', 'body'].includes(input.location) || !['response', 'human', 'generate', 'variable', 'preset', 'expression', 'random'].includes(input.source) ||
+          (input.location !== 'body' && (typeof input.name !== 'string' || !input.name || /[\r\n]/.test(input.name)))) throw new Error(`Invalid input in ${step.label}.`)
+        const path = input.location === 'body' ? pointerParts(input.pointer) : [input.location === 'header' ? input.name.toLowerCase() : input.name]
+        if (targets.some(target => target.location === input.location && (input.location !== 'body' ? target.path[0] === path[0] :
+          path.slice(0, Math.min(path.length, target.path.length)).every((part, index) => part === target.path[index])))) throw new Error(`Overlapping input targets in ${step.label}.`)
+        targets.push({ location: input.location, path })
+        if (input.source === 'preset' && input.location === 'body' && input.pointer === '') throw new Error('Presets match named body fields. Choose a field instead of the whole body.')
+        if (input.source === 'preset' && blueprint.version < 5) throw new Error('Explicit preset sources require Scenario Builder version 5.')
+        if (input.source === 'response') { if (typeof input.stepId !== 'string') throw new Error('Choose a source step.'); pointerParts(input.responsePointer) }
+        if (input.source === 'expression') {
+          if (blueprint.version < 6) throw new Error('Expressions require Scenario Builder version 6.')
+          expressionCount++; expressionChars+=typeof input.expression==='string'?input.expression.length:0; expressionBindings+=input.bindings?.length??0
+          if(expressionCount>100||expressionChars>65536||expressionBindings>256)throw new Error(`${expressionContext(step, input)}. Scenario expression budget exceeded (100 expressions, 64 KiB source characters, 256 bindings).`)
+          try { validateExpression(input) }
+          catch (cause) { throw new Error(`${expressionContext(step, input)}. ${cause.message}`) }
+        }
+        if (input.source === 'random') { if(blueprint.version<7)throw new Error('Pick random requires Scenario Builder version 7.');validateRandom(input) }
+        if (input.source === 'generate') validateGenerator(input)
+        if (input.source === 'human' && (typeof input.prompt !== 'string' || !input.prompt.trim() || !['text', 'number', 'boolean', 'json'].includes(input.valueType))) throw new Error('Human inputs need a question and value type.')
+      }
+    } catch (cause) {
+      throw stepIssue(cause, step, issueInput)
     }
   }
   if (blueprint.version >= 3) {
@@ -111,7 +129,7 @@ export function validateBlueprint(blueprint) {
     }
   }
   validateVariables(blueprint)
-  for (const step of blueprint.steps) if (dependencies(step, blueprint).some(id => !ids.has(id) || id === step.id)) throw new Error(`Invalid dependency in ${step.label}.`)
+  for (const step of blueprint.steps) if (dependencies(step, blueprint).some(id => !ids.has(id) || id === step.id)) throw stepIssue(new Error(`Invalid dependency in ${step.label}.`), step)
   layers(blueprint)
   return blueprint
 }

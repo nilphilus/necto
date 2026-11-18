@@ -71,3 +71,33 @@ test('JSON-looking text payloads are not treated as JSON fields when text media 
  const op=operation({requestBody:{content:{'application/json':{schema:{type:'object',properties:{code:{type:'string'}}}},'text/plain':{schema:{type:'string'}}}}}),{data,context}=setup(op,[],'{"code":"original"}');data.steps[0].request.mediaType='text/plain';context.valuesFor=presets({code:'override'})
  const [step]=prepareBlueprint(data,context);assert.equal(buildRequest(op,context.configuration,step.session,step.values).options.body,'{"code":"original"}')
 })
+
+test('protected body expressions are evaluated and their results survive preset serialization', async () => {
+  const op = operation({ requestBody: bodySchema({
+    limits: { type: 'object', properties: { min: { type: 'integer' }, max: { type: 'integer' } } },
+    name: { type: 'string' },
+  }) })
+  const { data, context } = setup(op, [
+    input('expression', 'body', '', { pointer: '/limits/min', expression: 'return -1;', bindings: [] }),
+  ], '{"limits":{"min":123,"max":20},"name":"Draft"}')
+  context.valuesFor = presets({ limits: '{"min":0,"max":5}', min: '0', name: 'Preset' })
+  async function actualBody(protectBodyExpressions) {
+    const plan = prepareBlueprint(data, { ...context, protectBodyExpressions })
+    let body
+    const result = await executeBlueprint(plan, {
+      signal: new AbortController().signal,
+      execute: async (op, session, values) => {
+        body = JSON.parse(buildRequest(op, context.configuration, session, values).options.body)
+        return ok({})
+      },
+    })
+    assert.equal(result.status, 'completed')
+    return body
+  }
+  assert.deepEqual(await actualBody(true), { limits: { min: -1, max: 20 }, name: 'Preset' })
+  assert.deepEqual(await actualBody(false), { limits: { min: 0, max: 5 }, name: 'Preset' })
+  data.steps[0].inputs[0] = input('expression', 'body', '', {
+    pointer: '', expression: 'return { limits: { min: -1 } };', bindings: [],
+  })
+  assert.deepEqual(await actualBody(true), { limits: { min: -1 } })
+})

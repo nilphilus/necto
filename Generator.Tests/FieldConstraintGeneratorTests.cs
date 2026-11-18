@@ -10,9 +10,9 @@ public sealed class FieldConstraintGeneratorTests
     {
         var result=ContractGeneratorFixture.Generate(new FieldConstraintsGenerator(),"""
             record Input([property: System.ComponentModel.DataAnnotations.Required, System.ComponentModel.DataAnnotations.StringLength(32,MinimumLength=3)] string Name,
-                [property: System.ComponentModel.DataAnnotations.Range(1,100)] int Count,
+                [property: System.ComponentModel.DataAnnotations.Range(1,100,MinimumIsExclusive=true)] int Count,
                 [property: System.Text.Json.Serialization.JsonIgnore, System.ComponentModel.DataAnnotations.Required] string Hidden);
             """);
-        var text=result.GeneratedTrees.Single().ToString();Assert.Contains("StringLengthAttribute",text);Assert.Contains("RangeAttribute",text);Assert.DoesNotContain("\"Hidden\"",text);
+        var text=result.GeneratedTrees.Single().ToString();Assert.Contains("StringLengthAttribute",text);Assert.Contains(""" "RangeAttribute","1","100",true,false """.Trim(),text);Assert.DoesNotContain("\"Hidden\"",text);
     }
 }

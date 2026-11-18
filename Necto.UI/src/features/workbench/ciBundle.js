@@ -1,6 +1,6 @@
 import { readOperations } from '../api-catalog/catalog.js'
 import { retainDraft } from './sensitiveSchema.js'
-import { exportWorkspace } from './workspace.js';
+import { exportScenarioDefinition } from '../scenarios/export.js';
 export function createCiBundle(
   scenario,
   document,
@@ -14,17 +14,10 @@ export function createCiBundle(
     const operation = operations.get(step.operationKey);
     return operation ? { ...step, ...retainDraft(operation, step) } : step;
   }) };
-  const storage = {
-    length: 1,
-    key: () => 'necto:scenarios:ci',
-    getItem: () => JSON.stringify({ version: 1, scenarios: [scenario] })
-  };
-  const safe = exportWorkspace(storage, includeBodies).entries[0].value
-    .scenarios[0];
   return {
     format: 'necto-ci-bundle',
     version: 2,
-    scenario: safe,
+    scenario: exportScenarioDefinition(scenario, includeBodies),
     document: JSON.parse(JSON.stringify(document)),
     mappings: JSON.parse(JSON.stringify(mappings))
   };

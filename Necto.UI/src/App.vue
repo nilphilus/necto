@@ -2,9 +2,10 @@
 import { useScenarioFolder } from './features/scenario-folder/useScenarioFolder.js'
 import OperationTasks from './features/api-catalog/OperationTasks.vue'
 import DescriptionHelp from './features/workbench/DescriptionHelp.vue'
-import { scenarioTargets } from './features/workbench/scenarioTargets.js'
+import { scenarioTargets } from './features/scenarios/scenarioTargets.js'
+import { useScenarioEditing } from './features/scenarios/useScenarioEditing.js'
 import { workspaceIdentity } from './features/workbench/workspaceIdentity.js'
-import { onWorkspaceImport } from './features/workbench/workspaceUpdates.js'
+import { usePresets } from './features/presets/usePresets.js'
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import WorkspaceSettings from './features/workbench/WorkspaceSettings.vue'
 import CurlImport from './features/workbench/CurlImport.vue'
@@ -13,25 +14,30 @@ import AuthorizationDialog from './features/authentication/AuthorizationDialog.v
 import { useAuthentication } from './features/authentication/useAuthentication.js'
 import NectoSkeleton from './NectoSkeleton.vue'
 import { useCatalog } from './features/api-catalog/catalog.js'
+import OpenApiDocumentPicker from './features/api-catalog/OpenApiDocumentPicker.vue'
 import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
 import OperationRunner from './features/request-runner/OperationRunner.vue'
 import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
 import RequestSamples from './features/request-runner/RequestSamples.vue'
-import { applySample, readSamples } from './features/request-runner/samples.js'
+import { createSampleDrafts } from './features/request-runner/samples.js'
 import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
-import ValueInput from './features/related-endpoints/ValueInput.vue'
 import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
 import RelatedTargets from './features/related-endpoints/RelatedTargets.vue'
 import ExternalApiSettings from './features/external-apis/ExternalApiSettings.vue'
 import EndpointGraph from './features/endpoint-graph/EndpointGraph.vue'
 import EntityGraph from './features/entity-graph/EntityGraph.vue'
 import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
+import CaptureRequestsDialog from './features/scenario-builder/CaptureRequestsDialog.vue'
+import { appendHistoryRequests } from './features/scenario-builder/captureHistory.js'
+import { parseBuilderImport } from './features/scenario-builder/definitionImport.js'
+import { FILE_LIMIT } from './features/scenario-folder/format.js'
+import { useBuilder } from './features/scenario-builder/useBuilder.js'
 import ScenarioBuilder from './features/scenario-builder/ScenarioBuilder.vue'
 import { useScenarios } from './features/scenarios/useScenarios.js'
-import { rememberBinding, snapshotScenario } from './features/scenarios/scenario.js'
+import { rememberBinding } from './features/scenarios/scenario.js'
 import { readRoute, routePath } from './features/routing/routes.js'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
-import { buildRequest, fieldKey, contextKey, hasPresetFor, migratePreset, presetInputs, resolveNamedRequestValues } from './features/request-runner/request.js'
+import { buildRequest, contextKey, hasPresetFor, presetInputs } from './features/request-runner/request.js'
 
 const authentication = useAuthentication()
 const authorizationOpen = ref(false)
@@ -41,8 +47,14 @@ authentication.register({ id: 'local', name: 'Local API', bootstrap: true, schem
   openApiUrl: new URL('/openapi/v1.json', document.baseURI).href, apiBaseUrl: new URL('/', document.baseURI).href,
   configurationUrl: new URL('./configuration', document.baseURI).href,
 }, origins: [location.origin] })
-const { spec, configuration, error, operations, groups, externalApis, reload: reloadCatalog, importDocument, documentSource, restoreServerDocument } = useCatalog(authentication)
+const { spec, configuration, error, operations, groups, externalApis, reload: reloadCatalog, importDocument, documentSource, restoreServerDocument,
+  openApiDocuments, documentLoading, documentError, selectOpenApiDocument } = useCatalog(authentication)
 const { sessions, sessionFor, createSession, run, prepare: prepareRequest, cancel: cancelRequest, history: requestHistory } = useRequestRunner(configuration, authentication)
+const { sampleStorageKey, createDraft } = createSampleDrafts({
+  createSession,
+  getConfiguration: () => configuration.value,
+  storage: localStorage,
+})
 const { error: mappingError, targetsFor, choicesFor, selectablePaths, mappings: endpointMappings, links: mappingLinks, pending: mappingPending } = useRelatedEndpoints(configuration, operations, externalApis.contexts, authentication)
 
 const { connections, show: showExternalApis, statuses: externalStatuses, storageError: externalStorageError } = externalApis
@@ -50,29 +62,21 @@ const externalPending = computed(() => showExternalApis.value && [...externalSta
 const selectedChain = ref([])
 const inspectedScenarioStep = ref(null)
 const scenarioPanel = ref(null)
-const builderPending = ref(false)
+const builderStore = useBuilder(configuration)
+const { saved: builderScenarios, pending: builderPending, error: builderError } = builderStore
+const builderView = ref(null)
+const captureDialog = ref(null)
 const builderVisited = ref(false)
 const scenarioStore = useScenarios(configuration)
 const { scenarios, state: scenarioState, runs: scenarioRuns, pending: scenarioPending, error: scenarioError } = scenarioStore
-const scenarioName = ref('')
 const scenarioDialog = ref(null)
 const requestSamples = ref(null)
-const editingScenarioId = ref(''), editingFolderSource = shallowRef(null)
-watch(editingScenarioId,()=>{editingFolderSource.value=null},{flush:'sync'})
-const editingScenario = computed(() => scenarios.value.find(scenario => scenario.id === editingScenarioId.value))
-const scenarioDirty = computed(() => {
-  const saved = editingScenario.value
-  if (!saved) return false
-  try { return JSON.stringify(snapshotScenario(chain.value, saved.name, saved.id, valuesFor).steps) !== JSON.stringify(saved.steps) }
-  catch { return true }
-})
-const overwriteScenario = computed(() => scenarios.value.find(scenario =>
-  scenario.id === editingScenarioId.value && scenario.name === scenarioName.value.trim()))
+const { scenarioName, editingScenarioId, editingFolderSource, editingScenario,
+  scenarioDirty, overwriteScenario, saveEditing, selectOriginalName, suggestCopyName } =
+  useScenarioEditing(scenarioStore, () => chain.value, (...args) => valuesFor(...args))
 const scenarioFolder = useScenarioFolder(configuration,operations,computed(()=>scenarioPending.value||builderPending.value))
-const workspaceLocked = computed(() => scenarioPending.value || builderPending.value || scenarioFolder.pending)
+const workspaceLocked = computed(() => scenarioPending.value || builderPending.value || scenarioFolder.pending || documentLoading.value)
 const scenarioBusy = computed(() => workspaceLocked.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
-const presets = ref(new Map())
-const presetColors = ref(new Map())
 const catalogMedia = matchMedia('(max-width: 760px)')
 const catalogOpen = ref(!catalogMedia.matches)
 const catalogWidth = ref(240)
@@ -86,7 +90,6 @@ function selectCatalogOperation(operation, group) {
   if (catalogMedia.matches) catalogOpen.value = false
 }
 const defaultPresetColor = '#287557'
-const activePresetNames = ref([])
 const settingsOpen = ref(false)
 const settingsTab = ref('presets')
 const skeletonWalking = ref(false)
@@ -107,13 +110,11 @@ const routeError = ref('')
 let activeRoute
 const editedPresetName = ref('')
 const newPresetName = ref('')
-const presetError = ref('')
 const confirmingPresetDeletion = ref(false)
-const activePresetValues = computed(() => activePresetNames.value.map(name => presets.value.get(name)))
+const presetStore = usePresets(configuration)
+const { presets, presetColors, activePresetNames, presetError, storageKey, valuesFor } = presetStore
 const editedPresetValues = computed(() => presets.value.get(editedPresetName.value))
 watch([editedPresetName, settingsOpen, settingsTab], () => { confirmingPresetDeletion.value = false })
-// Keep the original storage key so saved environments carry over to presets.
-const storageKey = computed(() => 'necto:environments:' + workspaceIdentity(configuration.value))
 const endpointHeading = ref(null)
 const workArea = ref(null)
 const chain = computed(() => {
@@ -125,6 +126,15 @@ const chain = computed(() => {
 const currentIndex = computed(() => inspectedScenarioStep.value === null ? chain.value.length - 1 : Math.min(inspectedScenarioStep.value, chain.value.length - 1))
 const current = computed(() => chain.value[currentIndex.value])
 const authorizedCount = computed(() => { const api = authentication.apis.get(current.value?.operation.apiId ?? 'local'); return Object.keys(api?.credentials ?? {}).length + (api?.access ? 1 : 0) })
+const activeServerDocument = computed(() => documentSource.value.kind === 'server' ? configuration.value?.openApiUrl : undefined)
+async function switchOpenApiDocument(url) {
+  if (scenarioBusy.value || url === activeServerDocument.value) return
+  const draft = builderStore.draft.value
+  if (builderStore.dirty.value && (draft.steps.length || draft.description) &&
+      !window.confirm('Discard unsaved Builder changes and switch OpenAPI document?')) return
+  await selectOpenApiDocument(url)
+}
+
 function openAuthorization(id = current.value?.operation.apiId ?? 'local') { authorizationApiId.value = id; authorizationOpen.value = true }
 async function closeAuthorization() { authorizationOpen.value = false; await nextTick(); authorizationButton.value?.focus() }
 async function retryAuthorizedMetadata(id) {
@@ -201,30 +211,6 @@ function releasePresetOrder() {
 
 watch([graphView, settingsOpen, storageKey], releasePresetOrder)
 
-function valuesFor(operation, layers = activePresetValues.value) {
-  if (operation.apiId && operation.apiId !== 'local' && !operation.usePresets) return new Map()
-  return resolveNamedRequestValues(operation, ...layers.map(values => ({ name: [...presets.value].find(([, stored]) => stored === values)?.[0], values })))
-}
-
-function sampleStorageKey(operation) {
-  return 'necto:request-samples:' + JSON.stringify([
-    workspaceIdentity(operation.configuration ?? configuration.value),
-    operation.key,
-  ])
-}
-
-function createDraft(operation) {
-  const session = createSession(operation)
-  try {
-    const { samples, defaultName } = readSamples(localStorage, sampleStorageKey(operation))
-    const sample = samples.find(sample => sample.name === defaultName)
-    if (sample) applySample(operation, session, sample)
-  } catch {
-    // The sample controls report storage errors when the operation is opened.
-  }
-  return session
-}
-
 function draftFor(operation) {
   return sessionFor(operation, createDraft)
 }
@@ -267,39 +253,6 @@ watch(externalApis.revision, () => {
   }
 })
 
-function loadPresets() {
-  presets.value = new Map(); presetColors.value = new Map(); activePresetNames.value = []
-  try {
-    const saved = JSON.parse(localStorage.getItem(storageKey.value))
-    if (!saved) return
-    presets.value = new Map((saved.presets ?? saved.environments).map(([name, values]) =>
-      [name, saved.version === 2 ? new Map(values) : migratePreset(values)]))
-    presetColors.value = new Map(Object.entries(saved.colors ?? {}).filter(([name, color]) =>
-      presets.value.has(name) && /^#[0-9a-f]{6}$/i.test(color)))
-    const active = Array.isArray(saved.active) ? saved.active : [saved.active]
-    activePresetNames.value = [...new Set(active.filter(name => presets.value.has(name)))]
-  } catch {
-    presetError.value = 'Could not load saved presets in this browser.'
-  }
-}
-watch(configuration, loadPresets)
-onWorkspaceImport(storageKey, loadPresets)
-
-function savePresets() {
-  try {
-    const entries = Array.from(presets.value, ([name, values]) => [name, [...values]])
-    localStorage.setItem(storageKey.value, JSON.stringify({
-      version: 2,
-      active: activePresetNames.value,
-      presets: entries,
-      colors: Object.fromEntries(presetColors.value)
-    }))
-    presetError.value = ''
-  } catch {
-    presetError.value = 'Could not save presets in this browser.'
-  }
-}
-
 function resetPresetSessions() {
   const selected = current.value
   const separateDraft = selected?.session.sampleName && selected.session !== sessions.get(selected.operation.key)
@@ -316,11 +269,7 @@ function resetPresetSessions() {
 }
 
 function togglePreset(name, enabled) {
-  activePresetNames.value = enabled
-    ? [...activePresetNames.value, name]
-    : activePresetNames.value.filter(activeName => activeName !== name)
-  resetPresetSessions()
-  savePresets()
+  if (presetStore.setActive(name, enabled)) resetPresetSessions()
 }
 
 async function configureScenarioFolder(){settingsTab.value='workspace';if(!settingsOpen.value)await toggleSettings()}
@@ -378,39 +327,26 @@ function trapSettingsFocus(event) {
 }
 
 async function addPreset() {
-  const name = newPresetName.value.trim()
+  const name = presetStore.add(newPresetName.value)
   if (!name) return
-  if (presets.value.has(name)) {
-    presetError.value = 'A preset with that name already exists.'
-    return
-  }
-  presets.value.set(name, new Map())
   newPresetName.value = ''
   editedPresetName.value = name
-  savePresets()
   await nextTick()
   presetFields.value?.addRow()
 }
 
 function savePresetValues(values) {
-  const name = editedPresetName.value
-  presets.value.set(name, values)
-  if (activePresetNames.value.includes(name)) resetPresetSessions()
-  savePresets()
+  if (presetStore.setValues(editedPresetName.value, values)) resetPresetSessions()
 }
 
 function savePresetColor(color) {
-  presetColors.value.set(editedPresetName.value, color)
-  savePresets()
+  presetStore.setColor(editedPresetName.value, color)
 }
 
 async function removePreset() {
-  const name = editedPresetName.value
-  presets.value.delete(name)
-  presetColors.value.delete(name)
+  const wasActive = presetStore.remove(editedPresetName.value)
   editedPresetName.value = presets.value.keys().next().value ?? ''
-  if (activePresetNames.value.includes(name)) togglePreset(name, false)
-  else savePresets()
+  if (wasActive) resetPresetSessions()
   await nextTick()
   const nextControl = presetList.value?.querySelector('[aria-current="true"]') ?? presetNameInput.value
   nextControl?.focus()
@@ -514,6 +450,62 @@ function navigateView(view) {
     }
     void showChain(steps)
   } else writeRoute(view ? { view } : chainRoute())
+}
+
+async function openBuilderScenario(id, review = false) {
+  if (scenarioBusy.value) return
+  builderVisited.value = true
+  await nextTick()
+  if (scenarioBusy.value || graphView.value !== 'scenarios') return
+  if (!builderView.value?.openFromLibrary(id)) return
+  navigateView('builder')
+  await nextTick()
+  if (review && graphView.value === 'builder' && !scenarioBusy.value) builderView.value?.reviewRun()
+}
+
+async function importLibraryScenario(file) {
+  const workspace = workspaceIdentity(configuration.value)
+  if (scenarioBusy.value || !workspace) throw new Error('Load an API and wait for active requests before importing.')
+  if (file.size > FILE_LIMIT) throw new Error('Scenario imports are limited to 2 MiB.')
+  const text = await file.text()
+  const content = new Blob([text], { type: 'application/json' })
+  let format
+  try { format = JSON.parse(text)?.format } catch { throw new Error('Invalid JSON in scenario file.') }
+  if (scenarioBusy.value || workspace !== workspaceIdentity(configuration.value))
+    throw new Error('The API workspace changed. Import the scenario again.')
+  let scenario
+  if (format === 'necto-shared-scenario') {
+    const imported = await scenarioFolder.importFile(content)
+    if (!imported) {
+      if (scenarioFolder.error) throw new Error(scenarioFolder.error)
+      return null
+    }
+    scenario = imported.scenario
+  } else {
+    scenario = await parseBuilderImport(content)
+    if (scenarioBusy.value || workspace !== workspaceIdentity(configuration.value))
+      throw new Error('The API workspace changed. Import the scenario again.')
+    builderStore.saveCaptured(scenario)
+  }
+  const missing = [...new Set(scenario.steps.filter((step) => !operations.value.some((operation) =>
+    operation.key === step.operationKey && (operation.apiId ?? 'local') === step.apiId
+  )).map((step) => step.operationKey))]
+  return { scenario, missing }
+}
+
+function captureRequests(entries) {
+  if (scenarioBusy.value || !current.value || !entries.length) return
+  captureDialog.value?.show(current.value.operation, entries, workspaceIdentity(configuration.value))
+}
+
+function saveCapturedRequests({ operation, entries, workspace, id, name }) {
+  const target = operations.value.find((item) => item.key === operation.key &&
+    item.apiId === operation.apiId && item.method === operation.method && item.path === operation.path)
+  if (scenarioBusy.value || workspace !== workspaceIdentity(configuration.value) || !target)
+    throw new Error('The API or workspace changed. Reopen the request capture.')
+  const existing = id ? builderScenarios.value.find((item) => item.id === id) : undefined
+  if (id && !existing) throw new Error('This scenario is no longer saved.')
+  builderStore.saveCaptured(appendHistoryRequests(existing, name, target, entries))
 }
 
 function enterScenario(steps, id, name, index, replace = false, folderSource) {
@@ -664,10 +656,7 @@ function builderPresetContext(names) {
 }
 function saveScenario() {
   try {
-    const saved = scenarioStore.save(chain.value, scenarioName.value, overwriteScenario.value?.id, valuesFor, overwriteScenario.value?.id===editingScenarioId.value?editingFolderSource.value:undefined)
-    editingScenarioId.value = saved.id
-    editingFolderSource.value = saved._sharedSource??null
-    scenarioName.value = saved.name
+    saveEditing()
     writeRoute(activeRoute, { replace: true, preserveUrl: true })
     scenarioDialog.value?.close()
   }
@@ -675,11 +664,11 @@ function saveScenario() {
 }
 function updateEditingScenario() {
   if (!editingScenario.value) return
-  scenarioName.value = editingScenario.value.name
+  selectOriginalName()
   saveScenario()
 }
 function copyEditingScenario() {
-  scenarioName.value = editingScenario.value.name + ' copy'
+  suggestCopyName()
   scenarioDialog.value.showModal()
 }
 
@@ -735,69 +724,232 @@ function removeScenario(id) {
   <main class="app">
     <header class="hero" :inert="settingsOpen">
       <nav v-if="spec" class="view-navigation" aria-label="Workspace views">
-        <button type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="!graphView" @click="navigateView('')">API</button>
-        <button v-if="configuration?.agentUrl" type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="graphView === 'agent'" @click="navigateView('agent')">Bring your agent</button>
-        <button type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="graphView === 'scenarios' || graphView === 'builder'" @click="navigateView('scenarios')">Scenarios</button>
-        <button type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="graphView === 'entities'" @click="navigateView('entities')">Entity graph</button>
-        <button type="button" class="secondary" :disabled="workspaceLocked" :aria-pressed="graphView === 'endpoints'" @click="navigateView('endpoints')">Endpoint graph</button>
+        <button
+          type="button"
+          class="secondary"
+          :disabled="workspaceLocked"
+          :aria-pressed="!graphView"
+          @click="navigateView('')"
+        >
+          API
+        </button>
+        <button
+          v-if="configuration?.agentUrl"
+          type="button"
+          class="secondary"
+          :disabled="workspaceLocked"
+          :aria-pressed="graphView === 'agent'"
+          @click="navigateView('agent')"
+        >
+          Bring your agent
+        </button>
+        <button
+          type="button"
+          class="secondary"
+          :disabled="workspaceLocked"
+          :aria-pressed="graphView === 'scenarios' || graphView === 'builder'"
+          @click="navigateView('scenarios')"
+        >
+          Scenarios
+        </button>
+        <button
+          type="button"
+          class="secondary"
+          :disabled="workspaceLocked"
+          :aria-pressed="graphView === 'entities'"
+          @click="navigateView('entities')"
+        >
+          Entity graph
+        </button>
+        <button
+          type="button"
+          class="secondary"
+          :disabled="workspaceLocked"
+          :aria-pressed="graphView === 'endpoints'"
+          @click="navigateView('endpoints')"
+        >
+          Endpoint graph
+        </button>
       </nav>
       <label v-if="spec" class="mobile-workspace-view">
         <span class="sr-only">Workspace view</span>
-        <select :value="graphView" :disabled="workspaceLocked" @change="navigateView($event.target.value)">
-          <option value="">API</option><option v-if="configuration?.agentUrl" value="agent">Bring your agent</option><option value="scenarios">Scenarios</option><option value="builder">Scenario Builder</option><option value="entities">Entity graph</option><option value="endpoints">Endpoint graph</option>
+        <select
+          :value="graphView"
+          :disabled="workspaceLocked"
+          @change="navigateView($event.target.value)"
+        >
+          <option value="">API</option>
+          <option v-if="configuration?.agentUrl" value="agent">Bring your agent</option>
+          <option value="scenarios">Scenarios</option>
+          <option value="builder">Scenario Builder</option>
+          <option value="entities">Entity graph</option>
+          <option value="endpoints">Endpoint graph</option>
         </select>
       </label>
       <div class="api-identity">
         <div class="api-info">
-          <DescriptionHelp class="mobile-api-about" label="About API" :trigger-text="spec?.info?.title ?? 'API documentation'" :context="spec?.info?.version ? 'Version ' + spec.info.version : spec?.info?.title" :summary="spec?.info?.summary" :description="spec?.info?.description" />
+          <DescriptionHelp
+            class="mobile-api-about"
+            label="About API"
+            :trigger-text="spec?.info?.title ?? 'API documentation'"
+            :context="spec?.info?.version ? 'Version ' + spec.info.version : spec?.info?.title"
+            :summary="spec?.info?.summary"
+            :description="spec?.info?.description"
+          />
           <div class="api-title">
-            <small v-if="documentSource.kind === 'import'" :title="documentSource.name">Imported</small><h1 :title="spec?.info?.title">{{ spec?.info?.title ?? 'API documentation' }}</h1>
+            <small v-if="documentSource.kind === 'import'" :title="documentSource.name"
+              >Imported</small
+            >
+            <h1 :title="spec?.info?.title">{{ spec?.info?.title ?? 'API documentation' }}</h1>
             <small v-if="spec?.info?.version">Version {{ spec.info.version }}</small>
           </div>
-          <DescriptionHelp class="desktop-api-help" label="About API" :summary="spec?.info?.summary" :description="spec?.info?.description" />
+          <DescriptionHelp
+            class="desktop-api-help"
+            label="About API"
+            :summary="spec?.info?.summary"
+            :description="spec?.info?.description"
+          />
         </div>
-        <button ref="authorizationButton" type="button" class="secondary authorize-button" aria-label="Authorize" :title="authorizedCount ? 'Authorize · configured' : 'Authorize'" :data-configured="authorizedCount > 0" @click="openAuthorization()"><svg class="authorize-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="4"/><path d="m11 11 9 9m-3-3 2-2m-5 2 2-2"/></svg><span class="authorize-label">Authorize<small v-if="authorizedCount"> · configured</small></span></button>
-        <button v-if="spec" ref="settingsButton" type="button" class="secondary settings-icon" :disabled="workspaceLocked"
-          aria-label="Settings" title="Settings" :aria-expanded="settingsOpen" :aria-controls="settingsOpen ? 'settings-panel' : undefined" @click="toggleSettings">
+        <button
+          ref="authorizationButton"
+          type="button"
+          class="secondary authorize-button"
+          aria-label="Authorize"
+          :title="authorizedCount ? 'Authorize · configured' : 'Authorize'"
+          :data-configured="authorizedCount > 0"
+          @click="openAuthorization()"
+        >
+          <svg class="authorize-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="8" cy="8" r="4" />
+            <path d="m11 11 9 9m-3-3 2-2m-5 2 2-2" /></svg
+          ><span class="authorize-label"
+            >Authorize<small v-if="authorizedCount"> · configured</small></span
+          >
+        </button>
+        <button
+          v-if="spec"
+          ref="settingsButton"
+          type="button"
+          class="secondary settings-icon"
+          :disabled="workspaceLocked"
+          aria-label="Settings"
+          title="Settings"
+          :aria-expanded="settingsOpen"
+          :aria-controls="settingsOpen ? 'settings-panel' : undefined"
+          @click="toggleSettings"
+        >
           <span aria-hidden="true">⚙︎</span>
         </button>
       </div>
     </header>
 
-    <AuthorizationDialog v-if="authorizationOpen" :authentication="authentication" :api-id="authorizationApiId" @close="closeAuthorization" :retry-documentation="retryAuthorizedMetadata" />
-    <p v-if="error" class="app-message error" role="alert">{{ error }} <button type="button" class="secondary" @click="retryAuthorizedMetadata">Retry documentation</button></p>
+    <AuthorizationDialog
+      v-if="authorizationOpen"
+      :authentication="authentication"
+      :api-id="authorizationApiId"
+      @close="closeAuthorization"
+      :retry-documentation="retryAuthorizedMetadata"
+    />
+    <div v-if="error" class="app-message error">
+      <div role="alert">
+        {{ error }}
+        <button type="button" class="secondary" @click="retryAuthorizedMetadata">
+          Retry documentation
+        </button>
+      </div>
+      <OpenApiDocumentPicker v-if="!spec" :documents="openApiDocuments" :selected="activeServerDocument"
+        :disabled="scenarioBusy" :error="documentError" @select="switchOpenApiDocument" />
+    </div>
     <p v-else-if="!spec" class="app-message" role="status">Loading API documentation…</p>
     <template v-else>
-      <p v-if="spec?.['x-necto-import-warning']" class="app-message" role="status">{{ spec['x-necto-import-warning'] }}</p>
+      <p v-if="spec?.['x-necto-import-warning']" class="app-message" role="status">
+        {{ spec['x-necto-import-warning'] }}
+      </p>
       <p v-if="routeError" class="app-message error" role="alert">{{ routeError }}</p>
       <p v-else-if="pendingRoute" class="app-message" role="status">Loading workspace view…</p>
-      <div v-if="settingsOpen" class="settings-backdrop" aria-hidden="true" @click="closeSettings"></div>
+      <div
+        v-if="settingsOpen"
+        class="settings-backdrop"
+        aria-hidden="true"
+        @click="closeSettings"
+      ></div>
       <Transition name="settings-drawer">
-        <aside v-if="settingsOpen" id="settings-panel" class="work-area settings" :class="{ 'settings-presets': settingsTab === 'presets' }" role="dialog" aria-modal="true" @keydown="trapSettingsFocus" aria-labelledby="settings-title" @keydown.esc.stop="closeSettings">
+        <aside
+          v-if="settingsOpen"
+          id="settings-panel"
+          class="work-area settings"
+          :class="{ 'settings-presets': settingsTab === 'presets' }"
+          role="dialog"
+          aria-modal="true"
+          @keydown="trapSettingsFocus"
+          aria-labelledby="settings-title"
+          @keydown.esc.stop="closeSettings"
+        >
           <div class="settings-header">
             <h2 id="settings-title">Settings</h2>
-            <button ref="settingsCloseButton" type="button" class="secondary settings-icon" aria-label="Close settings" @click="closeSettings">
+            <button
+              ref="settingsCloseButton"
+              type="button"
+              class="secondary settings-icon"
+              aria-label="Close settings"
+              @click="closeSettings"
+            >
               <span aria-hidden="true">×</span>
             </button>
             <nav class="settings-sections" aria-label="Settings sections">
-              <button type="button" class="secondary" :aria-pressed="settingsTab === 'presets'" @click="settingsTab = 'presets'">Presets</button>
-              <button type="button" class="secondary" :aria-pressed="settingsTab === 'connections'" @click="settingsTab = 'connections'">External APIs</button>
-              <button type="button" class="secondary" :aria-pressed="settingsTab === 'workspace'" @click="settingsTab = 'workspace'">Workspace</button>
+              <button
+                type="button"
+                class="secondary"
+                :aria-pressed="settingsTab === 'presets'"
+                @click="settingsTab = 'presets'"
+              >
+                Presets
+              </button>
+              <button
+                type="button"
+                class="secondary"
+                :aria-pressed="settingsTab === 'connections'"
+                @click="settingsTab = 'connections'"
+              >
+                External APIs
+              </button>
+              <button
+                type="button"
+                class="secondary"
+                :aria-pressed="settingsTab === 'workspace'"
+                @click="settingsTab = 'workspace'"
+              >
+                Workspace
+              </button>
             </nav>
           </div>
           <div :inert="workspaceLocked">
-            <section v-show="settingsTab === 'presets'" class="preset-panel" aria-labelledby="presets-title">
+            <section
+              v-show="settingsTab === 'presets'"
+              class="preset-panel"
+              aria-labelledby="presets-title"
+            >
               <header class="preset-intro">
                 <h3 id="presets-title">Request presets</h3>
-                <p class="muted">Save shared values and activate a preset to use them in matching requests.</p>
+                <p class="muted">
+                  Save shared values and activate a preset to use them in matching requests.
+                </p>
               </header>
               <p v-if="presetError" class="error" role="alert">{{ presetError }}</p>
               <div class="preset-layout">
                 <div class="preset-picker">
                   <ul v-if="presets.size" ref="presetList" class="preset-list" aria-label="Presets">
                     <li v-for="name in presets.keys()" :key="name">
-                      <button type="button" :aria-current="editedPresetName === name ? 'true' : undefined" @click="editedPresetName = name">
-                        <span class="preset-dot" :style="{ backgroundColor: presetColors.get(name) ?? defaultPresetColor }" aria-hidden="true"></span>
+                      <button
+                        type="button"
+                        :aria-current="editedPresetName === name ? 'true' : undefined"
+                        @click="editedPresetName = name"
+                      >
+                        <span
+                          class="preset-dot"
+                          :style="{ backgroundColor: presetColors.get(name) ?? defaultPresetColor }"
+                          aria-hidden="true"
+                        ></span>
                         <span class="preset-item-name">{{ name }}</span>
                         <small v-if="activePresetNames.includes(name)">Active</small>
                       </button>
@@ -806,8 +958,16 @@ function removeScenario(id) {
                   <form class="preset-create" @submit.prevent="addPreset">
                     <label for="new-preset-name">New preset</label>
                     <div>
-                      <input id="new-preset-name" ref="presetNameInput" v-model="newPresetName" placeholder="e.g. Staging" required>
-                      <button type="submit" :class="presets.size ? 'secondary' : 'primary'">Add</button>
+                      <input
+                        id="new-preset-name"
+                        ref="presetNameInput"
+                        v-model="newPresetName"
+                        placeholder="e.g. Staging"
+                        required
+                      />
+                      <button type="submit" :class="presets.size ? 'secondary' : 'primary'">
+                        Add
+                      </button>
                     </div>
                   </form>
                 </div>
@@ -816,34 +976,85 @@ function removeScenario(id) {
                     <h4>{{ editedPresetName }}</h4>
                     <label class="preset-color-field">
                       Color
-                      <input type="color" :value="presetColors.get(editedPresetName) ?? defaultPresetColor"
-                        @input="savePresetColor($event.target.value)">
+                      <input
+                        type="color"
+                        :value="presetColors.get(editedPresetName) ?? defaultPresetColor"
+                        @input="savePresetColor($event.target.value)"
+                      />
                     </label>
                     <label class="preset-active-field">
-                      <input type="checkbox" :checked="activePresetNames.includes(editedPresetName)"
-                        @change="togglePreset(editedPresetName, $event.target.checked)">
+                      <input
+                        type="checkbox"
+                        :checked="activePresetNames.includes(editedPresetName)"
+                        @change="togglePreset(editedPresetName, $event.target.checked)"
+                      />
                       Use in requests
                     </label>
                   </header>
-                  <ValuesEditor :key="editedPresetName" ref="presetFields" :values="editedPresetValues" label="Preset fields" @save="savePresetValues" />
+                  <ValuesEditor
+                    :key="editedPresetName"
+                    ref="presetFields"
+                    :values="editedPresetValues"
+                    label="Preset fields"
+                    @save="savePresetValues"
+                  />
                   <footer class="preset-detail-footer">
-                    <button v-if="!confirmingPresetDeletion" ref="presetDeleteControl" type="button" class="preset-delete secondary" @click="confirmPresetDeletion(true)">Delete preset</button>
+                    <button
+                      v-if="!confirmingPresetDeletion"
+                      ref="presetDeleteControl"
+                      type="button"
+                      class="preset-delete secondary"
+                      @click="confirmPresetDeletion(true)"
+                    >
+                      Delete preset
+                    </button>
                     <div v-else class="preset-delete-confirmation">
                       <p>Delete this preset and its fields?</p>
-                      <button ref="presetDeleteControl" type="button" class="secondary" @click="confirmPresetDeletion(false)">Cancel</button>
-                      <button type="button" class="preset-delete secondary" @click="removePreset">Delete preset</button>
+                      <button
+                        ref="presetDeleteControl"
+                        type="button"
+                        class="secondary"
+                        @click="confirmPresetDeletion(false)"
+                      >
+                        Cancel
+                      </button>
+                      <button type="button" class="preset-delete secondary" @click="removePreset">
+                        Delete preset
+                      </button>
                     </div>
                   </footer>
                 </div>
                 <div v-else class="preset-empty">
                   <h4>{{ presets.size ? 'Select a preset' : 'No presets yet' }}</h4>
-                  <p class="muted">{{ presets.size ? 'Choose a preset to edit its fields.' : 'Name your first preset to start adding fields.' }}</p>
+                  <p class="muted">
+                    {{
+                      presets.size
+                        ? 'Choose a preset to edit its fields.'
+                        : 'Name your first preset to start adding fields.'
+                    }}
+                  </p>
                 </div>
               </div>
             </section>
-            <WorkspaceSettings :folder="scenarioFolder" v-show="settingsTab === 'workspace'" v-model:catalog-width="catalogWidth" :import-document="importDocument" :document-source="documentSource" :restore-document="restoreServerDocument" :operations="operations" />
-            <ExternalApiSettings v-show="settingsTab === 'connections'" v-model:show="showExternalApis" :connections="connections" :statuses="externalStatuses" :storage-error="externalStorageError"
-              :save="externalApis.saveConnection" :remove="externalApis.removeConnection" :test="externalApis.testConnection" />
+            <WorkspaceSettings
+              :folder="scenarioFolder"
+              v-show="settingsTab === 'workspace'"
+              v-model:catalog-width="catalogWidth"
+              :import-document="importDocument"
+              :document-source="documentSource"
+              :restore-document="restoreServerDocument"
+              :operations="operations"
+            />
+            <ExternalApiSettings
+              v-show="settingsTab === 'connections'"
+              v-model:show="showExternalApis"
+              :connections="connections"
+              :statuses="externalStatuses"
+              :storage-error="externalStorageError"
+              :save="externalApis.saveConnection"
+              :remove="externalApis.removeConnection"
+              :test="externalApis.testConnection"
+            />
           </div>
         </aside>
       </Transition>
@@ -853,8 +1064,29 @@ function removeScenario(id) {
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <EndpointGraph :inert="settingsOpen" :initial-operation-key="current?.operation.key" v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
-      <ScenarioBuilder :folder="scenarioFolder" @folder-settings="configureScenarioFolder" v-if="builderVisited" v-show="graphView === 'builder'" :inert="settingsOpen" :configuration="configuration" :operations="operations" :scenarios="scenarios" :context="scenarioContext" :preset-context="builderPresetContext" :preset-names="[...presets.keys()]" :active-preset-names="activePresetNames" :authentication="authentication" :execute="(operation, session, values, signal, onRequest) => run(operation, session, values, { signal, onRequest })" :busy="scenarioBusy" @pending="builderPending = $event" @back="navigateView('scenarios')" />
-      <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="navigateView('builder')" :api-url="configuration?.openApiUrl" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
+      <ScenarioBuilder
+        ref="builderView"
+        :store="builderStore"
+        :mapping-links="mappingLinks"
+        :folder="scenarioFolder"
+        @folder-settings="configureScenarioFolder"
+        v-if="builderVisited"
+        v-show="graphView === 'builder'"
+        :inert="settingsOpen"
+        :configuration="configuration"
+        :operations="operations"
+        :scenarios="scenarios"
+        :context="scenarioContext"
+        :preset-context="builderPresetContext"
+        :preset-names="[...presets.keys()]"
+        :active-preset-names="activePresetNames"
+        :authentication="authentication"
+        :execute="(operation, session, values, signal, onRequest) => run(operation, session, values, { signal, onRequest })"
+        :busy="scenarioBusy"
+        @back="navigateView('scenarios')"
+      />
+      <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="navigateView('builder')" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios"
+        :import-scenario="importLibraryScenario" :builder-scenarios="builderScenarios" :builder-error="builderError" @open-builder-scenario="openBuilderScenario" :state="scenarioState" :runs="scenarioRuns"
 
         :deleted="scenarioStore.deleted.value" @undo-remove="undoRemoveScenario" :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"
@@ -863,7 +1095,10 @@ function removeScenario(id) {
           <details><summary>Targets for this run</summary>
             <ol><li v-for="(target, index) in previewScenarioTargets(scenario, presetNames)" :key="index">
               <span v-if="target.error">{{ target.error }}</span>
-              <template v-else><strong>{{ target.api }}</strong> · {{ target.target }} · <code>{{ target.operation }}</code></template>
+              <template v-else>
+                <strong>{{ target.api }}</strong> · {{ target.target }} · <code>{{ target.operation }}</code>
+                <span v-if="target.responseInputs"> · Inputs from earlier responses: {{ target.responseInputs }}</span>
+              </template>
             </li></ol>
           </details>
         </template>
@@ -903,6 +1138,10 @@ function removeScenario(id) {
               :active-operation="current?.operation.key ?? ''"
               @select-operation="selectCatalogOperation"
             >
+              <template #documents>
+                <OpenApiDocumentPicker :documents="openApiDocuments" :selected="activeServerDocument"
+                  :disabled="scenarioBusy" :error="documentError" @select="switchOpenApiDocument" />
+              </template>
               <template #actions><OperationTasks :configuration="configuration" :authentication="authentication" :operations="operations" @open-operation="operation => selectCatalogOperation(operation, operation.tags[0])" /><CurlImport :operations="operations" :configuration="configuration" :disabled="scenarioBusy" @import="loadCurlDraft" /></template>
             </EndpointCatalog>
           </div>
@@ -981,7 +1220,9 @@ function removeScenario(id) {
                 </div>
               </form>
             </dialog>
-            <OperationRunner :prepare="prepareRequest" :cancel="cancelRequest" :history="requestHistory" :configuration="configuration" :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :preset-colors="presetColors" :default-preset-color="defaultPresetColor" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" @edit-preset="editActivePreset">
+            <CaptureRequestsDialog ref="captureDialog" :scenarios="builderScenarios" :save="saveCapturedRequests" />
+            <OperationRunner @capture-requests="captureRequests" :prepare="prepareRequest" :cancel="cancelRequest" :history="requestHistory" :configuration="configuration" :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :preset-colors="presetColors" :default-preset-color="defaultPresetColor" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" :parameter-choices="parameter => choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
+              @choose-parameter="(location, choice) => choose(current.session, location, choice)" @edit-preset="editActivePreset">
               <template #request-actions>
                 <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">
                   Save request
@@ -990,12 +1231,6 @@ function removeScenario(id) {
               <template #samples>
                 <RequestSamples :key="sampleStorageKey(current.operation)" ref="requestSamples" :storage-key="sampleStorageKey(current.operation)"
                   :operation="current.operation" :session="current.session" :values="requestValues" />
-              </template>
-              <template #parameter-input="{ parameter, hint, id }">
-                <ValueInput :id="id" v-model="current.session.fields[fieldKey(parameter)]"
-                  :choices="choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
-                  :required="parameter.required || parameter.in === 'path'" :placeholder="hint"
-                  @choose="choose(current.session, parameter.in, $event)" />
               </template>
               <template #choices="{ location, parameterName }">
                 <RelatedChoices v-if="location === 'body'"

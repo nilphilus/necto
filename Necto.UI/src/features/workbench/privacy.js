@@ -41,6 +41,11 @@ function redactDocument(value) {
   }
   return result
 }
+export function sensitiveTransport(operation,location,name) {
+ const normalized=location==='header'?String(name).trim().toLowerCase():name
+ return sensitiveName(name)||Object.values(operation.securitySchemes??{}).some(scheme=>scheme?.type==='apiKey'&&scheme.in===location&&(location==='header'?String(scheme.name).trim().toLowerCase():scheme.name)===normalized)||operation.parameters?.some(parameter=>parameter.in===location&&(location==='header'?parameter.name?.toLowerCase():parameter.name)===normalized&&(parameter['x-necto-sensitive']===true||operation.resolve?.(parameter.schema)?.['x-necto-sensitive']===true))
+}
+
 export function safeRequest(request, includeCredentials = false) {
   if (includeCredentials) return request
   const copy = redactedRequest(request),

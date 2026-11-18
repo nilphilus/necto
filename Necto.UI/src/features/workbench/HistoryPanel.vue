@@ -1,5 +1,6 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { canCaptureHistory } from './historySnapshot.js';
 import { historySummary } from './historySummary.js';
 import { diffValues } from './history.js';
 import { requestFromHistory, restoreHistoryDraft } from './historySnapshot.js';
@@ -9,10 +10,15 @@ const props = defineProps({
   operation: Object,
   session: Object
 });
-const emit = defineEmits(['restored']);
+const emit = defineEmits(['restored', 'capture']);
 const entries = computed(
   () => props.history?.forOperation(props.operation.key) ?? []
 );
+const selected = ref([])
+const captureEntries = computed(() => entries.value
+  .filter((entry) => selected.value.includes(entry.id) && canCaptureHistory(entry))
+  .reverse())
+watch(() => props.operation.key, () => { selected.value = [] })
 const before = ref(''),
   after = ref(''),
   feedback = ref('');
@@ -64,9 +70,14 @@ async function copy(entry) {
     >
       Clear this endpoint’s history
     </button>
+    <button v-if="captureEntries.length" type="button" :disabled="session.pending"
+      @click="emit('capture', captureEntries)">Add selected requests to scenario ({{ captureEntries.length }})</button>
     <details v-for="entry in entries" :key="entry.id">
       <summary>{{ label(entry) }}</summary>
       <p v-if="entry.error" class="error">{{ entry.error }}</p>
+      <label v-if="canCaptureHistory(entry)" class="capture-selection">
+        <input v-model="selected" type="checkbox" :value="entry.id"> Select request for scenario
+      </label>
       <div class="actions">
         <button
           type="button"
@@ -77,6 +88,8 @@ async function copy(entry) {
         ><button type="button" :disabled="!entry.snapshot" @click="copy(entry)">
           Copy sent request as cURL
         </button>
+        <button v-if="canCaptureHistory(entry)" type="button" :disabled="session.pending"
+          @click="emit('capture', [entry])">Add to scenario…</button>
       </div>
       <p v-if="entry.omitted">
         Body and replay omitted to keep history within its memory limits.
@@ -163,6 +176,7 @@ label {
   min-width: 0;
   flex: 1;
 }
+label.capture-selection { display: flex; align-items: center; font-size: .8rem; }
 select {
   max-width: 100%;
 }

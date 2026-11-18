@@ -1,37 +1,19 @@
-import { randomSnapshot } from './random.js'
-import { expressionSnapshot } from './expression.js'
+import { builderCollection, builderCollectionKey, readBuilderCollection, savedBlueprint } from './definition.js'
+export { savedBlueprint } from './definition.js'
 import { inputSources } from './variables.js'
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
-import { sharedOrigin } from '../scenario-folder/origin.js'
+import { sharedOrigin } from '../scenario-definitions/origin.js'
 import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
-import { payloadSnapshot } from '../workbench/body.js'
-import { executionOptions } from '../workbench/executionOptions.js'
-import { newBlueprint, validateBlueprint, parseHuman } from './model.js'
+import { newBlueprint, parseHuman } from './model.js'
 import { prepareBlueprint, executeBlueprint } from './runner.js'
-import { variableSnapshot } from './variables.js'
-import { waitOptions } from './waiting.js'
-import { allConnections, hasTiming, upgradeBlueprint } from './connections.js'
+import { upgradeBlueprint } from './connections.js'
 
 const clone = value => JSON.parse(JSON.stringify(value))
-export function savedBlueprint(draft) {
-  validateBlueprint(draft)
-  draft = upgradeBlueprint(draft)
-  const saved = clone({ format: draft.format, version: 7, variables: draft.variables.map(variableSnapshot), id: draft.id, name: draft.name.trim(), concurrency: draft.concurrency,
-    connections: allConnections(draft).filter(edge => edge.from !== null || hasTiming(edge)).map(edge => ({ from: edge.from, to: edge.to, ...waitOptions(edge) })),
-    steps: draft.steps.map(step => ({ ...(step.position ? { position: { ...step.position } } : {}), id: step.id, label: step.label.trim(), operationKey: step.operationKey, apiId: step.apiId, method: step.method, path: step.path,
-      dependsOn: [], inputs: step.inputs.map(input => ({ location: input.location,
-        ...(input.location === 'body' ? { pointer: input.pointer } : { name: input.name }), source: input.source,
-        ...(input.source === 'random' ? randomSnapshot(input) : input.source === 'expression' ? expressionSnapshot(input) : input.source === 'response' ? { stepId: input.stepId, responsePointer: input.responsePointer } : input.source === 'variable' ? { variableId: input.variableId } : input.source === 'human' ? { prompt: input.prompt, valueType: input.valueType } : input.source === 'generate' ? { generator: input.generator, ...(input.generator === 'regex' ? { pattern: input.pattern } : {}) } : {}) })),
-      request: { fields: { ...step.request.fields }, body: step.request.body, ...payloadSnapshot(step.request), ...executionOptions(step.request),
-        assertions: step.request.assertions ?? [], serverIndex: step.request.serverIndex, serverValues: step.request.serverValues ?? {} } })) })
-  validateBlueprint(saved)
-  return saved
-}
 export function useBuilder(configuration) {
   const draft = ref(newBlueprint()), saved = ref([]), error = ref(''), notice = ref('')
   const execution = reactive({ status: 'idle', steps: [], error: '', stale: false, presetNames: [] }), pending = ref(false), questions = reactive(new Map())
-  const key = computed(() => workspaceIdentity(configuration.value) && 'necto:scenario-builder:' + workspaceIdentity(configuration.value))
+  const key = computed(() => workspaceIdentity(configuration.value) && builderCollectionKey(workspaceIdentity(configuration.value)))
   const dirty = computed(() => JSON.stringify(savedBlueprintSafe(draft.value)) !== JSON.stringify(savedBlueprintSafe(saved.value.find(item => item.id === draft.value.id))))
   let controller, revision = 0
   function savedBlueprintSafe(value) { try { return savedBlueprint(value) } catch { return value } }
@@ -45,12 +27,7 @@ export function useBuilder(configuration) {
     saved.value = []; error.value = ''
     if (!key.value) return
     try {
-      const data = JSON.parse(localStorage.getItem(key.value))
-      if (data !== null && (data.version !== 1 || !Array.isArray(data.blueprints) || data.blueprints.length > 100)) throw new Error('Invalid builder collection.')
-      const next = data?.blueprints ?? []
-      next.forEach(validateBlueprint)
-      if (new Set(next.map(item => item.id)).size !== next.length) throw new Error('Duplicate builder IDs.')
-      saved.value = next
+      saved.value = readBuilderCollection(localStorage.getItem(key.value))
     } catch (cause) { error.value = `Could not load Scenario Builder. ${cause.message}` }
   }
   watch(key, () => { revision++; clearRun(); draft.value = newBlueprint(); notice.value = ''; load() }, { immediate: true, flush: 'sync' })
@@ -58,7 +35,7 @@ export function useBuilder(configuration) {
   onScopeDispose(() => { revision++; stop() })
   function persist(next) {
     if (!key.value) throw new Error('Load an API before saving.')
-    const text = JSON.stringify({ version: 1, blueprints: next })
+    const text = JSON.stringify(builderCollection(next))
     if (next.length > 100 || text.length > 2 * 1024 * 1024) throw new Error('Builder storage is limited to 100 scenarios and 2 MB per workspace.')
     try { localStorage.setItem(key.value, text) } catch { throw new Error('Could not save in this browser. Export the definition instead.') }
     saved.value = next
@@ -69,6 +46,18 @@ export function useBuilder(configuration) {
     const origin=sharedOrigin(draft.value._sharedSource);if(origin)blueprint._sharedSource=origin
     persist([...saved.value.filter(item => item.id !== blueprint.id), blueprint])
     notice.value = 'Saved in this browser. Run inputs and responses are not included.'
+  }
+  function saveCaptured(blueprint) {
+    const isOpen = draft.value.id === blueprint.id
+    if (isOpen && dirty.value) throw new Error('Save or discard the open Builder changes before adding requests.')
+    const definition = savedBlueprint(blueprint)
+    const origin = sharedOrigin(blueprint._sharedSource)
+    if (origin) definition._sharedSource = origin
+    const exists = saved.value.some((item) => item.id === definition.id)
+    persist(exists
+      ? saved.value.map((item) => item.id === definition.id ? definition : item)
+      : [...saved.value, definition])
+    if (isOpen) open(definition)
   }
   function open(blueprint) { if (pending.value) return; clearRun(); draft.value = upgradeBlueprint(clone(blueprint)); notice.value = ''; error.value = '' }
   function fresh() { open(newBlueprint()) }
@@ -86,16 +75,16 @@ export function useBuilder(configuration) {
       } })
     })
   }
-  async function run(context, execute, allowHuman) {
+  async function run(context, execute, allowHuman, concurrency = draft.value.concurrency) {
     if (pending.value) return
     error.value = ''; notice.value = ''
-    const plan = prepareBlueprint(draft.value, context)
+    const plan = prepareBlueprint({ ...draft.value, concurrency }, context)
     if (!allowHuman && plan.some(step => step.inputs.flatMap(inputSources).some(input => input.source === 'human' || input.source === 'variable' && plan.variables.find(variable => variable.id === input.variableId)?.source === 'human'))) throw new Error('Enable human-in-the-loop for steps that ask for input.')
     const runRevision = revision
     Object.assign(execution, { status: 'running', steps: plan, error: '', stale: false, presetNames: [...(context.presetNames ?? [])] })
     const current = controller = new AbortController(); pending.value = true
     try {
-      const outcome = await executeBlueprint(execution.steps, { concurrency: draft.value.concurrency, execute, signal: current.signal, ask: allowHuman ? ask : undefined })
+      const outcome = await executeBlueprint(execution.steps, { concurrency, execute, signal: current.signal, ask: allowHuman ? ask : undefined })
       if (revision === runRevision) Object.assign(execution, outcome)
     } finally {
       // A canceled run must not retain human answers in its prompt queue.
@@ -103,5 +92,5 @@ export function useBuilder(configuration) {
       if (controller === current) controller = undefined
     }
   }
-  return { draft, saved, dirty, error, notice, execution, pending, questions, save, open, fresh, remove, stop, run, invalidate }
+  return { draft, saved, dirty, error, notice, execution, pending, questions, save, saveCaptured, open, fresh, remove, stop, run, invalidate }
 }

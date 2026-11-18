@@ -2,7 +2,7 @@
 
 The outer object is `{ "format": "necto-shared-scenario", "version": 1, "kind": "builder", "scenario": BLUEPRINT }`.
 
-Blueprint: `format: "necto-scenario-builder"`, `version: 7`, stable nonempty `id`, `name` (1–200 characters), `concurrency` (1–8), `variables: []`, `connections: []`, `steps: []` (maximum 100).
+Blueprint: `format: "necto-scenario-builder"`, `version: 7`, stable nonempty `id`, `name` (1–200 characters), optional plain-text `description` (up to 500 characters, shown in the scenario library), `concurrency` (1–8), `variables: []`, `connections: []`, `steps: []` (maximum 100).
 
 Each step requires:
 
