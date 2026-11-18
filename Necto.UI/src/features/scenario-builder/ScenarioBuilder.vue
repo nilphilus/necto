@@ -204,7 +204,18 @@ async function startRun() {
     if (runDialog.value.open) runDialog.value.close()
   } catch (cause) { runProblem.value = cause.message; if (!runDialog.value.open) error.value = cause.message }
 }
-function select(id) { selectedId.value = id; if (pending.value || execution.steps.length) tab.value = 'response'; void showStep() }
+let preferredStepTab
+function chooseStepTab(value) {
+  preferredStepTab = value
+  tab.value = value
+}
+watch(() => draft.value.id, () => { preferredStepTab = undefined })
+function select(id, showResult = false) {
+  selectedId.value = id
+  const hasResult = execution.steps.some(step => step.id === id)
+  tab.value = hasResult ? (showResult ? 'response' : preferredStepTab ?? 'response') : 'configure'
+  void showStep()
+}
 function exportDefinition() {
   attempt(() => {
     const data = savedBlueprint(draft.value)
@@ -269,7 +280,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
     <div v-if="execution.status !== 'idle'" class="builder-run-status" role="status"><strong>{{ execution.stale ? 'Previous run · ' : '' }}{{ execution.status }}</strong><span v-if="execution.presetNames?.length">Presets: {{ execution.presetNames.join(' → ') }}</span><span>{{ execution.steps.filter(step => step.status === 'completed').length }} / {{ execution.steps.length }} completed</span><span v-if="questions.size">{{ questions.size }} awaiting your input</span><span class="error">{{ execution.error }}</span></div>
     <section v-if="questions.size" class="human-queue" aria-label="Human input required">
       <form v-for="[id, question] in questions" :key="id" class="human-card" @submit.prevent="question.submit()">
-        <header><strong>{{ question.step.label }} · Your input is needed</strong><button v-if="!question.step.sharedVariable" type="button" @click="select(id)">Show step</button><span v-else>Shared across requests</span></header>
+        <header><strong>{{ question.step.label }} · Your input is needed</strong><button v-if="!question.step.sharedVariable" type="button" @click="select(id, true)">Show step</button><span v-else>Shared across requests</span></header>
         <label v-for="(input, index) in question.inputs" :key="index">{{ input.prompt }}<small>{{ input.location }} · {{ input.location === 'body' ? input.pointer || 'whole body' : input.name }} · {{ input.valueType }}</small><textarea :aria-label="input.prompt" v-if="input.valueType === 'json'" v-model="question.values[index]" rows="2" required autocomplete="off" /><input :aria-label="input.prompt" v-else v-model="question.values[index]" :type="input.valueType === 'number' ? 'number' : 'text'" step="any" required autocomplete="off" :placeholder="input.valueType === 'boolean' ? 'true or false' : ''"></label>
         <p v-if="question.error" class="error" role="alert">{{ question.error }}</p><div><button type="submit" class="primary">Continue {{ question.step.label }}</button><small>{{ question.step.sharedVariable ? 'Requests using this variable are paused. Independent branches can continue.' : 'Only this step is paused. Independent branches can continue.' }}</small></div>
       </form>
@@ -282,7 +293,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         <header class="step-dialog-title"><h3 id="step-dialog-title">{{tab==='response'?'Step response':'Edit step'}}</h3><button type="button" class="secondary" aria-label="Close step editor" @click="stepDialog.close()">×</button></header>
         <template v-if="selected">
           <header class="inspector-header"><label>Step name<input v-model="selected.label" :disabled="pending" maxlength="200" aria-label="Step name"></label><div class="request-endpoint-actions"><button type="button" class="secondary" :disabled="pending" @click="openAdd(selected.id)">{{ selected.operationKey ? 'Change endpoint' : 'Choose endpoint…' }}</button><button type="button" class="secondary" :disabled="pending || draft.steps.length >= 100" @click="createNext({from:selected.id})">+ Next request</button></div><code><span class="method" :data-method="selected.method">{{ selected.method }}</span> {{ selected.path }}</code></header>
-          <div class="inspector-tabs" role="group" aria-label="Step view"><button type="button" :aria-pressed="tab === 'configure'" @click="tab = 'configure'">Configure</button><button type="button" :aria-pressed="tab === 'response'" @click="tab = 'response'">Response<span v-if="runStep?.httpStatus"> · {{ runStep.httpStatus }}</span></button></div>
+          <div class="inspector-tabs" role="group" aria-label="Step view"><button type="button" :aria-pressed="tab === 'configure'" @click="chooseStepTab('configure')">Configure</button><button type="button" :aria-pressed="tab === 'response'" @click="chooseStepTab('response')">Response<span v-if="runStep?.httpStatus"> · {{ runStep.httpStatus }}</span></button></div>
           <div v-if="tab === 'response'" class="inspector-content response-content"><p v-if="runStep?.status === 'delaying'" class="attempt-progress" role="status">Delaying until {{ new Date(runStep.nextAttemptAt).toLocaleTimeString() }}</p><p v-if="runStep?.attempt" class="attempt-progress" role="status">Attempt {{ runStep.attempt }} / {{ runStep.maxAttempts }} · {{ runStep.status }}<span v-if="runStep.nextAttemptAt"> · Next attempt at {{ new Date(runStep.nextAttemptAt).toLocaleTimeString() }}</span></p><details v-if="runStep?.attempts?.length > 1" class="attempt-history"><summary>Attempt history ({{ runStep.attempts.length }})</summary><ol><li v-for="attempt in runStep.attempts" :key="attempt.attempt">{{ attempt.attempt }} · HTTP {{ attempt.status ?? '—' }} · {{ attempt.elapsed ?? '—' }} ms · {{ attempt.matched ? 'value matched' : 'not matched' }}</li></ol></details><p v-if="execution.stale" class="muted">Result from the previous run. Run again to use the updated definition.</p><p v-if="runStep?.error" class="error">{{ runStep.error }}</p><SentRequest v-if="runStep?.request" :key="selectedId+':request'" :request="runStep.request" :attempt="runStep.attempt" /><ExpandedResponse v-if="runStep?.response" :key="selectedId" :result="runStep.response" :operation="runStep.operation" :pending="pending" :stale="execution.stale" /><p v-else class="muted">{{ runStep ? runStep.status : 'Run the scenario to see this response.' }}</p></div>
           <div v-else class="inspector-content">
             <p v-if="!selected.operationKey" class="empty-request-note">Choose an endpoint for this request. Its connection is already in place.</p><p v-else-if="!operation" class="error">Endpoint unavailable. Enable its API connection before running.</p>
