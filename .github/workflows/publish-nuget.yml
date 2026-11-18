@@ -1,0 +1,152 @@
+name: Publish NuGet
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional version override. Leave blank to use Conventional Commits.'
+        required: false
+        type: string
+      publish:
+        description: 'Publish to nuget.org'
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-nuget-${{ inputs.publish && 'release' || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve package version
+        id: resolve
+        env:
+          VERSION_OVERRIDE: ${{ inputs.version }}
+        shell: bash
+        run: |
+          stable_version='(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
+          version="$VERSION_OVERRIDE"
+
+          if [[ -z "$version" ]]; then
+            tags=$(git tag --merged HEAD --list 'v*' --sort=-version:refname)
+            base_tag=''
+            while IFS= read -r tag; do
+              if [[ "$tag" =~ ^v${stable_version}$ ]]; then
+                base_tag="$tag"
+                break
+              fi
+            done <<< "$tags"
+
+            if [[ -z "$base_tag" ]]; then
+              echo "::error::No reachable stable release tag. Enter a version to publish the first release."
+              exit 1
+            fi
+
+            IFS=. read -r major minor patch <<< "${base_tag#v}"
+            breaking_subject='^[[:alnum:]_-]+(\([^)]*\))?!:'
+            breaking_footer='^BREAKING[ -]CHANGE:'
+            feat_subject='^feat(\([^)]*\))?:'
+            fix_subject='^fix(\([^)]*\))?:'
+
+            if [[ -n "$(git log --format=%H --extended-regexp --grep="$breaking_subject" --grep="$breaking_footer" "$base_tag"..HEAD)" ]]; then
+              version="$((major + 1)).0.0"
+            elif [[ -n "$(git log --format=%H --extended-regexp --grep="$feat_subject" "$base_tag"..HEAD)" ]]; then
+              version="$major.$((minor + 1)).0"
+            elif [[ -n "$(git log --format=%H --extended-regexp --grep="$fix_subject" "$base_tag"..HEAD)" ]]; then
+              version="$major.$minor.$((patch + 1))"
+            else
+              echo "No version bump since $base_tag." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
+
+          if [[ ! "$version" =~ ^${stable_version}(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::Enter a package version such as 0.3.1 or 0.4.0-preview.1"
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Necto.OpenApi version: $version" >> "$GITHUB_STEP_SUMMARY"
+
+  pack:
+    needs: version
+    if: needs.version.outputs.version != ''
+    runs-on: ubuntu-latest
+    env:
+      PACKAGE_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10'
+
+      - run: dotnet test Generator.Tests/Generator.Tests.csproj -c Release
+      - run: dotnet test Tests/Tests.csproj -c Release
+      - run: dotnet pack Necto/Necto.csproj -c Release -p:PackageVersion="$PACKAGE_VERSION" -o artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuget-package
+          path: artifacts/Necto.OpenApi.*.nupkg
+          if-no-files-found: error
+
+  publish:
+    if: inputs.publish && github.ref == 'refs/heads/main'
+    needs: [version, pack]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      RELEASE_TAG: v${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check release tag
+        run: |
+          if git ls-remote --exit-code origin "refs/tags/$RELEASE_TAG"; then
+            echo "::error::Release tag $RELEASE_TAG already exists"
+            exit 1
+          else
+            status=$?
+            if [[ "$status" != 2 ]]; then exit "$status"; fi
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: nuget-package
+          path: artifacts
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push package to nuget.org
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push artifacts/Necto.OpenApi.*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
+
+      - name: Tag the published version
+        run: git push origin "$GITHUB_SHA:refs/tags/$RELEASE_TAG"
