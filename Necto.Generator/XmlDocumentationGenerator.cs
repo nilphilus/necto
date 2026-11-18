@@ -3,7 +3,6 @@ using System.Xml.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Operations;
 namespace Necto.Generator;
 
 [Generator]
@@ -16,35 +15,11 @@ public sealed class XmlDocumentationGenerator : IIncrementalGenerator
             static (ctx, ct) => Read(ctx, ct)).Where(static item => item is not null);
         context.RegisterSourceOutput(endpoints.Collect().Combine(GeneratedScope.For(context, "Documentation")), static (ctx, data) => Emit(ctx, data.Left.OfType<DocumentationEndpoint>().ToArray(), data.Right));
     }
-    private static DocumentationEndpoint? Read(GeneratorSyntaxContext context, CancellationToken token)
-    {
-        var invocation = (InvocationExpressionSyntax)context.Node;
-        var model = context.SemanticModel;
-        if (model.GetOperation(invocation, token) is not IInvocationOperation named)
-            return null;
+    private static DocumentationEndpoint? Read(GeneratorSyntaxContext context, CancellationToken token) =>
+        MinimalApiRegistration.FromName(context, token, mappedMethodsOnly: false) is { Id: { } id, Handler: { } handler }
+            ? new(id, handler)
+            : null;
 
-        var declaringType = named.TargetMethod.ContainingType.ToDisplayString();
-        if (declaringType != "Microsoft.AspNetCore.Builder.RoutingEndpointConventionBuilderExtensions")
-            return null;
-
-        var endpointName = named.Arguments.FirstOrDefault(arg => arg.Parameter?.Name == "endpointName");
-        if (endpointName?.Value.ConstantValue is not { HasValue: true, Value: string id })
-            return null;
-
-        ExpressionSyntax receiver = ((MemberAccessExpressionSyntax)invocation.Expression).Expression;
-        while (receiver is InvocationExpressionSyntax call && call.Expression is MemberAccessExpressionSyntax member)
-        {
-            if (model.GetOperation(call, token) is IInvocationOperation route && route.TargetMethod.ContainingType.ToDisplayString() == "Microsoft.AspNetCore.Builder.EndpointRouteBuilderExtensions")
-            {
-                var value = route.Arguments.FirstOrDefault(arg => arg.Parameter?.Name == "handler")?.Value;
-                while (value is IConversionOperation conversion) value = conversion.Operand;
-                var handler = value is IDelegateCreationOperation creation ? creation.Target switch { IAnonymousFunctionOperation lambda => lambda.Symbol, IMethodReferenceOperation reference => reference.Method, _ => null } : null;
-                return handler is null ? null : new(id, handler);
-            }
-            receiver = member.Expression;
-        }
-        return null;
-    }
     private static XElement? Xml(ISymbol symbol)
     {
         try
