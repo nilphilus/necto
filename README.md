@@ -15,6 +15,7 @@ ASP.NET Core APIs.
   connect external APIs, or bring your own MCP-capable agent.
 
 **[Product website](https://nilphilus.github.io/necto/)** ·
+[Live demo](https://nilphilus.github.io/necto/demo/) ·
 [Setup and technical guide](https://nilphilus.github.io/necto/technical.html) ·
 [Source code](https://github.com/nilphilus/necto) ·
 [Local website preview](docs/landing-page/README.md#preview)

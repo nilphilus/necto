@@ -1,10 +1,15 @@
-name: Deploy landing page to GitHub Pages
+name: Deploy website and live demo to GitHub Pages
 
 on:
   push:
     branches: [main]
     paths:
       - 'docs/landing-page/**'
+      - 'Necto.UI/**'
+      - 'Necto/**'
+      - 'Necto.Generator/**'
+      - 'SampleApi.FastEndpoints/**'
+      - 'tools/capture-fastendpoints-demo.py'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -27,10 +32,28 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Build website and live demo
+        run: |
+          dotnet build SampleApi.FastEndpoints/SampleApi.FastEndpoints.csproj --configuration Release
+          mkdir -p "$RUNNER_TEMP/necto-pages"
+          cp -a docs/landing-page/. "$RUNNER_TEMP/necto-pages/"
+          pnpm --dir Necto.UI run build --mode live-demo --outDir "$RUNNER_TEMP/necto-pages/demo" --emptyOutDir
+          python3 tools/capture-fastendpoints-demo.py \
+            --assembly SampleApi.FastEndpoints/bin/Release/net10.0/SampleApi.FastEndpoints.dll \
+            --output "$RUNNER_TEMP/necto-pages/demo/fixtures"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/landing-page
+          path: ${{ runner.temp }}/necto-pages
           name: ${{ env.PAGES_ARTIFACT_NAME }}
       - name: Deploy to GitHub Pages
         id: deployment
