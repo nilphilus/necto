@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watchPostEffect } from 'vue'
+import { numericError } from './numericParameter.js'
 import ValueInput from '../related-endpoints/ValueInput.vue'
 
 const props = defineProps({
@@ -8,6 +9,7 @@ const props = defineProps({
   type: String,
   format: String,
   enumValues: Array,
+  numberRules: Array,
   choices: Array,
   required: Boolean,
 })
@@ -41,6 +43,16 @@ watchPostEffect(() => {
   const valid = booleanValue.value === 'true' || booleanValue.value === 'false'
   unsetRadio.value?.setCustomValidity(props.required && !valid ? 'Select True or False.' : '')
 })
+
+const numeric = computed(() => props.type === 'integer' || props.type === 'number')
+const valueControl = ref(null)
+watchPostEffect(() => {
+  const error = numeric.value && model.value !== undefined && model.value !== null && model.value !== ''
+    ? numericError(model.value, props.type, props.numberRules ?? [])
+    : ''
+  valueControl.value?.querySelector('input')?.setCustomValidity(error ? `${props.label} ${error}.` : '')
+})
+const numericHint = computed(() => numeric.value && props.numberRules?.map(([operator, limit]) => `${operator} ${limit}`).join(' · '))
 
 const format = computed(() => props.type === 'string' ? props.format : undefined)
 const hasDate = computed(() => ['date', 'date-time'].includes(format.value))
@@ -109,13 +121,15 @@ function applyPicker() {
     <option v-for="value in enumOptions" :key="value" :value="value">{{ value }}</option>
   </select>
   <div v-else class="parameter-input">
-    <div class="parameter-value">
+    <div ref="valueControl" class="parameter-value">
       <ValueInput
         :id="id"
         :model-value="model"
         :choices="longEnum ? enumChoices : choices"
         :required="required"
         :placeholder="placeholder"
+        :inputmode="numeric ? 'decimal' : undefined"
+        :aria-describedby="numericHint ? id + '-bounds' : undefined"
         @update:model-value="model = $event; pickerOpen = false"
         @choose="choice => { if (!longEnum || choices?.includes(choice)) emit('choose', choice) }"
       />
@@ -125,6 +139,7 @@ function applyPicker() {
         {{ hasDate && hasTime ? 'Date & time' : hasDate ? 'Date' : 'Time' }}
       </button>
     </div>
+    <small v-if="numericHint" :id="id + '-bounds'" class="muted">{{ numericHint }}</small>
     <div v-if="pickerOpen" :id="id + '-picker'" class="picker">
       <label v-if="hasDate">Date <input v-model="date" type="date"></label>
       <label v-if="hasTime">Time ({{ offset.toUpperCase() === 'Z' ? 'UTC' : offset }})
