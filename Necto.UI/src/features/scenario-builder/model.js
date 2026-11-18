@@ -63,6 +63,9 @@ export function validateBlueprint(blueprint) {
   if (blueprint?.format !== 'necto-scenario-builder' || ![1, 2, 3, 4, 5, 6, 7].includes(blueprint.version) || typeof blueprint.id !== 'string' || !blueprint.id ||
     typeof blueprint.name !== 'string' || !blueprint.name.trim() || blueprint.name.length > 200 || !Array.isArray(blueprint.steps) || blueprint.steps.length > 100 ||
     !Number.isInteger(blueprint.concurrency) || blueprint.concurrency < 1 || blueprint.concurrency > 8) throw new Error('Invalid Scenario Builder definition (maximum 100 steps; parallelism 1–8).')
+  if (blueprint.description !== undefined &&
+      (typeof blueprint.description !== 'string' || blueprint.description.length > 500))
+    throw new Error('Scenario descriptions are limited to 500 characters.')
   if (blueprint.version < 3 && blueprint.connections !== undefined && (!Array.isArray(blueprint.connections) || blueprint.connections.length)) throw new Error('Connections require Scenario Builder version 3.')
   const ids = new Set()
   let expressionCount=0, expressionChars=0, expressionBindings=0

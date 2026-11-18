@@ -20,6 +20,7 @@ export function savedBlueprint(draft) {
     variables: draft.variables.map(variableSnapshot),
     id: draft.id,
     name: draft.name.trim(),
+    ...(draft.description?.trim() ? { description: draft.description.trim() } : {}),
     concurrency: draft.concurrency,
     connections: allConnections(draft)
       .filter((edge) => edge.from !== null || hasTiming(edge))

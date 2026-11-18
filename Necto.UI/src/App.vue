@@ -27,6 +27,7 @@ import ExternalApiSettings from './features/external-apis/ExternalApiSettings.vu
 import EndpointGraph from './features/endpoint-graph/EndpointGraph.vue'
 import EntityGraph from './features/entity-graph/EntityGraph.vue'
 import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
+import { useBuilder } from './features/scenario-builder/useBuilder.js'
 import ScenarioBuilder from './features/scenario-builder/ScenarioBuilder.vue'
 import { useScenarios } from './features/scenarios/useScenarios.js'
 import { rememberBinding } from './features/scenarios/scenario.js'
@@ -56,7 +57,9 @@ const externalPending = computed(() => showExternalApis.value && [...externalSta
 const selectedChain = ref([])
 const inspectedScenarioStep = ref(null)
 const scenarioPanel = ref(null)
-const builderPending = ref(false)
+const builderStore = useBuilder(configuration)
+const { saved: builderScenarios, pending: builderPending, error: builderError } = builderStore
+const builderView = ref(null)
 const builderVisited = ref(false)
 const scenarioStore = useScenarios(configuration)
 const { scenarios, state: scenarioState, runs: scenarioRuns, pending: scenarioPending, error: scenarioError } = scenarioStore
@@ -432,6 +435,17 @@ function navigateView(view) {
     }
     void showChain(steps)
   } else writeRoute(view ? { view } : chainRoute())
+}
+
+async function openBuilderScenario(id, review = false) {
+  if (scenarioBusy.value) return
+  builderVisited.value = true
+  await nextTick()
+  if (scenarioBusy.value || graphView.value !== 'scenarios') return
+  if (!builderView.value?.openFromLibrary(id)) return
+  navigateView('builder')
+  await nextTick()
+  if (review && graphView.value === 'builder' && !scenarioBusy.value) builderView.value?.reviewRun()
 }
 
 function enterScenario(steps, id, name, index, replace = false, folderSource) {
@@ -987,6 +1001,8 @@ function removeScenario(id) {
       <EndpointGraph :inert="settingsOpen" :initial-operation-key="current?.operation.key" v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <ScenarioBuilder
+        ref="builderView"
+        :store="builderStore"
         :mapping-links="mappingLinks"
         :folder="scenarioFolder"
         @folder-settings="configureScenarioFolder"
@@ -1003,10 +1019,10 @@ function removeScenario(id) {
         :authentication="authentication"
         :execute="(operation, session, values, signal, onRequest) => run(operation, session, values, { signal, onRequest })"
         :busy="scenarioBusy"
-        @pending="builderPending = $event"
         @back="navigateView('scenarios')"
       />
-      <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="navigateView('builder')" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios" :state="scenarioState" :runs="scenarioRuns"
+      <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="navigateView('builder')" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios"
+        :builder-scenarios="builderScenarios" :builder-error="builderError" @open-builder-scenario="openBuilderScenario" :state="scenarioState" :runs="scenarioRuns"
 
         :deleted="scenarioStore.deleted.value" @undo-remove="undoRemoveScenario" :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"
