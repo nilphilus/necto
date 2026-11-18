@@ -5,93 +5,754 @@ import { contractValues } from '../request-runner/contractValues.js'
 import ExpressionEditor from './ExpressionEditor.vue'
 import DescriptionHelp from '../workbench/DescriptionHelp.vue'
 import { computed, ref, watch, inject } from 'vue'
-import { bodyAt, bindingAt, writeBody, sourceFor, schemaView, removeBodyField, removeArrayItem, pointer, prefix, inferVariant, BODY_VALUE, variantTemplate, editBodyNumber } from './bodySchema.js'
+import {
+  bodyAt,
+  bindingAt,
+  writeBody,
+  sourceFor,
+  schemaView,
+  removeBodyField,
+  removeArrayItem,
+  pointer,
+  prefix,
+  inferVariant,
+  BODY_VALUE,
+  variantTemplate,
+  editBodyNumber,
+} from './bodySchema.js'
 import { pointerParts, readPointer } from './pointers.js'
 import { schemaTemplate } from '../request-runner/schemaTemplate.js'
 import { generators } from './generation.js'
 import { pointerHints } from './pointerHints.js'
-const props=defineProps({step:Object,operation:Object,raw:Object,path:{type:Array,default:()=>[]},name:String,required:Boolean,steps:Array,operations:Array,variables:Array,results:Array,disabled:Boolean,depth:{type:Number,default:()=>0},ancestors:{type:Array,default:()=>[]},last:{type:Boolean,default:true}})
-const emit=defineEmits(['raw'])
-const body=inject(BODY_VALUE,null)
-function current(){if(!body)return bodyAt(props.step,props.path);try{return readPointer(body.value,pointer(props.path))}catch{return undefined}}
-const variants=computed(()=>{const raw=props.operation.resolve(props.raw);return raw?.oneOf??raw?.anyOf??[]})
-const variant=computed(()=>inferVariant(props.operation,props.raw,current(),props.step.request.bodyVariants?.[pointer(props.path)]))
-const error=ref(''),open=ref(props.depth<4),visible=ref(50),itemsVisible=ref(10)
-const schema=computed(()=>schemaView(props.operation,props.raw,variant.value))
-const examples = computed(() => schema.value.writeOnly || schema.value.format === 'password' ||
-  sensitiveName(props.name ?? '') || schema.value['x-necto-sensitive'] === true ||
-  props.operation.resolve(props.raw)?.oneOf || props.operation.resolve(props.raw)?.anyOf ||
-  props.operation.resolve(props.raw)?.allOf ? [] : contractValues(schema.value))
+const props = defineProps({
+  step: Object,
+  operation: Object,
+  raw: Object,
+  path: { type: Array, default: () => [] },
+  name: String,
+  required: Boolean,
+  steps: Array,
+  operations: Array,
+  variables: Array,
+  results: Array,
+  disabled: Boolean,
+  depth: { type: Number, default: () => 0 },
+  ancestors: { type: Array, default: () => [] },
+  last: { type: Boolean, default: true },
+})
+const emit = defineEmits(['raw'])
+const body = inject(BODY_VALUE, null)
+function current() {
+  if (!body) return bodyAt(props.step, props.path)
+  try {
+    return readPointer(body.value, pointer(props.path))
+  } catch {
+    return undefined
+  }
+}
+const variants = computed(() => {
+  const raw = props.operation.resolve(props.raw)
+  return raw?.oneOf ?? raw?.anyOf ?? []
+})
+const variant = computed(() =>
+  inferVariant(
+    props.operation,
+    props.raw,
+    current(),
+    props.step.request.bodyVariants?.[pointer(props.path)]
+  )
+)
+const error = ref(''),
+  open = ref(props.depth < 4),
+  visible = ref(50),
+  itemsVisible = ref(10)
+const schema = computed(() => schemaView(props.operation, props.raw, variant.value))
+const examples = computed(() =>
+  schema.value.writeOnly ||
+  schema.value.format === 'password' ||
+  sensitiveName(props.name ?? '') ||
+  schema.value['x-necto-sensitive'] === true ||
+  props.operation.resolve(props.raw)?.oneOf ||
+  props.operation.resolve(props.raw)?.anyOf ||
+  props.operation.resolve(props.raw)?.allOf
+    ? []
+    : contractValues(schema.value)
+)
 function useExample(index, element) {
   if (index !== '') set(examples.value[Number(index)].value)
   element.value = ''
 }
-const type=computed(()=>{const t=schema.value.type;return Array.isArray(t)?t.find(t=>t!=='null'):t??(Object.keys(schema.value.properties??{}).length?'object':schema.value.items?'array':current()!==undefined?(Array.isArray(current())?'array':current()===null?'null':typeof current()):'string')})
-const nullable=computed(()=>schema.value.nullable||schema.value.type?.includes?.('null'))
-const value=computed(current),binding=computed(()=>bindingAt(props.step,props.path)),source=computed(()=>binding.value?.source??'static')
-const properties=computed(()=>Object.entries(schema.value.properties??{}))
-const recursive=computed(()=>props.depth>=16||props.ancestors.includes(props.raw?.$ref??props.raw))
-const disabled=computed(()=>props.disabled||schema.value.readOnly)
-const jsonText=ref('')
-watch(value,value=>{jsonText.value=value===undefined||!(recursive.value||type.value==='object'&&!properties.value.length)?'':JSON.stringify(value,null,2)},{immediate:true})
-function attempt(action){error.value='';try{action()}catch(cause){error.value=cause.message}}
-function set(value){attempt(()=>writeBody(props.step,props.operation,props.path,value))}
-function choose(source,element){attempt(()=>{
- const affected=props.step.inputs.filter(input=>input.location==='body'&&input.pointer!==pointer(props.path)&&(prefix(props.path,pointerParts(input.pointer))||prefix(pointerParts(input.pointer),props.path)))
- if(affected.length&&!window.confirm('Replace the configured sources inside this field?'))return
- sourceFor(props.step,props.operation,props.path,source,{...schema.value,type:type.value})
-});element.value=binding.value?.source??'static'}
-function include(enabled,element){attempt(()=>{if(!enabled&&props.step.inputs.some(input=>input.location==='body'&&prefix(props.path,pointerParts(input.pointer)))&&!window.confirm('Remove this field and its configured input sources?'))return;if(enabled)writeBody(props.step,props.operation,props.path,schemaTemplate(props.operation,schema.value));else removeBodyField(props.step,props.path)});element.checked=value.value!==undefined}
-function addItem(){attempt(()=>{const items=[...(value.value??[])];items.push(schemaTemplate(props.operation,schema.value.items??{}));writeBody(props.step,props.operation,props.path,items);itemsVisible.value=Math.max(itemsVisible.value,items.length)})}
-function removeItem(index){attempt(()=>{if(!window.confirm('Remove this item and any configured input sources inside it?'))return;removeArrayItem(props.step,props.operation,props.path,index)})}
-function hints(){const from=props.steps.find(step=>step.id===binding.value?.stepId);return pointerHints(props.operations.find(operation=>operation.key===from?.operationKey),props.results?.find(result=>result.id===from?.id)?.response?.json)}
-function changeVariant(index,element){attempt(()=>{if(!window.confirm('Replace this field with the selected schema variant?'))return;const selected=schemaView(props.operation,props.raw,Number(index));const next=variantTemplate(props.operation,props.raw,Number(index));writeBody(props.step,props.operation,props.path,next);sourceFor(props.step,props.operation,props.path,'static',selected);props.step.request.bodyVariants={...props.step.request.bodyVariants,[pointer(props.path)]:Number(index)}});element.value=variant.value}
-
+const type = computed(() => {
+  const t = schema.value.type
+  return Array.isArray(t)
+    ? t.find((t) => t !== 'null')
+    : (t ??
+        (Object.keys(schema.value.properties ?? {}).length
+          ? 'object'
+          : schema.value.items
+            ? 'array'
+            : current() !== undefined
+              ? Array.isArray(current())
+                ? 'array'
+                : current() === null
+                  ? 'null'
+                  : typeof current()
+              : 'string'))
+})
+const nullable = computed(() => schema.value.nullable || schema.value.type?.includes?.('null'))
+const value = computed(current),
+  binding = computed(() => bindingAt(props.step, props.path)),
+  source = computed(() => binding.value?.source ?? 'static')
+const properties = computed(() => Object.entries(schema.value.properties ?? {}))
+const recursive = computed(
+  () => props.depth >= 16 || props.ancestors.includes(props.raw?.$ref ?? props.raw)
+)
+const disabled = computed(() => props.disabled || schema.value.readOnly)
+const jsonText = ref('')
+watch(
+  value,
+  (value) => {
+    jsonText.value =
+      value === undefined ||
+      !(recursive.value || (type.value === 'object' && !properties.value.length))
+        ? ''
+        : JSON.stringify(value, null, 2)
+  },
+  { immediate: true }
+)
+function attempt(action) {
+  error.value = ''
+  try {
+    action()
+  } catch (cause) {
+    error.value = cause.message
+  }
+}
+function set(value) {
+  attempt(() => writeBody(props.step, props.operation, props.path, value))
+}
+function choose(source, element) {
+  attempt(() => {
+    const affected = props.step.inputs.filter(
+      (input) =>
+        input.location === 'body' &&
+        input.pointer !== pointer(props.path) &&
+        (prefix(props.path, pointerParts(input.pointer)) ||
+          prefix(pointerParts(input.pointer), props.path))
+    )
+    if (affected.length && !window.confirm('Replace the configured sources inside this field?'))
+      return
+    sourceFor(props.step, props.operation, props.path, source, {
+      ...schema.value,
+      type: type.value,
+    })
+  })
+  element.value = binding.value?.source ?? 'static'
+}
+function include(enabled, element) {
+  attempt(() => {
+    if (
+      !enabled &&
+      props.step.inputs.some(
+        (input) => input.location === 'body' && prefix(props.path, pointerParts(input.pointer))
+      ) &&
+      !window.confirm('Remove this field and its configured input sources?')
+    )
+      return
+    if (enabled)
+      writeBody(
+        props.step,
+        props.operation,
+        props.path,
+        schemaTemplate(props.operation, schema.value)
+      )
+    else removeBodyField(props.step, props.path)
+  })
+  element.checked = value.value !== undefined
+}
+function addItem() {
+  attempt(() => {
+    const items = [...(value.value ?? [])]
+    items.push(schemaTemplate(props.operation, schema.value.items ?? {}))
+    writeBody(props.step, props.operation, props.path, items)
+    itemsVisible.value = Math.max(itemsVisible.value, items.length)
+  })
+}
+function removeItem(index) {
+  attempt(() => {
+    if (!window.confirm('Remove this item and any configured input sources inside it?')) return
+    removeArrayItem(props.step, props.operation, props.path, index)
+  })
+}
+function hints() {
+  const from = props.steps.find((step) => step.id === binding.value?.stepId)
+  return pointerHints(
+    props.operations.find((operation) => operation.key === from?.operationKey),
+    props.results?.find((result) => result.id === from?.id)?.response?.json
+  )
+}
+function changeVariant(index, element) {
+  attempt(() => {
+    if (!window.confirm('Replace this field with the selected schema variant?')) return
+    const selected = schemaView(props.operation, props.raw, Number(index))
+    const next = variantTemplate(props.operation, props.raw, Number(index))
+    writeBody(props.step, props.operation, props.path, next)
+    sourceFor(props.step, props.operation, props.path, 'static', selected)
+    props.step.request.bodyVariants = {
+      ...props.step.request.bodyVariants,
+      [pointer(props.path)]: Number(index),
+    }
+  })
+  element.value = variant.value
+}
 </script>
 <template>
- <section class="schema-field" :data-body-path="pointer(path)" :class="{'root-field':!path.length,'omitted-field':path.length&&value===undefined&&source==='static'}">
-  <div class="json-line">
-  <div class="field-heading" :title="[schema.description,type,schema.format,required?'required':'',schema.readOnly?'read only':''].filter(Boolean).join(' · ')"><button v-if="['object','array'].includes(type)&&source==='static'" type="button" class="expand-field" :aria-expanded="open" :aria-label="'Expand '+name" @click="open=!open">{{open?'▾':'▸'}}</button><span v-if="path.length&&typeof path.at(-1)!=='number'" class="json-key">{{JSON.stringify(name)}}<span class="punctuation">:</span></span><span v-if="source==='static'&&['object','array'].includes(type)&&value!==null" class="punctuation">{{type==='object'?'{':'['}}{{!open?' … '+(type==='object'?'}':']'):''}}</span><span v-if="required&&path.length&&typeof path.at(-1)!=='number'" class="required-mark" aria-label="Required">*</span><DescriptionHelp v-if="schema.description" :label="'About field '+name" :description="schema.description" /><span v-if="value===undefined&&source==='static'" class="sr-only">Not included in request</span><span v-if="schema.readOnly" class="field-badge">read only</span></div>
-  <fieldset :disabled="disabled" class="field-editor"><label class="source-picker"><span class="sr-only">Value source</span><select :value="source" :aria-label="'Source for '+name" @change="choose($event.target.value,$event.target)"><option value="static">Static value</option><option value="response">Previous response</option><option value="variable">Shared variable</option><option v-if="path.length" value="preset">Run preset</option><option value="generate">Generate data</option><option value="expression">Expression</option><option value="random">Pick random</option><option value="human">Ask at run time</option></select></label>
-   <template v-if="source==='static'"><small v-if="value===null">JSON null</small>
-    <select v-if="schema.enum" :value="JSON.stringify(value)" :aria-label="'Value for '+name" @change="set(JSON.parse($event.target.value))"><option v-if="value===undefined" value="" disabled>Choose value</option><option v-for="item in schema.enum" :key="JSON.stringify(item)" :value="JSON.stringify(item)">{{typeof item==='object'?JSON.stringify(item):String(item)}}</option></select>
-    <select v-else-if="type==='boolean'" :value="value===undefined?'':JSON.stringify(value)" :aria-label="'Value for '+name" @change="set(JSON.parse($event.target.value))"><option value="" disabled>Not set</option><option value="true">true</option><option value="false">false</option><option v-if="nullable" value="null">null</option></select>
-    <input v-else-if="type==='number'||type==='integer'" :value="step.request.bodyFieldEdits?.[pointer(path)]??value??''" type="number" :step="type==='integer'?1:'any'" :aria-label="'Value for '+name" @input="attempt(()=>editBodyNumber(step,operation,path,$event.target.value,type==='integer'))">
-    <input v-else-if="type==='string'" :value="value??''" :type="schema.writeOnly||schema.format==='password'?'password':'text'" :aria-label="'Value for '+name" @input="set($event.target.value)">
-    <select v-if="examples.length" :aria-label="'Contract examples for '+name" value="" @change="useExample($event.target.value,$event.target)"><option value="">Contract examples…</option><option v-for="(example, index) in examples" :key="index" :value="index">{{example.label}} · {{JSON.stringify(example.value).slice(0,48)}}</option></select>
-    <button v-if="['object','array'].includes(type)&&value===null" type="button" class="secondary" @click="attempt(()=>set(schemaTemplate(operation,schema)))">Create {{type}}</button><button v-if="nullable&&value!==null" type="button" class="secondary" @click="set(null)">Set null</button>
-   </template>
-   <template v-else-if="source==='response'"><label>Source step<select v-model="binding.stepId" :aria-label="'Response step for '+name"><option value="" disabled>Choose request</option><option v-for="other in steps.filter(other=>other.id!==step.id)" :key="other.id" :value="other.id">{{other.label}}</option></select></label><label>Response field<input v-model="binding.responsePointer" :list="'schema-path-'+binding.stepId+'-'+pointer(path)" :aria-label="'Response field for '+name" placeholder="/id"></label><datalist :id="'schema-path-'+binding.stepId+'-'+pointer(path)"><option v-for="hint in hints()" :key="hint" :value="hint" /></datalist></template>
-   <label v-else-if="source==='variable'">Variable<select v-model="binding.variableId" :aria-label="'Variable for '+name"><option value="" disabled>Choose variable</option><option v-for="variable in variables" :key="variable.id" :value="variable.id">{{variable.name}}</option></select></label>
-   <p v-else-if="source==='preset'" class="field-note">Select a matching preset in Review & run. This field must be filled by that preset.</p>
-   <template v-else-if="source==='generate'"><label>Generator<select v-model="binding.generator" :aria-label="'Generator for '+name"><option v-for="[id,label] in generators" :key="id" :value="id">{{label}}</option></select></label><input v-if="binding.generator==='regex'" v-model="binding.pattern" :aria-label="'Pattern for '+name"></template>
-   <template v-else-if="source==='human'"><label>Question<input v-model="binding.prompt" :aria-label="'Question for '+name"></label><label>Type<select v-model="binding.valueType"><option value="text">Text</option><option value="number">Number</option><option value="boolean">Boolean</option><option value="json">JSON</option></select></label></template>
-  </fieldset>
-  <span v-if="source!=='static'||!['object','array'].includes(type)||value===null" class="punctuation comma">{{last?'':','}}</span><label v-if="path.length&&typeof path.at(-1)!=='number'&&!required&&source==='static'&&!schema.readOnly" class="include-field"><input type="checkbox" :checked="value!==undefined" :disabled="disabled" :aria-label="'Include '+name" @change="include($event.target.checked,$event.target)"><span class="sr-only">Include {{name}}</span></label>
-  </div>
-  <details v-if="source==='random'" class="expression-details" open><summary>Configure random selection</summary><RandomSourceEditor :source="binding" :step="step" :steps="steps" :disabled="disabled" /></details>
-  <details v-if="source==='expression'" class="expression-details" open><summary>Configure expression</summary><ExpressionEditor :input="binding" :step="step" :steps="steps" :variables="variables" :disabled="disabled" /></details>
-  <div v-if="source==='static'&&open&&value!==null" class="schema-children">
-   <label v-if="variants.length">Schema variant<select :value="variant" :disabled="disabled" :aria-label="'Variant for '+name" @change="changeVariant($event.target.value,$event.target)"><option v-for="(item,index) in variants" :key="index" :value="index">{{operation.resolve(item)?.title??item.$ref?.split('/').at(-1)??('Variant '+(index+1))}}</option></select></label>
-   <template v-if="recursive"><p class="field-note">Recursive or deeply nested schema. Edit this subtree as JSON.</p><textarea v-model="jsonText" :disabled="disabled" :aria-label="'JSON value for '+name" rows="3" @change="attempt(()=>set(JSON.parse(jsonText)))" /></template>
-   <template v-else-if="type==='object'&&properties.length">
-    <BodySchemaField v-for="([key,property],index) in properties.slice(0,visible)" :last="index===properties.length-1" :key="key" :raw="property" :operation="operation" :step="step" :path="[...path,key]" :name="key" :required="schema.required.includes(key)" :steps="steps" :operations="operations" :variables="variables" :results="results" :disabled="disabled" :depth="depth+1" :ancestors="[...ancestors,raw.$ref??raw]" @raw="emit('raw')" />
-    <button v-if="visible<properties.length" type="button" class="secondary" @click="visible+=50">Show next fields ({{visible}} / {{properties.length}})</button>
-    <button v-if="schema.additionalProperties" type="button" class="secondary" @click="emit('raw')">Edit additional properties in Raw JSON</button>
-   </template>
-   <template v-else-if="type==='array'"><div v-for="(item,index) in (Array.isArray(value)?value:[]).slice(0,itemsVisible)" :key="index" class="array-item"><BodySchemaField :raw="schema.items??{}" :operation="operation" :step="step" :path="[...path,index]" :name="'Item '+(index+1)" :last="index===value.length-1" :required="true" :steps="steps" :operations="operations" :variables="variables" :results="results" :disabled="disabled" :depth="depth+1" :ancestors="[...ancestors,raw.$ref??raw]" @raw="emit('raw')" /><button type="button" class="secondary" :disabled="disabled" :aria-label="'Remove '+name+' item '+(index+1)" @click="removeItem(index)">Remove item</button></div><button v-if="Array.isArray(value)&&value.length>itemsVisible" type="button" class="secondary" @click="itemsVisible+=10">Show more items ({{itemsVisible}} / {{value.length}})</button><button type="button" class="secondary" :disabled="disabled" :aria-label="'Add item to '+name" @click="addItem">+ Add item</button></template>
-   <template v-else-if="type==='object'"><textarea v-model="jsonText" :disabled="disabled" :aria-label="'JSON value for '+name" rows="3" @change="attempt(()=>set(JSON.parse(jsonText)))" /></template>
-  </div>
-  <div v-if="source==='static'&&open&&['object','array'].includes(type)&&value!==null" class="punctuation closing">{{type==='object'?'}':']'}}{{last?'':','}}</div>
-  <p v-if="Object.hasOwn(step.request.bodyFieldEdits??{},pointer(path))" class="error" role="alert">Enter {{type==='integer'?'an integer':'a number'}} before saving or running. Clearing the input does not mean JSON null.</p>
-  <p v-if="error" class="error" role="alert">{{error}}</p>
- </section>
+  <section
+    class="schema-field"
+    :data-body-path="pointer(path)"
+    :class="{
+      'root-field': !path.length,
+      'omitted-field': path.length && value === undefined && source === 'static',
+    }"
+  >
+    <div class="json-line">
+      <div
+        class="field-heading"
+        :title="
+          [
+            schema.description,
+            type,
+            schema.format,
+            required ? 'required' : '',
+            schema.readOnly ? 'read only' : '',
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        "
+      >
+        <button
+          v-if="['object', 'array'].includes(type) && source === 'static'"
+          type="button"
+          class="expand-field"
+          :aria-expanded="open"
+          :aria-label="'Expand ' + name"
+          @click="open = !open"
+        >
+          {{ open ? '▾' : '▸' }}</button
+        ><span v-if="path.length && typeof path.at(-1) !== 'number'" class="json-key"
+          >{{ JSON.stringify(name) }}<span class="punctuation">:</span></span
+        ><span
+          v-if="source === 'static' && ['object', 'array'].includes(type) && value !== null"
+          class="punctuation"
+          >{{ type === 'object' ? '{' : '['
+          }}{{ !open ? ' … ' + (type === 'object' ? '}' : ']') : '' }}</span
+        ><span
+          v-if="required && path.length && typeof path.at(-1) !== 'number'"
+          class="required-mark"
+          aria-label="Required"
+          >*</span
+        ><DescriptionHelp
+          v-if="schema.description"
+          :label="'About field ' + name"
+          :description="schema.description"
+        /><span v-if="value === undefined && source === 'static'" class="sr-only"
+          >Not included in request</span
+        ><span v-if="schema.readOnly" class="field-badge">read only</span>
+      </div>
+      <fieldset :disabled="disabled" class="field-editor">
+        <label class="source-picker"
+          ><span class="sr-only">Value source</span
+          ><select
+            :value="source"
+            :aria-label="'Source for ' + name"
+            @change="choose($event.target.value, $event.target)"
+          >
+            <option value="static">Static value</option>
+            <option value="response">Previous response</option>
+            <option value="variable">Shared variable</option>
+            <option v-if="path.length" value="preset">Run preset</option>
+            <option value="generate">Generate data</option>
+            <option value="expression">Expression</option>
+            <option value="random">Pick random</option>
+            <option value="human">Ask at run time</option>
+          </select></label
+        >
+        <template v-if="source === 'static'"
+          ><small v-if="value === null">JSON null</small>
+          <select
+            v-if="schema.enum"
+            :value="JSON.stringify(value)"
+            :aria-label="'Value for ' + name"
+            @change="set(JSON.parse($event.target.value))"
+          >
+            <option v-if="value === undefined" value="" disabled>Choose value</option>
+            <option
+              v-for="item in schema.enum"
+              :key="JSON.stringify(item)"
+              :value="JSON.stringify(item)"
+            >
+              {{ typeof item === 'object' ? JSON.stringify(item) : String(item) }}
+            </option>
+          </select>
+          <select
+            v-else-if="type === 'boolean'"
+            :value="value === undefined ? '' : JSON.stringify(value)"
+            :aria-label="'Value for ' + name"
+            @change="set(JSON.parse($event.target.value))"
+          >
+            <option value="" disabled>Not set</option>
+            <option value="true">true</option>
+            <option value="false">false</option>
+            <option v-if="nullable" value="null">null</option>
+          </select>
+          <input
+            v-else-if="type === 'number' || type === 'integer'"
+            :value="step.request.bodyFieldEdits?.[pointer(path)] ?? value ?? ''"
+            type="number"
+            :step="type === 'integer' ? 1 : 'any'"
+            :aria-label="'Value for ' + name"
+            @input="
+              attempt(() =>
+                editBodyNumber(step, operation, path, $event.target.value, type === 'integer')
+              )
+            "
+          />
+          <input
+            v-else-if="type === 'string'"
+            :value="value ?? ''"
+            :type="schema.writeOnly || schema.format === 'password' ? 'password' : 'text'"
+            :aria-label="'Value for ' + name"
+            @input="set($event.target.value)"
+          />
+          <select
+            v-if="examples.length"
+            :aria-label="'Contract examples for ' + name"
+            value=""
+            @change="useExample($event.target.value, $event.target)"
+          >
+            <option value="">Contract examples…</option>
+            <option v-for="(example, index) in examples" :key="index" :value="index">
+              {{ example.label }} · {{ JSON.stringify(example.value).slice(0, 48) }}
+            </option>
+          </select>
+          <button
+            v-if="['object', 'array'].includes(type) && value === null"
+            type="button"
+            class="secondary"
+            @click="attempt(() => set(schemaTemplate(operation, schema)))"
+          >
+            Create {{ type }}</button
+          ><button
+            v-if="nullable && value !== null"
+            type="button"
+            class="secondary"
+            @click="set(null)"
+          >
+            Set null
+          </button>
+        </template>
+        <template v-else-if="source === 'response'"
+          ><label
+            >Source step<select v-model="binding.stepId" :aria-label="'Response step for ' + name">
+              <option value="" disabled>Choose request</option>
+              <option
+                v-for="other in steps.filter((other) => other.id !== step.id)"
+                :key="other.id"
+                :value="other.id"
+              >
+                {{ other.label }}
+              </option>
+            </select></label
+          ><label
+            >Response field<input
+              v-model="binding.responsePointer"
+              :list="'schema-path-' + binding.stepId + '-' + pointer(path)"
+              :aria-label="'Response field for ' + name"
+              placeholder="/id" /></label
+          ><datalist :id="'schema-path-' + binding.stepId + '-' + pointer(path)">
+            <option v-for="hint in hints()" :key="hint" :value="hint" /></datalist
+        ></template>
+        <label v-else-if="source === 'variable'"
+          >Variable<select v-model="binding.variableId" :aria-label="'Variable for ' + name">
+            <option value="" disabled>Choose variable</option>
+            <option v-for="variable in variables" :key="variable.id" :value="variable.id">
+              {{ variable.name }}
+            </option>
+          </select></label
+        >
+        <p v-else-if="source === 'preset'" class="field-note">
+          Select a matching preset in Review & run. This field must be filled by that preset.
+        </p>
+        <template v-else-if="source === 'generate'"
+          ><label
+            >Generator<select v-model="binding.generator" :aria-label="'Generator for ' + name">
+              <option v-for="[id, label] in generators" :key="id" :value="id">{{ label }}</option>
+            </select></label
+          ><input
+            v-if="binding.generator === 'regex'"
+            v-model="binding.pattern"
+            :aria-label="'Pattern for ' + name"
+        /></template>
+        <template v-else-if="source === 'human'"
+          ><label
+            >Question<input v-model="binding.prompt" :aria-label="'Question for ' + name" /></label
+          ><label
+            >Type<select v-model="binding.valueType">
+              <option value="text">Text</option>
+              <option value="number">Number</option>
+              <option value="boolean">Boolean</option>
+              <option value="json">JSON</option>
+            </select></label
+          ></template
+        >
+      </fieldset>
+      <span
+        v-if="source !== 'static' || !['object', 'array'].includes(type) || value === null"
+        class="punctuation comma"
+        >{{ last ? '' : ',' }}</span
+      ><label
+        v-if="
+          path.length &&
+          typeof path.at(-1) !== 'number' &&
+          !required &&
+          source === 'static' &&
+          !schema.readOnly
+        "
+        class="include-field"
+        ><input
+          type="checkbox"
+          :checked="value !== undefined"
+          :disabled="disabled"
+          :aria-label="'Include ' + name"
+          @change="include($event.target.checked, $event.target)"
+        /><span class="sr-only">Include {{ name }}</span></label
+      >
+    </div>
+    <details v-if="source === 'random'" class="expression-details" open>
+      <summary>Configure random selection</summary>
+      <RandomSourceEditor :source="binding" :step="step" :steps="steps" :disabled="disabled" />
+    </details>
+    <details v-if="source === 'expression'" class="expression-details" open>
+      <summary>Configure expression</summary>
+      <ExpressionEditor
+        :input="binding"
+        :step="step"
+        :steps="steps"
+        :variables="variables"
+        :disabled="disabled"
+      />
+    </details>
+    <div v-if="source === 'static' && open && value !== null" class="schema-children">
+      <label v-if="variants.length"
+        >Schema variant<select
+          :value="variant"
+          :disabled="disabled"
+          :aria-label="'Variant for ' + name"
+          @change="changeVariant($event.target.value, $event.target)"
+        >
+          <option v-for="(item, index) in variants" :key="index" :value="index">
+            {{
+              operation.resolve(item)?.title ??
+              item.$ref?.split('/').at(-1) ??
+              'Variant ' + (index + 1)
+            }}
+          </option>
+        </select></label
+      >
+      <template v-if="recursive"
+        ><p class="field-note">Recursive or deeply nested schema. Edit this subtree as JSON.</p>
+        <textarea
+          v-model="jsonText"
+          :disabled="disabled"
+          :aria-label="'JSON value for ' + name"
+          rows="3"
+          @change="attempt(() => set(JSON.parse(jsonText)))"
+        />
+      </template>
+      <template v-else-if="type === 'object' && properties.length">
+        <BodySchemaField
+          v-for="([key, property], index) in properties.slice(0, visible)"
+          :last="index === properties.length - 1"
+          :key="key"
+          :raw="property"
+          :operation="operation"
+          :step="step"
+          :path="[...path, key]"
+          :name="key"
+          :required="schema.required.includes(key)"
+          :steps="steps"
+          :operations="operations"
+          :variables="variables"
+          :results="results"
+          :disabled="disabled"
+          :depth="depth + 1"
+          :ancestors="[...ancestors, raw.$ref ?? raw]"
+          @raw="emit('raw')"
+        />
+        <button
+          v-if="visible < properties.length"
+          type="button"
+          class="secondary"
+          @click="visible += 50"
+        >
+          Show next fields ({{ visible }} / {{ properties.length }})
+        </button>
+        <button
+          v-if="schema.additionalProperties"
+          type="button"
+          class="secondary"
+          @click="emit('raw')"
+        >
+          Edit additional properties in Raw JSON
+        </button>
+      </template>
+      <template v-else-if="type === 'array'"
+        ><div
+          v-for="(item, index) in (Array.isArray(value) ? value : []).slice(0, itemsVisible)"
+          :key="index"
+          class="array-item"
+        >
+          <BodySchemaField
+            :raw="schema.items ?? {}"
+            :operation="operation"
+            :step="step"
+            :path="[...path, index]"
+            :name="'Item ' + (index + 1)"
+            :last="index === value.length - 1"
+            :required="true"
+            :steps="steps"
+            :operations="operations"
+            :variables="variables"
+            :results="results"
+            :disabled="disabled"
+            :depth="depth + 1"
+            :ancestors="[...ancestors, raw.$ref ?? raw]"
+            @raw="emit('raw')"
+          /><button
+            type="button"
+            class="secondary"
+            :disabled="disabled"
+            :aria-label="'Remove ' + name + ' item ' + (index + 1)"
+            @click="removeItem(index)"
+          >
+            Remove item
+          </button>
+        </div>
+        <button
+          v-if="Array.isArray(value) && value.length > itemsVisible"
+          type="button"
+          class="secondary"
+          @click="itemsVisible += 10"
+        >
+          Show more items ({{ itemsVisible }} / {{ value.length }})</button
+        ><button
+          type="button"
+          class="secondary"
+          :disabled="disabled"
+          :aria-label="'Add item to ' + name"
+          @click="addItem"
+        >
+          + Add item
+        </button></template
+      >
+      <template v-else-if="type === 'object'">
+        <textarea
+          v-model="jsonText"
+          :disabled="disabled"
+          :aria-label="'JSON value for ' + name"
+          rows="3"
+          @change="attempt(() => set(JSON.parse(jsonText)))"
+        />
+      </template>
+    </div>
+    <div
+      v-if="source === 'static' && open && ['object', 'array'].includes(type) && value !== null"
+      class="punctuation closing"
+    >
+      {{ type === 'object' ? '}' : ']' }}{{ last ? '' : ',' }}
+    </div>
+    <p
+      v-if="Object.hasOwn(step.request.bodyFieldEdits ?? {}, pointer(path))"
+      class="error"
+      role="alert"
+    >
+      Enter {{ type === 'integer' ? 'an integer' : 'a number' }} before saving or running. Clearing
+      the input does not mean JSON null.
+    </p>
+    <p v-if="error" class="error" role="alert">{{ error }}</p>
+  </section>
 </template>
 <style scoped>
-.expression-details { margin:.3rem 0 .5rem 1rem; font:.72rem system-ui; }
+.expression-details {
+  margin: 0.3rem 0 0.5rem 1rem;
+  font: 0.72rem system-ui;
+}
 
-.omitted-field > .json-line > .field-heading,.omitted-field > .json-line > .field-editor,.omitted-field > .schema-children { opacity:.45; }.omitted-field:focus-within > .json-line > .field-editor { opacity:.85; }.required-mark { color:var(--accent); font-size:.65rem; }
+.omitted-field > .json-line > .field-heading,
+.omitted-field > .json-line > .field-editor,
+.omitted-field > .schema-children {
+  opacity: 0.45;
+}
+.omitted-field:focus-within > .json-line > .field-editor {
+  opacity: 0.85;
+}
+.required-mark {
+  color: var(--accent);
+  font-size: 0.65rem;
+}
 
-.schema-field { min-width:0; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.76rem; }.json-line { display:flex; align-items:center; gap:.35rem; flex-wrap:wrap; min-height:2.3rem; padding:.15rem 0; }.field-heading { display:flex; align-items:center; gap:.3rem; flex:none; }.json-key { color:var(--accent); white-space:pre-wrap; overflow-wrap:anywhere; }.punctuation { color:var(--muted); font-weight:600; }.expand-field { padding:0 .15rem; border:0; background:transparent; color:var(--muted); }.field-badge { font: .6rem system-ui; color:var(--muted); }.include-field { display:flex; align-items:center; margin-left:auto; }.include-field input { width:auto; }.field-editor { border:0; padding:0; margin:0; display:flex; align-items:center; gap:.35rem; flex-wrap:wrap; flex:1; min-width:0; }.field-editor label { display:flex; align-items:center; gap:.3rem; min-width:0; font: .65rem system-ui; }.field-editor .source-picker { flex:none; }.source-picker select { max-width:9rem; background:var(--accent-soft); font-size:.65rem; }.field-editor > input,.field-editor > select { flex:1; min-width:5rem; }.field-editor label:not(.source-picker) { flex:1; flex-wrap:wrap; }.field-editor label:not(.source-picker) input,.field-editor label:not(.source-picker) select { flex:1; min-width:5rem; }input,select,textarea { min-width:0; max-width:100%; padding:.25rem .35rem; font:inherit; }input[type=text],input[type=password] { color:var(--accent); }.schema-children { margin-left:1.25rem; padding-left:.5rem; border-left:1px solid var(--line); }.schema-children > label { font:.7rem system-ui; }.field-note { color:var(--muted); font:.68rem system-ui; margin:.2rem 0; }.array-item > button,.schema-children > button { font:.65rem system-ui; margin:.15rem 0; padding:.2rem .4rem; }.closing { min-height:1.5rem; display:flex; align-items:center; white-space:pre; }.error { font:.73rem system-ui; margin:.3rem 0; }.sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-@container (max-width:450px) { .schema-children { margin-left:.6rem; padding-left:.3rem; }.field-editor { flex-basis:100%; margin-left:.7rem; }.source-picker select { max-width:8rem; }.include-field { margin-left:0; }.json-line { gap:.2rem; } }
+.schema-field {
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.76rem;
+}
+.json-line {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  min-height: 2.3rem;
+  padding: 0.15rem 0;
+}
+.field-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: none;
+}
+.json-key {
+  color: var(--accent);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.punctuation {
+  color: var(--muted);
+  font-weight: 600;
+}
+.expand-field {
+  padding: 0 0.15rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.field-badge {
+  font: 0.6rem system-ui;
+  color: var(--muted);
+}
+.include-field {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+.include-field input {
+  width: auto;
+}
+.field-editor {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+.field-editor label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  font: 0.65rem system-ui;
+}
+.field-editor .source-picker {
+  flex: none;
+}
+.source-picker select {
+  max-width: 9rem;
+  background: var(--accent-soft);
+  font-size: 0.65rem;
+}
+.field-editor > input,
+.field-editor > select {
+  flex: 1;
+  min-width: 5rem;
+}
+.field-editor label:not(.source-picker) {
+  flex: 1;
+  flex-wrap: wrap;
+}
+.field-editor label:not(.source-picker) input,
+.field-editor label:not(.source-picker) select {
+  flex: 1;
+  min-width: 5rem;
+}
+input,
+select,
+textarea {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.25rem 0.35rem;
+  font: inherit;
+}
+input[type='text'],
+input[type='password'] {
+  color: var(--accent);
+}
+.schema-children {
+  margin-left: 1.25rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--line);
+}
+.schema-children > label {
+  font: 0.7rem system-ui;
+}
+.field-note {
+  color: var(--muted);
+  font: 0.68rem system-ui;
+  margin: 0.2rem 0;
+}
+.array-item > button,
+.schema-children > button {
+  font: 0.65rem system-ui;
+  margin: 0.15rem 0;
+  padding: 0.2rem 0.4rem;
+}
+.closing {
+  min-height: 1.5rem;
+  display: flex;
+  align-items: center;
+  white-space: pre;
+}
+.error {
+  font: 0.73rem system-ui;
+  margin: 0.3rem 0;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@container (max-width:450px) {
+  .schema-children {
+    margin-left: 0.6rem;
+    padding-left: 0.3rem;
+  }
+  .field-editor {
+    flex-basis: 100%;
+    margin-left: 0.7rem;
+  }
+  .source-picker select {
+    max-width: 8rem;
+  }
+  .include-field {
+    margin-left: 0;
+  }
+  .json-line {
+    gap: 0.2rem;
+  }
+}
 </style>
