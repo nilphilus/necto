@@ -2,10 +2,11 @@
 import { CARD_HEIGHT, CARD_WIDTH, createEdgeRouter, placeConnectionControls } from './edgeRouting.js'
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
 import { inputProducers } from './variables.js'
+import { canRetryStep } from './runner.js'
 import { layers } from './model.js'
 import { allConnections, connectionKey, hasTiming } from './connections.js'
 const props = defineProps({ blueprint: Object, selected: String, steps: Array, disabled: Boolean, activeConnection: String })
-const emit = defineEmits(['select', 'inspect', 'add-first', 'connect', 'configure', 'create-next'])
+const emit = defineEmits(['select', 'inspect', 'add-first', 'connect', 'configure', 'create-next', 'retry'])
 const zoom = ref(1),
   canvas = ref(null),
   drag = ref(null),
@@ -375,6 +376,14 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
               :aria-label="'View response for ' + node.step.label" @click="emit('inspect', node.step.id)">
               {{ states.get(node.step.id).httpStatus ?? states.get(node.step.id).status }}
             </button>
+            <button v-if="!drag && canRetryStep(states.get(node.step.id))" type="button" class="node-retry"
+              :disabled="disabled" :aria-label="'Retry step ' + node.step.label" title="Retry this step"
+              @click="emit('retry', node.step.id)">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M13.5 5.5A5.5 5.5 0 1 0 13 11M13.5 2.5v3.5H10" />
+              </svg>
+            </button>
             <button
               type="button"
               class="port output"
@@ -598,6 +607,18 @@ marker path {
   align-items: center;
   justify-content: space-between;
   gap: 0.3rem;
+}
+.node-retry {
+  position: absolute;
+  z-index: 2;
+  inset-block-start: .45rem;
+  inset-inline-end: 3.4rem;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  color: var(--accent);
 }
 .node-response {
   position: absolute;

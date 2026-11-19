@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { savedBlueprint } from './definition.js'
 import { newBlueprint, newStep } from './model.js'
 import { prepareBlueprint, executeBlueprint } from './runner.js'
 import { readOperations } from '../api-catalog/catalog.js'
@@ -100,4 +101,32 @@ test('protected body expressions are evaluated and their results survive preset 
     pointer: '', expression: 'return { limits: { min: -1 } };', bindings: [],
   })
   assert.deepEqual(await actualBody(true), { limits: { min: -1 } })
+})
+
+test('required JSON input can come from an active preset or a typed one-time value', () => {
+ const op = operation({ requestBody: { content: { 'application/json': {
+  schema: { type: 'object', required: ['count'], properties: { count: { type: 'integer' } } },
+ } } } })
+ const { data, context } = setup(op, [])
+ assert.throws(() => prepareBlueprint(data, context), error =>
+  error.missingInput && error.target.location === 'body' && error.target.name === '/count')
+ context.valuesFor = presets({ count: '4' })
+ const [withPreset] = prepareBlueprint(data, context)
+ assert.equal(JSON.parse(withPreset.session.body).count, 4)
+ data.steps[0].ignorePresets = true
+ assert.equal(savedBlueprint(data).steps[0].ignorePresets, true)
+ assert.throws(() => prepareBlueprint(data, context), error => error.missingInput)
+ context.requestOverrides = new Map([['target', [{ location: 'body', pointer: '/count', value: 7 }]]])
+ const [oneTime] = prepareBlueprint(data, context)
+ assert.equal(JSON.parse(oneTime.session.body).count, 7)
+ assert.equal(data.steps[0].request.body, '{}')
+})
+
+test('missing JSON properties can still be sent for an explicit validation-error scenario', () => {
+ const op = operation({ requestBody: { content: { 'application/json': {
+  schema: { type: 'object', required: ['count'], properties: { count: { type: 'integer' } } },
+ } } } })
+ const { data, context } = setup(op, [])
+ data.steps[0].request.assertions = [{ kind: 'status', expected: '400' }]
+ assert.doesNotThrow(() => prepareBlueprint(data, context))
 })

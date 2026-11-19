@@ -24,6 +24,8 @@ Static transport fields are string values under `path:name`, `query:name`, `head
 
 ## Inputs
 
+Active presets apply to matching fields at run time. Set the step's optional `ignorePresets: true` only when the user wants that step to use its own inputs regardless of preset selection.
+
 Each input targets `location: "path"|"query"|"header"` plus `name`, or `location: "body"` plus `pointer`. JSON Pointer uses `/field`, `/items/0/id`; escape `~` as `~0` and `/` as `~1`. Empty pointer means the whole body/response. Array target elements must already exist. Input targets must not overlap. Copy JSON property names exactly from the selected OpenAPI media type and schema. If the schema declares `Type`, write `"Type"` in the saved body and `/Type` in target pointers, including through nested array items. Use the source response schema for source pointers. JSON keys such as `abc` and `ABC` are distinct.
 
 Add one source:
@@ -36,7 +38,7 @@ Add one source:
 | `variable` | `variableId` |
 | `random` | `stepId`, `responsePointer` (array), `itemPointer` (selected value); [details](random.md) |
 | `expression` | `expression` (code) and `bindings`; see [expression reference](expressions.md) |
-| `preset` | none; matches the named transport/body field from the run preset |
+| `preset` | legacy source; matches a named field from the globally active presets. For new steps, leave the field available for active presets and supply a static or dynamic fallback when appropriate. |
 
 Preset cannot target the whole body. A response input creates a dependency automatically; explicit connections can additionally make ordering and timing clear. Response-sourced variables also create dependencies. Avoid cycles.
 

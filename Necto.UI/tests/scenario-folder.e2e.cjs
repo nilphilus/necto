@@ -1,5 +1,5 @@
 const fs=require('node:fs/promises'),path=require('node:path')
-require('./qa-fixture.cjs').run(async({p,assert,builder,add,save,calls})=>{
+require('./qa-fixture.cjs').run(async({p,assert,builder,add,save,calls,closeEditor})=>{
  await p.addInitScript(()=>{window.showDirectoryPicker=async()=>{const root=await navigator.storage.getDirectory();return root.getDirectoryHandle('team-repo',{create:true})}})
  await p.reload()
  const settings=async()=>{await p.getByRole('button',{name:'Settings',exact:true}).click();await p.getByRole('button',{name:'Workspace',exact:true}).click()}
@@ -9,11 +9,24 @@ require('./qa-fixture.cjs').run(async({p,assert,builder,add,save,calls})=>{
  const changeFile=(name,scenarioName)=>p.evaluate(async({name,scenarioName})=>{const repo=await(await navigator.storage.getDirectory()).getDirectoryHandle('team-repo'),dir=await repo.getDirectoryHandle('necto-scenarios'),handle=await dir.getFileHandle(name),data=JSON.parse(await(await handle.getFile()).text());data.scenario.name=scenarioName;const writer=await handle.createWritable();await writer.write(JSON.stringify(data,null,2)+'\n');await writer.close()},{name,scenarioName})
  const waitIdle=()=>p.locator('.folder-feedback:visible').getByText('Working with scenario files…',{exact:true}).first().waitFor({state:'hidden'})
  await settings();await folderRegion().getByRole('button',{name:'Choose folder',exact:true}).click();await folderRegion().getByText('Folder preference saved for this API in this browser.',{exact:true}).waitFor();await waitIdle();await close()
- await builder();await add('Create invoice');await p.getByRole('textbox',{name:'Scenario name',exact:true}).fill('Team invoice');await p.locator('.builder-more > summary').click();await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('status').filter({hasText:'Saved “Team invoice” to team-repo/necto-scenarios/'}).waitFor();assert.equal(calls.length,0)
+ await builder();await add('Create invoice');await closeEditor();await p.getByRole('textbox',{name:'Scenario name',exact:true}).fill('Team invoice');await p.locator('.builder-more > summary').click();await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('status').filter({hasText:'Saved “Team invoice” to team-repo/necto-scenarios/'}).waitFor();assert.equal(calls.length,0)
  let files=await readFiles();assert.equal(files.length,1);assert.ok(!files[0].text.includes('private-pass'));assert.ok(!files[0].text.includes('fallback'));assert.ok(!files[0].text.includes('_sharedSource'));assert.equal(JSON.parse(files[0].text).kind,'builder');const filename=files[0].name
  await changeFile(filename,'Teammate edit');await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('alert').filter({hasText:'changed on disk'}).waitFor()
- const library=p.locator('.builder > .folder-library');await library.locator('summary').click();await library.getByRole('button',{name:'Reload folder',exact:true}).click();await waitIdle();await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('alert').filter({hasText:'changed on disk'}).waitFor();assert.equal(JSON.parse((await readFiles())[0].text).scenario.name,'Teammate edit')
- await library.getByRole('button',{name:'Import Teammate edit from folder',exact:true}).click();await waitIdle();assert.equal(await p.getByRole('textbox',{name:'Scenario name',exact:true}).inputValue(),'Team invoice');await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('alert').filter({hasText:'changed on disk'}).waitFor()
+ assert.equal(await p.locator('.builder .folder-library').count(),0)
+ const scenarioList=()=>p.getByRole('button',{name:'Scenarios',exact:true}).click()
+ const reopenBuilder=async()=>{await p.getByRole('button',{name:'Scenario Builder →',exact:true}).click();if(await p.locator('.builder-more').getAttribute('open')===null)await p.locator('.builder-more > summary').click()}
+ await scenarioList()
+ const library=p.locator('.folder-library:visible')
+ await library.locator('summary').click()
+ await library.getByRole('button',{name:'Reload folder',exact:true}).click();await waitIdle()
+ await reopenBuilder()
+ await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('alert').filter({hasText:'changed on disk'}).waitFor();assert.equal(JSON.parse((await readFiles())[0].text).scenario.name,'Teammate edit')
+ await scenarioList()
+ await library.locator('summary').click()
+ await library.getByRole('button',{name:'Import Teammate edit from folder',exact:true}).click();await waitIdle()
+ await reopenBuilder()
+ assert.equal(await p.getByRole('textbox',{name:'Scenario name',exact:true}).inputValue(),'Team invoice')
+ await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('alert').filter({hasText:'changed on disk'}).waitFor()
  await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:'Teammate edit'});await p.getByRole('textbox',{name:'Scenario name',exact:true}).fill('Edited after import');await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('status').filter({hasText:'Saved “Edited after import”'}).waitFor();await save();assert.equal(await p.locator('.builder-actions .save-state').innerText(),'Saved');assert.equal(JSON.parse((await readFiles())[0].text).scenario.name,'Edited after import')
  await p.reload();await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:'Edited after import'});await p.locator('.builder-more > summary').click();await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('status').filter({hasText:'Saved “Edited after import”'}).waitFor();assert.equal(calls.length,0)
  await p.evaluate(()=>localStorage.setItem('necto:scenarios:'+location.origin+'/openapi.json',JSON.stringify({version:1,scenarios:[{version:1,id:'quick-folder',name:'Quick customer',steps:[{operationKey:'GET /customer',apiId:'local',method:'GET',path:'/customer',name:'Find customer',fields:{},body:'',bindings:[]}]}]})))

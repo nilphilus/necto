@@ -82,6 +82,7 @@ export function validateBlueprint(blueprint) {
         !Array.isArray(step.dependsOn) || step.dependsOn.length > 100 || !Array.isArray(step.inputs) || step.inputs.length > 100 || !step.request ||
         typeof step.request.body !== 'string' || !step.request.fields || Array.isArray(step.request.fields) || typeof step.request.fields !== 'object' ||
         Object.values(step.request.fields).some(value => typeof value !== 'string')) throw new Error('Invalid scenario step or request.')
+      if (step.ignorePresets !== undefined && typeof step.ignorePresets !== 'boolean') throw new Error('Invalid preset setting.')
       if (step.position !== undefined && (!step.position || !Number.isFinite(step.position.x) || !Number.isFinite(step.position.y) || step.position.x < 20 || step.position.y < 20 || step.position.x > 20000 || step.position.y > 20000)) throw new Error('Invalid request position.')
       ids.add(step.id)
       if (blueprint.version === 1 && (step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('Delay and response waiting require Scenario Builder version 2.')
