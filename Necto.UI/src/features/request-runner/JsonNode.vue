@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { hasExpandableArray } from './expansion.js'
 import { matchesPath } from '../related-endpoints/mappings.js'
 import { childEntries, pageRange, PREVIEW_PAGE_SIZE, STRING_PAGE_SIZE } from './preview.js'
 import { isPrefix } from '../payload-search/search.js'
@@ -30,6 +31,13 @@ function changePage(value){page.value=value;emit('page',{path:props.path,page:va
 const expansionKey=computed(()=>JSON.stringify(props.path))
 const activeExpansion=computed(()=>props.expansion?.commands.findLast(command=>isPrefix(command.path,props.path)))
 const childrenExpanded=computed(()=>Boolean(activeExpansion.value?.expanded&&activeExpansion.value.paths.has(expansionKey.value)))
+const canToggleChildren = computed(() => props.expansion && count.value > 0 &&
+  (array.value ||
+   (childrenExpanded.value && activeExpansion.value.path.length === props.path.length) ||
+   hasExpandableArray(props.value, props.path, props.expansion.pages)))
+const childrenToggleTitle = computed(() => (childrenExpanded.value ? 'Collapse' : 'Expand') +
+  (array.value ? ' children in this list.' : ' children under this object, including arrays.') +
+  ' Visible pages only; preview limits remain active.')
 const forcedExpansion=computed(()=>{
  const command=activeExpansion.value
  return command?{expanded:props.root||command.path.length===props.path.length||childrenExpanded.value,revision:command.revision}:null
@@ -85,7 +93,7 @@ watch([() => props.navigation, () => props.value], () => {
       :aria-label="'Select object at ' + JSON.stringify(path)" @click="$emit('select', path)">{{ active ? 'Selected' : 'Select' }}</button>
     <button v-if="count" type="button" class="object-selector" :aria-expanded="expanded"
       :aria-label="(expanded ? 'Collapse' : 'Expand') + ' ' + JSON.stringify(path)" @click="expanded = !expanded">{{ expanded ? '−' : '+' }}</button>
-    <button v-if="expansion && array && count" type="button" class="object-selector children-toggle" :aria-pressed="childrenExpanded" :aria-label="(childrenExpanded?'Collapse':'Expand')+' children at '+expansionKey" :title="(childrenExpanded?'Collapse':'Expand')+' children in this list. Visible pages only; preview limits remain active.'" @click="toggleChildren"><svg class="children-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 2v12 M3 4h3 M3 8h3 M3 12h3" /><path :d="childrenExpanded ? 'M11 13V3 M8.5 5.5 11 3l2.5 2.5' : 'M11 3v10 M8.5 10.5 11 13l2.5-2.5'" /></svg></button>
+    <button v-if="canToggleChildren" type="button" class="object-selector children-toggle" :aria-pressed="childrenExpanded" :aria-label="(childrenExpanded?'Collapse':'Expand')+' children at '+expansionKey" :title="childrenToggleTitle" @click="toggleChildren"><svg class="children-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 2v12 M3 4h3 M3 8h3 M3 12h3" /><path :d="childrenExpanded ? 'M11 13V3 M8.5 5.5 11 3l2.5 2.5' : 'M11 3v10 M8.5 10.5 11 13l2.5-2.5'" /></svg></button>
     <span>{{ array ? '[' : '{' }}</span>
     <template v-if="expanded">
       <span v-if="expansionLimited" class="expansion-note" role="status">Some branches remain collapsed to keep the preview responsive. Expand them individually or use Find.</span>
