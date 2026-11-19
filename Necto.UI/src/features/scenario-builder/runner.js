@@ -1,3 +1,4 @@
+import { normalizeBodyFieldNames } from './bodyFieldNames.js'
 import { stepIssue } from './stepIssue.js'
 import { pickRandom } from './random.js'
 import { evaluateExpression, expressionContext } from './expression.js'
@@ -24,8 +25,11 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
       if (!operation || (operation.apiId ?? 'local') !== definition.apiId || operation.method !== definition.method || operation.path !== definition.path)
         throw new Error(`${definition.label}: endpoint unavailable. Check API visibility and connections.`)
       const request = { ...definition.request, fields: { ...definition.request.fields }, formFields: definition.request.formFields?.map(row => ({ ...row, files: [...(row.files ?? [])] })) }, session = createSession(operation)
-      Object.assign(session, request)
-      const expressions = definition.inputs.filter(input => input.location === 'body' && input.source === 'expression')
+      const normalized = normalizeBodyFieldNames(operation, request, definition.inputs)
+      if (normalized.conflict) throw new Error(`${definition.label}: ${normalized.conflict}`)
+      const inputs = normalized.inputs
+      Object.assign(session, request, { body: normalized.body })
+      const expressions = inputs.filter(input => input.location === 'body' && input.source === 'expression')
       const reserved = protectBodyExpressions ? expressions.map(input => pointerParts(input.pointer)) : []
       if (reserved.length) session[protectedBodyPaths] = reserved
       const context = valuesFor(operation)
@@ -35,7 +39,7 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
       // Presets are run overrides, including bindings, generated and human inputs.
       const values = new Map(context)
       const probe = { ...session, fields: { ...session.fields } }
-      for (const input of definition.inputs) if (input.location === 'body' && input.pointer) {
+      for (const input of inputs) if (input.location === 'body' && input.pointer) {
         try { applyInput(probe, operation, input, null) } catch { /* Uncovered invalid targets are checked below. */ }
       }
       const probed = applyBodyPresets(operation, probe.body, context, session.mediaType, reserved)
@@ -45,9 +49,9 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
         const target = pointerParts(input.pointer)
         return candidates.some(path => path.length <= target.length && path.every((part, index) => String(part) === target[index]))
       }
-      const activeInputs = definition.inputs.filter(input => input.location !== 'body'
+      const activeInputs = inputs.filter(input => input.location !== 'body'
         ? !values.has(contextKey({ in: input.location, name: input.name })) : !coveredBody(input, paths))
-      for (const input of definition.inputs) if (input.location === 'body' && !activeInputs.includes(input) && !coveredBody(input, presetBody.paths ?? [])) {
+      for (const input of inputs) if (input.location === 'body' && !activeInputs.includes(input) && !coveredBody(input, presetBody.paths ?? [])) {
         applyInput(session, operation, input, readPointer(JSON.parse(probed.body), input.pointer))
       }
       const missingPreset = activeInputs.find(input => input.source === 'preset')
@@ -56,7 +60,7 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
         const input = missingPreset
         throw new Error(`${definition.label}: select a matching run preset for ${input.location === 'body' ? input.pointer || '(whole body)' : input.name}, or choose another value source.`)
       }
-      for (const input of definition.inputs) {
+      for (const input of inputs) {
         issueInput = input
         if (input.location === 'body' && !operation.requestBody || input.location !== 'body' &&
           !operation.parameters.some(parameter => parameter.in === input.location && parameter.name === input.name)) throw new Error(`${definition.label}: input target is no longer present in the API.`)

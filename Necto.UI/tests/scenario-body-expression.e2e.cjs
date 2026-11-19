@@ -11,7 +11,9 @@ run(async ({ p, assert, calls, review, shot }) => {
   await p.route('**/workflow-openapi.json', async (route) => {
     const response = await p.request.get(origin + '/openapi.json')
     const document = await response.json()
-    document.paths['/invoices'].post.requestBody.content['application/json'].schema.properties.lines.type = ['string', 'array']
+    const lines = document.paths['/invoices'].post.requestBody.content['application/json'].schema.properties.lines
+    lines.type = ['string', 'array']
+    lines.items.properties = { Quantity: { type: 'integer' } }
     await route.fulfill({ response, json: document })
   })
   await p.evaluate(() => localStorage.setItem(
@@ -28,7 +30,7 @@ run(async ({ p, assert, calls, review, shot }) => {
     steps: [{
       id: 'target', label: 'Send payload', apiId: 'local', operationKey: 'POST /invoices',
       method: 'POST', path: '/invoices', dependsOn: [],
-      request: { fields: {}, body: '{"customerId":7,"name":"Draft","lines":[{}]}' },
+      request: { fields: {}, body: '{"customerId":7,"name":"Draft","lines":[{"quantity":1}]}' },
       inputs: [{
         location: 'body', pointer: '/limits/min', source: 'expression',
         expression: 'return -1;', bindings: [],
@@ -55,10 +57,10 @@ run(async ({ p, assert, calls, review, shot }) => {
   await fieldPanel.getByText('Result · integer').waitFor()
   assert.equal(calls.length, 0)
   await fieldPanel.getByRole('button', { name: 'Back to body' }).click()
-  const quantity = body.locator('[data-body-path="/lines/0/quantity"]')
-  await quantity.getByRole('button', { name: 'Edit source for quantity: Expression' }).waitFor()
+  const quantity = body.locator('[data-body-path="/lines/0/Quantity"]')
+  await quantity.getByRole('button', { name: 'Edit source for Quantity: Expression' }).waitFor()
   await body.getByRole('button', { name: 'Configured fields (2)' }).click()
-  await body.locator('li').filter({ hasText: '/lines/0/quantity' }).getByRole('button', { name: 'Expression' }).click()
+  await body.locator('li').filter({ hasText: '/lines/0/Quantity' }).getByRole('button', { name: 'Expression' }).click()
   assert.equal(await fieldPanel.getByLabel('Expression code').inputValue(), 'return 2;')
   await p.setViewportSize({ width: 390, height: 844 })
   assert.equal(await body.locator('.body-tree').isVisible(), false)
@@ -67,22 +69,22 @@ run(async ({ p, assert, calls, review, shot }) => {
   await p.setViewportSize({ width: 1440, height: 900 })
   await body.getByRole('button', { name: 'Configured fields (2)' }).click()
   await body.getByRole('button', { name: 'Raw JSON', exact: true }).click()
-  assert.deepEqual(JSON.parse(await body.getByLabel('Raw request body').inputValue()), { customerId: 7, name: 'Draft', lines: [{}] })
+  assert.deepEqual(JSON.parse(await body.getByLabel('Raw request body').inputValue()), { customerId: 7, name: 'Draft', lines: [{ Quantity: 1 }] })
   await body.getByRole('button', { name: 'JSON builder', exact: true }).click()
   await shot('expression-target')
 
   const protectedReview = await review()
   const overrides = protectedReview.getByRole('checkbox', { name: 'Allow presets to override payload expressions' })
   assert.equal(await overrides.isChecked(), false)
-  await protectedReview.getByText('/lines/0/quantity · Expression evaluated before send').waitFor()
+  await protectedReview.getByText('/lines/0/Quantity · Expression evaluated before send').waitFor()
   await protectedReview.getByRole('button', { name: 'Run scenario', exact: true }).click()
   await p.locator('.builder-run-status').filter({ hasText: '1 / 1 completed' }).waitFor()
-  assert.deepEqual(calls[0].body, { customerId: 7, name: 'Preset name', lines: [{ quantity: 2 }], limits: { min: -1 } })
+  assert.deepEqual(calls[0].body, { customerId: 7, name: 'Preset name', lines: [{ Quantity: 2 }], limits: { min: -1 } })
 
   const overrideReview = await review()
   await overrideReview.getByRole('checkbox', { name: 'Allow presets to override payload expressions' }).check()
   await overrideReview.getByText('Expression overridden by preset', { exact: false }).waitFor()
   await overrideReview.getByRole('button', { name: 'Run scenario', exact: true }).click()
   await p.locator('.builder-run-status').filter({ hasText: '1 / 1 completed' }).waitFor()
-  assert.deepEqual(calls[1].body, { customerId: 7, name: 'Preset name', lines: [{ quantity: 2 }], limits: { min: 0 } })
+  assert.deepEqual(calls[1].body, { customerId: 7, name: 'Preset name', lines: [{ Quantity: 2 }], limits: { min: 0 } })
 })
