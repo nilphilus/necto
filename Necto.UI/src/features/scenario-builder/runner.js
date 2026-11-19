@@ -1,3 +1,4 @@
+import { normalizeParameterNames } from './parameterNames.js'
 import { normalizeBodyFieldNames } from './bodyFieldNames.js'
 import { stepIssue } from './stepIssue.js'
 import { pickRandom } from './random.js'
@@ -25,10 +26,12 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
       if (!operation || (operation.apiId ?? 'local') !== definition.apiId || operation.method !== definition.method || operation.path !== definition.path)
         throw new Error(`${definition.label}: endpoint unavailable. Check API visibility and connections.`)
       const request = { ...definition.request, fields: { ...definition.request.fields }, formFields: definition.request.formFields?.map(row => ({ ...row, files: [...(row.files ?? [])] })) }, session = createSession(operation)
-      const normalized = normalizeBodyFieldNames(operation, request, definition.inputs)
+      const parameters = normalizeParameterNames(operation, request.fields, definition.inputs)
+      if (parameters.conflict) throw new Error(`${definition.label}: ${parameters.conflict}`)
+      const normalized = normalizeBodyFieldNames(operation, request, parameters.inputs)
       if (normalized.conflict) throw new Error(`${definition.label}: ${normalized.conflict}`)
       const inputs = normalized.inputs
-      Object.assign(session, request, { body: normalized.body })
+      Object.assign(session, request, { body: normalized.body, fields: parameters.fields })
       const expressions = inputs.filter(input => input.location === 'body' && input.source === 'expression')
       const reserved = protectBodyExpressions ? expressions.map(input => pointerParts(input.pointer)) : []
       if (reserved.length) session[protectedBodyPaths] = reserved
