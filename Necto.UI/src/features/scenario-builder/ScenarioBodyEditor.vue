@@ -1,10 +1,11 @@
 <script setup>
-import { computed, ref, provide, nextTick } from 'vue'
+import { computed, ref, provide, nextTick, watch } from 'vue'
 import { bodyContent, isJson } from '../workbench/body.js'
 import BodyEditor from '../workbench/BodyEditor.vue'
 import BodySchemaField from './BodySchemaField.vue'
 import { BODY_FIELD_EDITOR, BODY_SOURCE_LABELS, BODY_VALUE, inferVariant, pointer, schemaView } from './bodySchema.js'
 import { pointerParts } from './pointers.js'
+import { normalizeBodyFieldNames } from './bodyFieldNames.js'
 import StepInputs from './StepInputs.vue'
 const props=defineProps({step:Object,operation:Object,steps:Array,operations:Array,variables:Array,results:Array,disabled:Boolean})
 function rawMode(){if(Object.keys(props.step.request.bodyFieldEdits??{}).length&&!window.confirm('Discard unfinished number edits and open the last valid JSON?'))return;delete props.step.request.bodyFieldEdits;selectedPath.value = null;mode.value='raw'}
@@ -68,6 +69,17 @@ async function focusBinding(path) {
   return true
 }
 defineExpose({ focusBinding })
+const casingConflict = ref('')
+watch(() => [props.operation, props.step, mode.value, props.disabled], () => {
+  if (props.disabled) return
+  const normalized = normalizeBodyFieldNames(props.operation, props.step.request, props.step.inputs)
+  casingConflict.value = normalized.conflict ?? ''
+  if (mode.value !== 'fields' || normalized.conflict) return
+  props.step.request.body = normalized.body
+  if (normalized.inputs.some((input, index) => input !== props.step.inputs[index])) {
+    props.step.inputs = normalized.inputs
+  }
+}, { immediate: true })
 provide(BODY_FIELD_EDITOR, editField)
 const wholeBodySources = computed(() => /^(?:text\/|application\/(?:.+\+)?xml)/i.test(media.value?.[0] ?? ''))
 provide(BODY_VALUE,computed(()=>parsed.value.value))
@@ -77,6 +89,7 @@ provide(BODY_VALUE,computed(()=>parsed.value.value))
   <header><h4>Request body</h4><div v-if="json" role="group" aria-label="Body editing mode"><button type="button" class="secondary" :aria-pressed="mode==='fields'" @click="mode='fields'">JSON builder</button><button type="button" class="secondary" :aria-pressed="mode==='raw'" @click="rawMode">Raw JSON</button><button type="button" class="secondary" @click="expand">Expand body editor</button></div></header>
   <Teleport :disabled="!expanded" :to="dialogHost??'body'">
    <div class="body-editor-content">
+    <p v-if="casingConflict" class="error" role="alert">{{ casingConflict }}</p>
     <div class="body-workspace" :class="{ 'editing-field': selectedInput }">
      <div ref="bodyTree" class="body-tree">
       <button v-if="json && mode === 'fields' && bodyInputs.length" ref="configuredToggle" type="button"
