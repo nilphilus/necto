@@ -2,12 +2,11 @@
 import DescriptionHelp from '../workbench/DescriptionHelp.vue'
 import { preferredRelatedChoice } from './mappings.js'
 import RequestSendIcon from '../request-runner/RequestSendIcon.vue'
-import { computed, reactive, watch } from 'vue'
+import { computed, watch } from 'vue'
 import ValueSourceHelp from './ValueSourceHelp.vue'
 import ValueInput from './ValueInput.vue'
 const props = defineProps({ target: Object, canSend: Function, sourcesFor: Function })
 const emit = defineEmits(['follow', 'edit-preset', 'search-response', 'open-source'])
-const drafts = reactive({})
 const fields = computed(() => {
   const groups = new Map()
   for (const choice of props.target.candidates) {
@@ -24,18 +23,24 @@ const fields = computed(() => {
       choice.location === field.location && choice.name === field.name),
   }))
 })
-watch(fields, fields => {
-  for (const field of fields) {
-    const suggested = preferredRelatedChoice(field.choices, field.selected)
-    if (suggested) {
-      const value = suggested.value
-      drafts[field.key] = typeof value === 'object' ? JSON.stringify(value) : String(value)
-    } else if (!(field.key in drafts)) drafts[field.key] = ''
+const choiceText = choice => !choice ? '' : typeof choice.value === 'object'
+  ? JSON.stringify(choice.value) : String(choice.value)
+const inputValue = field => props.target.drafts[field.key] ??
+  choiceText(preferredRelatedChoice(field.choices, field.selected))
+
+watch(fields, (next, previous) => {
+  const prior = new Map(previous.map(field => [field.key, field]))
+  for (const field of next) {
+    const old = prior.get(field.key)
+    const selected = preferredRelatedChoice([], field.selected)
+    if (old && selected && choiceText(selected) !== choiceText(preferredRelatedChoice([], old.selected)))
+      delete props.target.drafts[field.key]
   }
-}, { immediate: true })
-const choices = computed(() => fields.value.filter(field => drafts[field.key] !== '').map(field => {
-  const input = drafts[field.key]
-  const match = [...field.selected, ...field.choices].find(choice => (typeof choice.value === 'object' ? JSON.stringify(choice.value) : String(choice.value)) === input)
+})
+
+const choices = computed(() => fields.value.filter(field => inputValue(field) !== '').map(field => {
+  const input = inputValue(field)
+  const match = [...field.selected, ...field.choices].find(choice => choiceText(choice) === input)
   let value = match ? match.value : input
   if (!match && field.location === 'body') {
     try { value = JSON.parse(input) } catch { /* Let the request editor handle text values. */ }
@@ -72,7 +77,7 @@ const ready = computed(() => props.canSend(props.target.operation, choices.value
         :aria-label="'Send ' + target.operation.name">Send <RequestSendIcon /></button>
       <div v-if="fields.length" class="fields">
         <div v-for="(field, index) in fields" :key="field.key" class="field">
-          <ValueInput v-model="drafts[field.key]" :choices="field.choices" dropdown searchable-response @search-response="emit('search-response', { query: $event, field: searchField(field) })" placeholder="Type or choose a value…">
+          <ValueInput :model-value="inputValue(field)" @update:model-value="target.drafts[field.key] = $event" :choices="field.choices" dropdown searchable-response @search-response="emit('search-response', { query: $event, field: searchField(field) })" placeholder="Type or choose a value…">
             <template #label>{{ field.name ?? 'body' }} <small>{{ field.location }}</small></template>
             <template #label-actions>
               <ValueSourceHelp :label="'Where to get ' + (field.name ?? 'request body')"
