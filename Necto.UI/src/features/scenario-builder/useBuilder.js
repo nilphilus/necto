@@ -6,7 +6,7 @@ import { sharedOrigin } from '../scenario-definitions/origin.js'
 import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { newBlueprint, parseHuman } from './model.js'
-import { prepareBlueprint, executeBlueprint } from './runner.js'
+import { canRetryStep, prepareBlueprint, executeBlueprint } from './runner.js'
 import { upgradeBlueprint } from './connections.js'
 
 const clone = value => JSON.parse(JSON.stringify(value))
@@ -92,5 +92,23 @@ export function useBuilder(configuration) {
       if (controller === current) controller = undefined
     }
   }
-  return { draft, saved, dirty, error, notice, execution, pending, questions, save, saveCaptured, open, fresh, remove, stop, run, invalidate }
+  async function retry(stepId, execute) {
+    const step = execution.steps.find(item => item.id === stepId)
+    if (pending.value || execution.stale || !canRetryStep(step)) return
+    const runRevision = revision
+    const current = controller = new AbortController()
+    pending.value = true
+    execution.status = 'running'
+    execution.error = ''
+    try {
+      const outcome = await executeBlueprint(execution.steps, {
+        execute, signal: current.signal, retryStepId: stepId,
+      })
+      if (revision === runRevision) Object.assign(execution, outcome)
+    } finally {
+      pending.value = false
+      if (controller === current) controller = undefined
+    }
+  }
+  return { draft, saved, dirty, error, notice, execution, pending, questions, save, saveCaptured, open, fresh, remove, stop, run, retry, invalidate }
 }

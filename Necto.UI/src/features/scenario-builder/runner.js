@@ -98,11 +98,21 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
   return plan
 }
 
+export function canRetryStep(step) {
+  return Boolean(step?.request && ['failed', 'cancelled'].includes(step.status))
+}
+
 // DAG scheduler: ready nodes start immediately; a join waits for every dependency.
 // Only explicit response-wait policies repeat requests. Errors stop the run.
-export async function executeBlueprint(plan, { concurrency = 4, execute, signal, ask, generate = generateValue, sleep = abortableDelay, pick = pickRandom }) {
+export async function executeBlueprint(plan, { concurrency = 4, execute, signal, ask, generate = generateValue, sleep = abortableDelay, pick = pickRandom, retryStepId }) {
   const controller = new AbortController(), combined = AbortSignal.any([signal, controller.signal])
   const byId = new Map(plan.map(step => [step.id, step])), running = new Map()
+  const retryOnly = retryStepId !== undefined
+  if (retryOnly) {
+    const target = byId.get(retryStepId)
+    if (!canRetryStep(target)) throw new Error('This step has no failed request to retry.')
+    Object.assign(target, { status: 'waiting', error: '', problemTarget: undefined })
+  }
   let failure, activeRequests = 0
   const waiting = []
   function release() { activeRequests--; waiting.shift()?.grant() }
@@ -149,12 +159,12 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
     const conditions = policies.filter(policy => policy.waitFor)
     try {
       combined.throwIfAborted()
-      if (delayMs) {
+      if (!retryOnly && delayMs) {
         step.status = 'delaying'; step.nextAttemptAt = Date.now() + delayMs
         await sleep(delayMs, combined); combined.throwIfAborted(); step.nextAttemptAt = undefined
         step.status = 'preparing'
       }
-      for (const input of step.inputs.filter(input => input.source !== 'human')) {
+      for (const input of retryOnly ? [] : step.inputs.filter(input => input.source !== 'human')) {
         issueInput = input
         if (input.source === 'variable' && variableDefinitions.get(input.variableId)?.source === 'human') step.status = 'needs-input'
         let value
@@ -195,7 +205,7 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
         applyInput(step.session, step.operation, input, value)
       }
       issueInput = undefined
-      const questions = step.inputs.filter(input => input.source === 'human')
+      const questions = retryOnly ? [] : step.inputs.filter(input => input.source === 'human')
       if (questions.length) {
         if (!ask) throw new Error('This step needs human input. Enable human-in-the-loop mode.')
         step.status = 'needs-input'
@@ -205,10 +215,12 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
         questions.forEach((input, index) => applyInput(step.session, step.operation, input, answers[index]))
       }
       combined.throwIfAborted()
-      step.attempts = []
-      const maximum = Math.max(1, ...conditions.map(policy => policy.waitFor.retryCount + 1))
+      if (!retryOnly) step.attempts = []
+      step.attempts ??= []
+      const previousAttempts = step.attempts.length
+      const maximum = retryOnly ? 1 : Math.max(1, ...conditions.map(policy => policy.waitFor.retryCount + 1))
       for (let attempt = 1; attempt <= maximum; attempt++) {
-        step.attempt = attempt; step.maxAttempts = maximum; step.status = 'queued'
+        step.attempt = previousAttempts + attempt; step.maxAttempts = previousAttempts + maximum; step.status = 'queued'
         const permit = acquire()
         releaseSlot = typeof permit === 'function' ? permit : await permit
         combined.throwIfAborted(); step.status = 'running'
@@ -220,7 +232,7 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
         } finally { releaseSlot(); releaseSlot = undefined }
         combined.throwIfAborted()
         step.response = response; step.httpStatus = response?.status; step.elapsed = response?.elapsed
-        const record = { attempt, status: response?.status, elapsed: response?.elapsed, matched: false }
+        const record = { attempt: step.attempt, status: response?.status, elapsed: response?.elapsed, matched: false }
         step.attempts.push(record)
         if (!response || !response.ok && !response.assertions?.some(check => check.kind === 'status' && check.passed)) throw new Error(response ? `HTTP ${response.status} ${response.statusText ?? ''}` : step.session.error || 'No response received.')
         const unmet = conditions.filter(policy => !waitMatches(response, policy.waitFor))
@@ -230,7 +242,7 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
           if (response.assertions?.some(check => !check.passed)) throw new Error('Response checks failed.')
           break
         }
-        const exhausted = unmet.find(policy => attempt > policy.waitFor.retryCount)
+        const exhausted = unmet.find(policy => retryOnly || attempt > policy.waitFor.retryCount)
         if (exhausted) throw new Error(`Response condition at ${exhausted.waitFor.pointer || '(root)'}${exhausted.label ? ' on ' + exhausted.label : ''} was not met after ${attempt} attempt${attempt === 1 ? '' : 's'}.`)
         const intervalMs = Math.max(...unmet.map(policy => policy.waitFor.intervalMs))
         step.status = 'retry-wait'; step.nextAttemptAt = Date.now() + intervalMs
@@ -250,7 +262,8 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
   }
   while (true) {
     if (!combined.aborted) {
-      const ready = plan.filter(step => step.status === 'waiting' && step.dependencies.every(id => byId.get(id)?.status === 'completed'))
+      const ready = plan.filter(step => step.status === 'waiting' && (retryOnly
+        ? step.id === retryStepId : step.dependencies.every(id => byId.get(id)?.status === 'completed')))
       for (const step of ready) {
         const task = run(step).finally(() => running.delete(step.id))
         running.set(step.id, task)
@@ -263,6 +276,8 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
   for (const step of plan) if (step.status === 'waiting') step.status = 'skipped'
   if (failure) return { status: 'failed', error: `${failure.step.label}: ${failure.cause.message}` }
   if (signal.aborted) return { status: 'cancelled', error: 'Scenario stopped.' }
+  if (retryOnly && plan.some(step => step.status !== 'completed'))
+    return { status: 'incomplete', error: 'Step retried. Other steps were not run again.' }
   if (plan.some(step => step.status !== 'completed')) return { status: 'failed', error: 'Some dependencies could not complete.' }
   return { status: 'completed', error: '' }
 }
