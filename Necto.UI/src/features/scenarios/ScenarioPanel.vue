@@ -11,7 +11,7 @@ import { nextTick, ref } from 'vue'
 import { pathLabel } from './scenario.js'
 import ScenarioTrace from './ScenarioTrace.vue'
 const props = defineProps({ scenarios: Array, builderScenarios: Array, builderError: String, importScenario: Function, state: Object, pending: Boolean, busy: Boolean, error: String,
-  presetNames: Array, activePresetNames: Array, runs: Map, document: Object, mappings: Array, configuration: Object, deleted: Object, folder:Object })
+  activePresetNames: Array, runs: Map, document: Object, mappings: Array, configuration: Object, deleted: Object, folder:Object })
 
 const emit = defineEmits(['open', 'run', 'remove', 'stop', 'inspect', 'undo-remove', 'builder', 'open-builder-scenario', 'folder-settings'])
 const importInput = ref(null)
@@ -30,7 +30,6 @@ async function importFile(event) {
   finally { importing.value = false }
 }
 const runId = ref('')
-const selectedPresets = ref([])
 const list = ref(null), undoButton = ref(null), title = ref(null)
 async function deleteScenario(id) {
   emit('remove', id)
@@ -53,13 +52,12 @@ function descriptionFor(scenario, separator) {
 }
 
 function configureRun(scenario) {
-  selectedPresets.value = [...props.activePresetNames]
   runId.value = scenario.id
 }
 
 function runScenario(scenario) {
   if (props.busy) return
-  emit('run', scenario, selectedPresets.value.filter(name => props.presetNames.includes(name)))
+  emit('run', scenario, [...props.activePresetNames])
   runId.value = ''
 }
 </script>
@@ -124,19 +122,8 @@ function runScenario(scenario) {
           <button type="button" class="secondary" :disabled="pending" :aria-label="'Delete scenario ' + scenario.name" @click="deleteScenario(scenario.id)">Delete</button>
         </div>
         <form v-if="runId === scenario.id" class="run-form" @submit.prevent="runScenario(scenario)">
-          <slot name="run-targets" :scenario="scenario" :preset-names="selectedPresets" />
-          <fieldset v-if="presetNames.length" :disabled="busy">
-            <legend>Presets for this run</legend>
-            <div class="preset-options">
-              <label v-for="name in presetNames" :key="name">
-                <input v-model="selectedPresets" type="checkbox" :value="name">
-                {{ name }}
-              </label>
-            </div>
-            <p class="muted">Selected presets override matching scenario inputs. The last selected preset wins when values overlap.</p>
-            <p v-if="selectedPresets.length" class="muted">Applied in order: {{ selectedPresets.join(' → ') }}</p>
-          </fieldset>
-          <p v-else class="muted">This run will use saved inputs and response bindings.</p>
+          <slot name="run-targets" :scenario="scenario" :preset-names="activePresetNames" />
+          <p v-if="activePresetNames.length" class="muted">Active presets · {{ activePresetNames.join(' → ') }}</p>
           <div class="actions">
             <button type="submit" class="primary" :disabled="busy">Run scenario</button>
             <button type="button" class="secondary" @click="runId = ''">Cancel</button>

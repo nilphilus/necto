@@ -173,7 +173,7 @@ function runPreview() {
   </div>
   <button type="button" class="secondary" :disabled="input.bindings.length>=16" @click="add">Add expression input</button>
   <p v-if="error" class="error" role="status">{{error}}</p>
-  <small>Read selected inputs by name. Return a JSON value. Supports const, if, switch and basic operators; no functions, loops, imports or browser access. {{ input.location === 'body' ? 'A run preset can replace this value if explicitly allowed.' : 'Matching run presets override this value.' }} Code is saved as written; keep secrets in local authorization or human inputs.</small>
+  <small>Read selected inputs by name. Return a JSON value. Supports const, if, switch and basic operators; no functions, loops, imports or browser access. {{ input.location === 'body' ? 'Body expressions take precedence over matching presets.' : 'Matching active presets override this value unless the step excludes presets.' }} Code is saved as written; keep secrets in local authorization or human inputs.</small>
   <details v-if="input.location === 'body'" class="expression-preview" @toggle="showPreview = $event.target.open">
    <summary>Preview result</summary>
    <template v-if="showPreview">

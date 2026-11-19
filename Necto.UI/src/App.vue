@@ -196,7 +196,9 @@ const visiblePresetNames = computed(() => {
 })
 const presetOrder = computed(() => {
   const active = activePresetNames.value
-  const inactive = visiblePresetNames.value.filter(name => !active.includes(name))
+  const scenarioView = graphView.value === 'scenarios' || graphView.value === 'builder'
+  const available = scenarioView ? [...presets.value.keys()] : visiblePresetNames.value
+  const inactive = available.filter(name => !active.includes(name))
   return { names: [...active, ...inactive], firstInactive: active.length ? inactive[0] : undefined }
 })
 const hoveredPresetOrder = ref(null)
@@ -260,7 +262,7 @@ function resetPresetSessions() {
   for (const [key, session] of sessions) {
     sessions.set(key, { ...session, result: null, pending: false, error: '' })
   }
-  if (selected) {
+  if (selected && !editingScenarioId.value) {
     const { operation, group, session } = selected
     const draft = separateDraft
       ? { ...session, bindings: [], result: null, pending: false, error: '' }
@@ -1072,6 +1074,19 @@ function removeScenario(id) {
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
       <EndpointGraph :inert="settingsOpen" :initial-operation-key="current?.operation.key" v-if="graphView === 'endpoints'" :operations="operations" :mappings="endpointMappings" :mapping-error="mappingError"
         @open-operation="operation => selectOperation(operation, operation.tags[0])" />
+      <section v-if="(!graphView || ['scenarios', 'builder'].includes(graphView)) && displayedPresetOrder.names.length" :inert="settingsOpen" class="preset-bar"
+        aria-label="Presets" @pointerenter="holdPresetOrder" @pointerleave="releasePresetOrder">
+        <strong>Presets</strong>
+        <button v-for="name in displayedPresetOrder.names" :key="name" type="button" class="preset-toggle"
+          :class="{ 'preset-group-start': name === displayedPresetOrder.firstInactive }"
+          :disabled="workspaceLocked" :aria-pressed="activePresetNames.includes(name)"
+          :style="{ '--preset-color': presetColors.get(name) ?? defaultPresetColor }"
+          @click="togglePreset(name, !activePresetNames.includes(name))">{{ name }}</button>
+        <template v-if="!graphView && activePresetNames.length">
+          <small v-if="current?.operation.apiId && current.operation.apiId !== 'local' && !current.operation.usePresets">Not applied to this external API.</small>
+          <small v-else-if="!visiblePresetNames.some(name => activePresetNames.includes(name))">None apply to this request; related requests may still use them.</small>
+        </template>
+      </section>
       <ScenarioBuilder
         ref="builderView"
         :store="builderStore"
@@ -1088,6 +1103,7 @@ function removeScenario(id) {
         :preset-context="builderPresetContext"
         :preset-names="[...presets.keys()]"
         :active-preset-names="activePresetNames"
+        @activate-preset="togglePreset($event, true)"
         :authentication="authentication"
         :execute="(operation, session, values, signal, onRequest) => run(operation, session, values, { signal, onRequest })"
         :busy="scenarioBusy"
@@ -1096,7 +1112,7 @@ function removeScenario(id) {
       <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="navigateView('builder')" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios"
         :import-scenario="importLibraryScenario" :builder-scenarios="builderScenarios" :builder-error="builderError" @open-builder-scenario="openBuilderScenario" :state="scenarioState" :runs="scenarioRuns"
 
-        :deleted="scenarioStore.deleted.value" @undo-remove="undoRemoveScenario" :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError" :preset-names="[...presets.keys()]"
+        :deleted="scenarioStore.deleted.value" @undo-remove="undoRemoveScenario" :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"
         @remove="removeScenario" @stop="scenarioStore.stop" @inspect="inspectScenario">
         <template #run-targets="{ scenario, presetNames }">
@@ -1111,19 +1127,6 @@ function removeScenario(id) {
           </details>
         </template>
       </ScenarioPanel>
-      <section v-if="!graphView && displayedPresetOrder.names.length" :inert="settingsOpen" class="preset-bar"
-        aria-label="Presets" @pointerenter="holdPresetOrder" @pointerleave="releasePresetOrder">
-        <strong>Presets</strong>
-        <button v-for="name in displayedPresetOrder.names" :key="name" type="button" class="preset-toggle"
-          :class="{ 'preset-group-start': name === displayedPresetOrder.firstInactive }"
-          :disabled="workspaceLocked" :aria-pressed="activePresetNames.includes(name)"
-          :style="{ '--preset-color': presetColors.get(name) ?? defaultPresetColor }"
-          @click="togglePreset(name, !activePresetNames.includes(name))">{{ name }}</button>
-        <template v-if="activePresetNames.length">
-          <small v-if="current?.operation.apiId && current.operation.apiId !== 'local' && !current.operation.usePresets">Not applied to this external API.</small>
-          <small v-else-if="!visiblePresetNames.some(name => activePresetNames.includes(name))">None apply to this request; related requests may still use them.</small>
-        </template>
-      </section>
       <div :inert="settingsOpen" v-show="!graphView" class="layout navigation-layout" :class="{ 'catalog-collapsed': !catalogOpen }" :style="{ '--catalog-width': catalogWidth + 'px' }">
         <div class="catalog-sidebar">
           <button

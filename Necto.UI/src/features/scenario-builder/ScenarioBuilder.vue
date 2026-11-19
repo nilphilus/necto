@@ -44,7 +44,7 @@ const props = defineProps({
   busy: Boolean,
   folder: Object,
 })
-const emit = defineEmits(['back', 'folder-settings'])
+const emit = defineEmits(['back', 'folder-settings', 'activate-preset'])
 const store = props.store
 const { draft, saved, dirty, error, notice, execution, pending, questions } = store
 const nextRequest = ref(null)
@@ -61,12 +61,11 @@ const selectedId = ref(''),
   addDialog = ref(null),
   runDialog = ref(null),
   fileInput = ref(null)
-const selectedPresets = ref([])
+const oneTimeValues = ref(new Map())
+const missingValue = ref('')
+const missingValueError = ref('')
 const runConcurrency = ref(4)
 const runIssue = ref(null)
-const allowExpressionOverrides = ref(false)
-const hasBodyExpressions = computed(() => draft.value.steps.some(step =>
-  step.inputs.some(input => input.location === 'body' && input.source === 'expression')))
 const review = ref([]),
   allowHuman = ref(true),
   runProblem = ref(''),
@@ -489,11 +488,9 @@ function removeConnection() {
   )
   edgeDialog.value.close()
 }
-function runContext() {
-  if (selectedPresets.value.some((name) => !props.presetNames.includes(name)))
-    throw new Error('A selected preset is no longer available. Reopen the run review.')
-  const context = props.presetContext ? props.presetContext(selectedPresets.value) : props.context()
-  return { ...context, protectBodyExpressions: !allowExpressionOverrides.value }
+function runContext(names = props.activePresetNames) {
+  const context = props.presetContext ? props.presetContext(names) : props.context()
+  return { ...context, protectBodyExpressions: true, requestOverrides: oneTimeValues.value }
 }
 function refreshReview() {
   runProblem.value = ''
@@ -506,30 +503,54 @@ function refreshReview() {
     runIssue.value = cause
   }
 }
+const suggestedPresets = computed(() => {
+  const issue = runIssue.value
+  if (!issue?.missingInput || !props.presetContext) return []
+  return props.presetNames.filter(name => {
+    if (props.activePresetNames.includes(name)) return false
+    try {
+      prepareBlueprint({ ...draft.value, concurrency: runConcurrency.value }, runContext([...props.activePresetNames, name]))
+      return true
+    } catch (cause) {
+      // A later missing input can be resolved separately. Reject other failures on this step.
+      return cause.missingInput && (cause.stepId !== issue.stepId ||
+        cause.target?.location !== issue.target?.location || cause.target?.name !== issue.target?.name)
+    }
+  })
+})
+function activateSuggestedPreset(name) {
+  missingValue.value = ''
+  missingValueError.value = ''
+  emit('activate-preset', name)
+}
+function useMissingValue() {
+  const issue = runIssue.value
+  if (!issue?.missingInput || !issue.target || !missingValue.value.trim()) return
+  let value = missingValue.value
+  if (issue.target.location === 'body') {
+    try { value = JSON.parse(value) }
+    catch { missingValueError.value = 'Enter a valid JSON value.'; return }
+  }
+  const inputs = oneTimeValues.value.get(issue.stepId) ?? []
+  oneTimeValues.value.set(issue.stepId, [...inputs.filter(input =>
+    input.location !== issue.target.location || input.name !== issue.target.name),
+    { ...issue.target, ...(issue.target.location === 'body' ? { pointer: issue.target.name } : {}), value }])
+  missingValue.value = ''
+  missingValueError.value = ''
+  refreshReview()
+}
 function reviewRun() {
   runConcurrency.value = draft.value.concurrency
   allowHuman.value = true
-  allowExpressionOverrides.value = false
-  selectedPresets.value = props.activePresetNames.filter((name) => props.presetNames.includes(name))
+  oneTimeValues.value = new Map()
+  missingValue.value = ''
+  missingValueError.value = ''
   refreshReview()
   runDialog.value.showModal()
 }
-watch([allowHuman, allowExpressionOverrides, runConcurrency], () => {
+watch([allowHuman, runConcurrency, () => props.activePresetNames, () => props.presetNames], () => {
   if (runDialog.value?.isOpen()) refreshReview()
 })
-watch(
-  selectedPresets,
-  () => {
-    if (runDialog.value?.isOpen()) refreshReview()
-  },
-  { deep: true }
-)
-watch(
-  () => props.presetNames,
-  () => {
-    if (runDialog.value?.isOpen()) refreshReview()
-  }
-)
 async function startRun() {
   runProblem.value = ''
   runIssue.value = null
@@ -1109,7 +1130,10 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
               <ResponseChecksEditor :session="selected.request" :disabled="pending" />
             </details>
             <details class="request-limits">
-              <summary>Request limits</summary>
+              <summary>Request settings</summary>
+              <label><input v-model="selected.ignorePresets" type="checkbox" :disabled="pending">
+                Do not apply presets to this step
+              </label>
               <fieldset :disabled="pending">
                 <label
                   >Timeout (ms)<input
@@ -1331,15 +1355,18 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
     </dialog>
     <ScenarioRunReview
       ref="runDialog"
-      v-model:selected-presets="selectedPresets"
-      v-model:allow-expression-overrides="allowExpressionOverrides"
-      :has-body-expressions="hasBodyExpressions"
+      :active-presets="activePresetNames"
+      :suggested-presets="suggestedPresets"
+      :missing-target="runIssue?.missingInput ? runIssue.target : undefined"
+      v-model:missing-value="missingValue"
+      :missing-value-error="missingValueError"
+      @activate-preset="activateSuggestedPreset"
+      @use-missing-value="useMissingValue"
       v-model:concurrency.number="runConcurrency"
       v-model:allow-human="allowHuman"
       :name="draft.name"
       :step-count="draft.steps.length"
       :variables="draft.variables"
-      :preset-names="presetNames"
       :pending="pending"
       :validation="validation"
       :run-problem="runProblem"
