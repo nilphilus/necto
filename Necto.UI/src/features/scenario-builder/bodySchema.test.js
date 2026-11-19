@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { bodyFieldEntries, bodyAt, writeBody, sourceFor, schemaView, removeArrayItem, inferVariant, variantTemplate } from './bodySchema.js'
 import { newBlueprint,newStep,validateBlueprint } from './model.js'
 import { savedBlueprint } from './useBuilder.js'
-import { prepareBlueprint } from './runner.js'
+import { prepareBlueprint } from './prepareBlueprint.js'
 import { resolveRequestValues } from '../request-runner/request.js'
 import { schemaTemplate } from '../request-runner/schemaTemplate.js'
 const operation={key:'POST /test',apiId:'local',method:'POST',path:'/test',name:'Test',parameters:[],servers:[],tags:['Test'],resolve:value=>value,requestBody:{content:{'application/json':{schema:{type:'object',properties:{code:{type:'string'}}}}}}}

@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { newBlueprint, newStep, validateBlueprint } from './model.js'
-import { prepareBlueprint, executeBlueprint } from './runner.js'
+import { executeBlueprint } from './runner.js'
+import { prepareBlueprint } from './prepareBlueprint.js'
 import { allConnections } from './connections.js'
 import { savedBlueprint } from './useBuilder.js'
 const op=id=>({key:id,name:id,method:'POST',path:'/'+id,apiId:'local',tags:['Demo'],parameters:[{in:'query',name:'value',schema:{type:'string'}}],resolve:value=>value,servers:[]})

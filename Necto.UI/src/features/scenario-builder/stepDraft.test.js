@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { emptyStep, configureEndpoint } from './stepDraft.js'
 import { newBlueprint, validateBlueprint } from './model.js'
 import { savedBlueprint } from './useBuilder.js'
-import { prepareBlueprint } from './runner.js'
+import { prepareBlueprint } from './prepareBlueprint.js'
 test('empty connected requests can be saved but cannot execute until an endpoint is chosen',()=>{
  const step=emptyStep({x:600,y:250}),data={...newBlueprint(),steps:[step]};validateBlueprint(data);assert.deepEqual(savedBlueprint(data).steps[0].position,{x:600,y:250})
  assert.throws(()=>prepareBlueprint(data,{operations:[]}),/choose an endpoint/)
