@@ -1,5 +1,6 @@
 <script setup>
 import ScenarioRunReview from './ScenarioRunReview.vue'
+import { suggestRunPresets } from './reviewPresets.js'
 import { parseBuilderImport } from './definitionImport.js'
 import { suggestInputs } from './inputSuggestions.js'
 import FolderSave from '../scenario-folder/FolderSave.vue'
@@ -507,31 +508,11 @@ function refreshReview() {
     }
   }
 }
-function issueKey(issue) {
-  return JSON.stringify([issue.stepId, issue.target?.location, issue.target?.name, issue.missingInput ? '' : issue.message])
-}
 const suggestedPresets = computed(() => {
-  const missing = runIssues.value.filter(issue => issue.missingInput)
-  if (!missing.length || !props.presetContext) return []
-  return props.presetNames.flatMap(name => {
-    if (props.activePresetNames.includes(name)) return []
-    let effects, unresolved
-    try {
-      effects = prepareBlueprint({ ...draft.value, concurrency: runConcurrency.value },
-        runContext([...props.activePresetNames, name]), { collectIssues: true }).presetEffects
-      unresolved = []
-    } catch (cause) {
-      if (!(cause instanceof AggregateError)) return []
-      effects = cause.presetEffects
-      unresolved = cause.errors
-    }
-    const remaining = new Set(unresolved.map(issueKey))
-    const resolved = missing.filter(issue => !remaining.has(issueKey(issue)))
-    if (!resolved.length) return []
-    const fields = effects.flatMap(step => step.fields.filter(field => field.preset === name)
-      .map(({ field }) => `${step.label} · ${field.replace(':', ' ')}`))
-    return [{ name, fields: [...new Set(fields)] }]
-  })
+  if (!props.presetContext) return []
+  return suggestRunPresets(runIssues.value, props.activePresetNames, props.presetNames, names =>
+    prepareBlueprint({ ...draft.value, concurrency: runConcurrency.value },
+      runContext(names), { collectIssues: true }))
 })
 function useMissingValues(entries) {
   for (const { issue, value } of entries) {

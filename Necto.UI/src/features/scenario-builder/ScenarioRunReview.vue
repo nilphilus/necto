@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { connectionKey } from './connections.js'
+import { runIssueKey } from './reviewPresets.js'
 import { inputSources } from './variables.js'
 
 const props = defineProps({
@@ -21,9 +22,6 @@ const emit = defineEmits(['start', 'go-to-step', 'activate-preset', 'use-missing
 
 const values = ref({})
 const errors = ref({})
-function key(issue) {
-  return JSON.stringify([issue.stepId, issue.target?.location, issue.target?.name, issue.missingInput ? '' : issue.message])
-}
 const groups = computed(() => {
   const byStep = new Map()
   for (const issue of props.issues) {
@@ -33,13 +31,13 @@ const groups = computed(() => {
   return [...byStep].map(([id, issues]) => ({ id, label: props.steps.find(step => step.id === id)?.label, issues }))
 })
 const hasValues = computed(() => props.issues.some(issue =>
-  issue.missingInput && issue.target && values.value[key(issue)]?.trim()))
+  issue.missingInput && issue.target && values.value[runIssueKey(issue)]?.trim()))
 
 function applyValues(issues = props.issues) {
   const entries = []
   for (const issue of issues) {
     if (!issue.missingInput || !issue.target) continue
-    const id = key(issue)
+    const id = runIssueKey(issue)
     const raw = values.value[id]
     if (!raw?.trim()) continue
     try {
@@ -154,16 +152,16 @@ defineExpose({
       <section v-if="groups.length" class="missing-input" aria-label="Resolve run issues">
         <fieldset v-for="group in groups" :key="group.id">
           <legend>{{ group.label }}</legend>
-          <div v-for="issue in group.issues" :key="key(issue)" class="run-issue">
+          <div v-for="issue in group.issues" :key="runIssueKey(issue)" class="run-issue">
             <p class="error" role="alert">{{ issue.message }}</p>
             <div class="issue-actions">
               <label v-if="issue.missingInput && issue.target">Value for {{ issue.target.name || 'request body' }}
-                <input v-model="values[key(issue)]" :placeholder="issue.target.location === 'body' ? 'JSON value' : undefined"
+                <input v-model="values[runIssueKey(issue)]" :placeholder="issue.target.location === 'body' ? 'JSON value' : undefined"
                   @keydown.enter.prevent="applyValues([issue])">
               </label>
               <button type="button" class="secondary" @click="$emit('go-to-step', issue)">Go to step</button>
             </div>
-            <p v-if="errors[key(issue)]" role="alert">{{ errors[key(issue)] }}</p>
+            <p v-if="errors[runIssueKey(issue)]" role="alert">{{ errors[runIssueKey(issue)] }}</p>
           </div>
         </fieldset>
         <button v-if="issues.some(issue => issue.missingInput && issue.target)" type="button" class="secondary"
