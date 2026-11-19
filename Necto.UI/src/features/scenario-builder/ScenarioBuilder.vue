@@ -663,6 +663,14 @@ function importQuick() {
       'Copied the quick chain. Remove “Run after” connections to introduce parallel branches.'
   })
 }
+async function retryStep(id) {
+  const step = execution.steps.find(item => item.id === id)
+  if (!step || pending.value || props.busy || execution.stale) return
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(step.operation.method) &&
+      !window.confirm(`Send ${step.operation.method} again for “${step.label}”? This can repeat changes on the server.`)) return
+  try { await store.retry(id, props.execute) }
+  catch (cause) { error.value = cause.message }
+}
 function beforeUnload(event) {
   if (pending.value || hasUnsavedDraft.value) {
     event.preventDefault()
@@ -890,6 +898,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         @connect="connect"
         @configure="openConnection"
         @create-next="createNext"
+        @retry="retryStep"
       />
     </div>
     <dialog
