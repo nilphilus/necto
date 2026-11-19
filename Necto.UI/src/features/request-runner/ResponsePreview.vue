@@ -83,6 +83,7 @@ const expansionModes = reactive(new Map()),
   previewPages = reactive(new Map())
 let expansionRevision = 0
 const expansion = computed(() => ({
+  pages: previewPages,
   commands: [...expansionModes.values()].flatMap((command) => {
     try {
       return [
