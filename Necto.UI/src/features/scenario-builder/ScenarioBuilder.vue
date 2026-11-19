@@ -687,31 +687,33 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         ← Scenarios
       </button>
       <h2 id="builder-title">Scenario Builder</h2>
-      <span class="save-state">{{ dirty ? 'Unsaved changes' : 'Saved' }}</span>
-      <div class="builder-actions">
-        <button type="button" class="secondary" :disabled="pending" @click="fresh">New</button
-        ><button type="button" class="secondary" :disabled="pending || !!validation" @click="save">
-          Save</button
-        ><button
-          type="button"
-          class="primary"
-          :disabled="pending || busy || !draft.steps.length || !!validation"
-          @click="reviewRun"
-        >
-          Review & run</button
-        ><button v-if="pending" type="button" class="secondary" @click="store.stop">
-          Stop run
-        </button>
-      </div>
     </header>
     <div class="builder-toolbar">
-      <label class="scenario-name"
-        >Name<input
-          v-model="draft.name"
-          :disabled="pending"
-          maxlength="200"
-          aria-label="Scenario name"
-      /></label>
+      <div class="scenario-identity">
+        <label class="scenario-name">
+          Name
+          <input v-model="draft.name" :disabled="pending" maxlength="200" aria-label="Scenario name">
+        </label>
+        <div class="builder-actions" role="group" aria-label="Current scenario actions">
+          <button type="button" class="secondary" :disabled="pending || !!validation" @click="save">Save</button>
+          <button type="button" class="primary"
+            :disabled="pending || busy || !draft.steps.length || !!validation" @click="reviewRun">
+            Review &amp; run
+          </button>
+          <button v-if="pending" type="button" class="secondary" @click="store.stop">Stop run</button>
+          <span class="save-state">{{ dirty ? 'Unsaved changes' : 'Saved' }}</span>
+        </div>
+      </div>
+      <div class="scenario-library-controls">
+        <label>
+          Saved
+          <select v-model="picker" :disabled="pending" aria-label="Saved builder scenarios" @change="openSaved">
+            <option value="">Current draft</option>
+            <option v-for="item in saved" :key="item.id" :value="item.id">{{ item.name }}</option>
+          </select>
+        </label>
+        <button type="button" class="secondary" :disabled="pending" @click="fresh">New</button>
+      </div>
       <details class="scenario-description">
         <summary>Scenario details</summary>
         <textarea
@@ -726,17 +728,6 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
           <input v-model.number="draft.concurrency" :disabled="pending" type="number" min="1" max="8" step="1">
         </label>
       </details>
-      <label
-        >Saved<select
-          v-model="picker"
-          :disabled="pending"
-          aria-label="Saved builder scenarios"
-          @change="openSaved"
-        >
-          <option value="">Current draft</option>
-          <option v-for="item in saved" :key="item.id" :value="item.id">{{ item.name }}</option>
-        </select></label
-      >
       <button
         type="button"
         class="secondary"
@@ -1626,6 +1617,8 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 }
 .builder-header,
 .builder-actions,
+.scenario-identity,
+.scenario-library-controls,
 .builder-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1639,8 +1632,16 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 .builder-header {
   font-size: 0.78rem;
 }
-.builder-actions {
-  margin-left: auto;
+.scenario-identity,
+.scenario-library-controls {
+  min-width: 0;
+}
+.scenario-library-controls {
+  border-inline-start: 1px solid var(--line);
+  padding-inline-start: .65rem;
+}
+.scenario-library-controls label {
+  min-width: 0;
 }
 .save-state {
   font-size: 0.68rem;
@@ -1661,7 +1662,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
   max-width: 15rem;
 }
 .scenario-name {
-  flex: 1;
+  min-width: 0;
 }
 .scenario-name input {
   flex: 1;
@@ -1956,11 +1957,13 @@ summary {
   .inspector-content {
     max-height: none;
   }
-  .builder-actions {
-    margin-left: 0;
-  }
-  .builder-toolbar > label {
+  .scenario-identity,
+  .scenario-name {
     width: 100%;
+  }
+  .scenario-library-controls {
+    border-inline-start: 0;
+    padding-inline-start: 0;
   }
   .builder-toolbar select,
   .builder-toolbar input {
