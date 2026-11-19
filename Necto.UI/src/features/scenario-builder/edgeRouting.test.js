@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {createEdgeRouter,routeGeometry,CARD_WIDTH,CARD_HEIGHT} from './edgeRouting.js'
+import {createEdgeRouter,routeGeometry,placeConnectionControls,CARD_WIDTH,CARD_HEIGHT} from './edgeRouting.js'
 const card=(id,x,y)=>({step:{id},x,y})
 function assertClear(route,nodes,from,to){
  assert.ok(route,'route exists')
@@ -37,4 +37,38 @@ test('bounded router handles the maximum scenario size and 1000 connections dete
  let routed=0
  for(let i=0;i<1000;i++){const a=i%100,b=(a+1+Math.floor(i/100))%100;const r=route('n'+a,'n'+b);if(r){assertClear(r,nodes,'n'+a,'n'+b);routed++}}
  assert.equal(routed,1000)
+})
+
+test('fan-out and fan-in use separate ports and independently clickable controls', () => {
+ const nodes = [card('a', 170, 180), card('b', 450, 70), card('c', 450, 300), card('d', 730, 180)]
+ const connections = [['a','b'], ['a','d'], ['a','c'], ['b','d'], ['c','d']].map(([from, to]) => ({ from, to }))
+ const route = createEdgeRouter(nodes, 550, { connections })
+ const edges = connections.map(edge => ({ ...edge, key: edge.from + edge.to, ...route(edge.from, edge.to) }))
+ assert.equal(new Set(edges.filter(edge => edge.from === 'a').map(edge => edge.points[0].y)).size, 3)
+ assert.equal(new Set(edges.filter(edge => edge.to === 'd').map(edge => edge.points.at(-1).y)).size, 3)
+ const cards = nodes.map(node => ({ ...node, width: CARD_WIDTH, height: CARD_HEIGHT }))
+ const controls = placeConnectionControls(edges, cards, 1)
+ assert.equal(controls.size, connections.length)
+ for (const [key, position] of controls) {
+  for (const [other, next] of controls) {
+   if (key !== other) assert.ok(Math.abs(position.x - next.x) >= 35 || Math.abs(position.y - next.y) >= 35)
+  }
+ }
+})
+
+test('overlapping lines get distinct controls when there is room and list access when there is not', () => {
+ const line = routeGeometry([{ x: 50, y: 50 }, { x: 240, y: 50 }])
+ const separated = placeConnectionControls([{ key: 'a', ...line }, { key: 'b', ...line }], [], 0.65)
+ assert.equal(separated.size, 2)
+ assert.ok(Math.abs(separated.get('a').x - separated.get('b').x) * 0.65 >= 35)
+
+ const short = routeGeometry([{ x: 50, y: 50 }, { x: 70, y: 50 }])
+ assert.equal(placeConnectionControls([{ key: 'a', ...short }, { key: 'b', ...short }], [], 1).size, 1)
+})
+
+test('keeps a route available when separate-lane search is exhausted', () => {
+ const nodes = [card('a', 170, 84), card('b', 450, 84), card('c', 730, 84)]
+ const connections = [{ from: 'a', to: 'b' }, { from: 'a', to: 'c' }]
+ const route = createEdgeRouter(nodes, 300, { connections, budget: 0 })
+ assertClear(route('a', 'c'), nodes, 'a', 'c')
 })

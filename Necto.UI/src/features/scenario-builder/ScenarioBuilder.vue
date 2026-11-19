@@ -847,6 +847,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       <ScenarioMap
         :blueprint="draft"
         :selected="selectedId"
+        :active-connection="edgeEdit ? connectionKey(edgeEdit.from, edgeEdit.to) : undefined"
         :steps="execution.stale ? [] : execution.steps"
         :disabled="pending"
         @select="select"
