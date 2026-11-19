@@ -90,6 +90,7 @@ const selected = computed(() => draft.value.steps.find((step) => step.id === sel
 const operation = computed(() =>
   props.operations.find((operation) => operation.key === selected.value?.operationKey)
 )
+const bodyEditor = ref(null)
 const suggestionsOpen = ref(false)
 const suggestionSummary = ref(null)
 const suggestionProblem = ref('')
@@ -108,11 +109,8 @@ watch(
   () => draft.value.id,
   () => appliedSuggestions.value.clear()
 )
-const suggestions = computed(() =>
-  suggestionsOpen.value
-    ? suggestInputs(draft.value, selected.value, operation.value, props.mappingLinks)
-    : []
-)
+const suggestions = computed(() => suggestInputs(draft.value, selected.value, operation.value, props.mappingLinks))
+const suggestionCount = computed(() => suggestions.value.reduce((count, group) => count + group.options.length, 0))
 watch(selectedId, () => {
   suggestionsOpen.value = false
   suggestionProblem.value = ''
@@ -547,6 +545,7 @@ async function goToIssue(issue, showResult = false) {
   await select(issue.stepId, showResult)
   if (!issue.target) return
   const { location, name } = issue.target
+  if (location === 'body' && await bodyEditor.value?.focusBinding(name)) return
   const attribute = location === 'body' ? 'data-body-path' : 'data-parameter'
   const key = location === 'body' ? name : location + ':' + name
   const row = [...stepDialog.value.querySelectorAll(`[${attribute}]`)].find(
@@ -554,7 +553,7 @@ async function goToIssue(issue, showResult = false) {
   )
   const focus = row?.querySelector('.expression-editor textarea:not([disabled])') ??
     row?.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled])') ??
-    stepDialog.value.querySelector('.request-inputs > h4')
+    stepDialog.value.querySelector('.request-input-heading > h4')
   focus?.scrollIntoView({ block: 'nearest' })
   focus?.focus({ preventScroll: true })
 }
@@ -978,14 +977,14 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
               Endpoint unavailable. Enable its API connection before running.
             </p>
             <section v-if="requestParameters.length || operation?.requestBody" class="request-inputs" aria-label="Request inputs">
-              <h4 tabindex="-1">Request inputs</h4>
-              <details
-                v-if="operation"
-                :key="selected.id"
-                class="input-suggestions"
-                @toggle="suggestionsOpen = $event.target.open"
-              >
-                <summary>Suggested inputs</summary>
+              <div class="request-input-heading">
+                <h4 tabindex="-1">Request inputs</h4>
+                <button v-if="operation && (suggestionCount || suggestionsOpen)" type="button" class="secondary"
+                  :aria-expanded="suggestionsOpen" @click="suggestionsOpen = !suggestionsOpen">
+                  Suggested inputs ({{ suggestionCount }})
+                </button>
+              </div>
+              <section v-if="suggestionsOpen" class="input-suggestions" aria-label="Suggested inputs">
                 <div class="suggestion-content">
                   <p class="suggestion-hint">Choose a suggestion to add a response binding to this request.</p>
                   <div
@@ -1042,7 +1041,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
                   </div>
                   <p v-if="suggestionProblem" class="error" role="alert">{{ suggestionProblem }}</p>
                 </div>
-              </details>
+              </section>
               <div v-if="requestParameters.length" class="request-parameters">
                 <div v-for="parameter in requestParameters"
                   :key="parameter.in + ':' + parameter.name" class="request-parameter" :data-parameter="parameter.in + ':' + parameter.name">
@@ -1059,6 +1058,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
                 </div>
               </div>
               <ScenarioBodyEditor
+                ref="bodyEditor"
                 v-if="operation?.requestBody"
                 :key="selected.id"
                 :step="selected"
@@ -1070,7 +1070,11 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
                 :disabled="pending"
               />
             </section>
-            <details v-if="inbound.length" class="incoming-links" aria-label="Incoming connections">
+            <button v-if="inbound.length === 1" type="button" class="secondary incoming-link"
+              @click="openConnection(inbound[0], $event)">
+              Edit connection · {{ connectionSummary(inbound[0], draft.steps) }}
+            </button>
+            <details v-else-if="inbound.length" class="incoming-links" aria-label="Incoming connections">
               <summary>Incoming connections ({{ inbound.length }})</summary>
               <button
                 v-for="edge in inbound"
@@ -1334,7 +1338,9 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 <style scoped>
 .request-inputs { padding-block-start: .15rem; }
 .scenario-parallelism { margin-top: .45rem; }
-.request-inputs > h4 { margin: 0 0 .55rem; font-size: .9rem; }
+.request-input-heading { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; justify-content: space-between; margin-bottom: .55rem; }
+.request-input-heading h4 { margin: 0; font-size: .9rem; }
+.request-input-heading button { font-size: .75rem; }
 .request-parameters { display: grid; gap: .45rem; }
 .request-parameter { padding: .55rem; border: 1px solid var(--line); border-radius: .45rem; }
 .parameter-label { display: grid; gap: .25rem; font-size: .8rem; margin-bottom: .25rem; }
@@ -1392,8 +1398,6 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
   border-radius: 0.45rem;
   background: var(--accent-soft);
 }
-.input-suggestions > summary { padding: .35rem .55rem; font-weight: 600; }
-.input-suggestions[open] > summary { border-bottom: 1px solid var(--line); }
 .suggestion-content { padding: .5rem .65rem; overflow-wrap: anywhere; }
 .suggestion-hint { margin: 0 0 .5rem; color: var(--muted); }
 .input-suggestions ul {
@@ -1529,6 +1533,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 .connection-popover footer .error {
   margin-right: auto;
 }
+.incoming-link { margin-bottom: .55rem; font-size: .75rem; }
 .incoming-links {
   margin-bottom: 1rem;
   display: grid;

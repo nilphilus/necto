@@ -1,9 +1,56 @@
 <script setup>
-import { computed } from 'vue'
-import { validateExpression } from './expression.js'
-const props=defineProps({input:Object,step:Object,steps:Array,variables:{type:Array,default:()=>[]},disabled:Boolean})
+import { computed, ref, watch } from 'vue'
+import { evaluateExpression, validateExpression } from './expression.js'
+import { readPointer } from './pointers.js'
+import { staticVariableValue } from './variables.js'
+import { schemaIssues } from '../workbench/schema.js'
+const props=defineProps({input:Object,step:Object,steps:Array,variables:{type:Array,default:()=>[]},results:Array,expectedSchema:Object,resolve:Function,disabled:Boolean})
 const error=computed(()=>{try{validateExpression(props.input);return ''}catch(cause){return cause.message}})
 function add(){props.input.bindings.push({name:'value'+(props.input.bindings.length+1),source:'response',stepId:'',responsePointer:''})}
+const showPreview = ref(false)
+const samples = ref(new Map())
+const preview = ref(null)
+watch(() => [props.input.expression, props.input.bindings], () => { preview.value = null }, { deep: true })
+function bindingValue(binding) {
+  if (binding.source === 'variable') {
+    const variable = props.variables.find(item => item.id === binding.variableId)
+    if (variable?.source === 'static') return staticVariableValue(variable)
+    throw new Error(`No preview value for shared variable "${variable?.name ?? binding.variableId}". Enter a sample for "${binding.name}".`)
+  }
+  const result = props.results?.find(item => item.id === binding.stepId && item.status === 'completed')
+  try { return readPointer(result?.response?.json, binding.responsePointer) }
+  catch {
+    const origin = props.steps.find(item => item.id === binding.stepId)
+    throw new Error(`Missing "${binding.name}" from "${origin?.label ?? binding.stepId}" at ${binding.responsePointer || '(whole response)'}. Enter a sample or run the earlier step.`)
+  }
+}
+const jsonText = value => JSON.stringify(value, null, 2)
+const displayJson = value => {
+  const text = jsonText(value)
+  return text.length > 4000 ? text.slice(0, 4000) + '…' : text
+}
+function runPreview() {
+  try {
+    validateExpression(props.input)
+    const values = Object.create(null)
+    for (const binding of props.input.bindings) {
+      const sample = samples.value.get(binding.name)
+      if (sample?.trim()) {
+        try { values[binding.name] = JSON.parse(sample) }
+        catch { throw new Error(`Sample for "${binding.name}" must be valid JSON.`) }
+      } else values[binding.name] = bindingValue(binding)
+    }
+    const result = evaluateExpression(props.input.expression, values)
+    const type = result === null ? 'null' : Array.isArray(result) ? 'array' : Number.isInteger(result) ? 'integer' : typeof result
+    preview.value = { values, result, type, issues: schemaIssues(result, props.expectedSchema, props.resolve) }
+  } catch (cause) {
+    const alias = cause.path?.match(/^[A-Za-z_$][A-Za-z0-9_$]*/)?.[0]
+    const binding = props.input.bindings.find(item => item.name === alias && item.source === 'response')
+    const origin = binding && props.steps.find(item => item.id === binding.stepId)
+    const source = origin ? ` Source: "${origin.label}" at ${binding.responsePointer || '(whole response)'}.` : ''
+    preview.value = { error: cause.message + source }
+  }
+}
 </script>
 <template>
  <fieldset class="expression-editor" :disabled="disabled" aria-label="Expression configuration">
@@ -18,8 +65,33 @@ function add(){props.input.bindings.push({name:'value'+(props.input.bindings.len
   <button type="button" class="secondary" :disabled="input.bindings.length>=16" @click="add">Add expression input</button>
   <p v-if="error" class="error" role="status">{{error}}</p>
   <small>Read selected inputs by name. Return a JSON value. Supports const, if, switch and basic operators; no functions, loops, imports or browser access. {{ input.location === 'body' ? 'A run preset can replace this value if explicitly allowed.' : 'Matching run presets override this value.' }} Code is saved as written; keep secrets in local authorization or human inputs.</small>
+  <details v-if="input.location === 'body'" class="expression-preview" @toggle="showPreview = $event.target.open">
+   <summary>Preview result</summary>
+   <template v-if="showPreview">
+    <p>Uses the latest completed response or sample JSON entered below. Preview sends no request and samples are not saved.</p>
+    <label v-for="binding in input.bindings" :key="binding.name">
+     Sample for {{ binding.name }}
+     <textarea :value="samples.get(binding.name) ?? ''" rows="2" maxlength="65536" spellcheck="false"
+       placeholder="Optional JSON override"
+       @input="samples.set(binding.name, $event.target.value); preview = null" />
+    </label>
+    <button type="button" class="secondary" :disabled="!!error" @click="runPreview">Evaluate expression</button>
+    <p v-if="preview?.error" class="error" role="alert">{{ preview.error }}</p>
+    <template v-else-if="preview">
+     <template v-if="input.bindings.length"><strong>Inputs</strong><pre>{{ displayJson(preview.values) }}</pre></template>
+     <strong>Result · {{ preview.type }}</strong>
+     <pre>{{ displayJson(preview.result) }}</pre>
+     <ul v-if="preview.issues.length" class="error"><li v-for="issue in preview.issues" :key="issue">{{ issue }}</li></ul>
+    </template>
+   </template>
+  </details>
  </fieldset>
 </template>
 <style scoped>
 .expression-editor { display:grid; gap:.45rem; border:0; padding:.5rem 0; margin:0; min-width:0; width:100%; }label { display:grid; gap:.2rem; min-width:0; font:.73rem system-ui; }textarea { width:100%; min-width:0; padding:.4rem; font:.75rem/1.5 ui-monospace,monospace; resize:vertical; }input,select { min-width:0; width:100%; padding:.3rem; }.expression-binding { display:flex; flex-wrap:wrap; align-items:end; gap:.35rem; }.expression-binding label { flex:1 1 7rem; }.expression-editor>button { justify-self:start; }small { color:var(--muted); font:.68rem/1.5 system-ui; }.error { margin:0; font:.72rem system-ui; }
+.expression-preview { border-top: 1px solid var(--line); padding-top: .5rem; font: .75rem system-ui; }
+.expression-preview summary { cursor: pointer; }
+.expression-preview label { margin-block: .4rem; }
+.expression-preview strong { display: block; margin-top: .5rem; }
+.expression-preview pre { background: var(--surface); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 15rem; overflow: auto; padding: .4rem; }
 </style>

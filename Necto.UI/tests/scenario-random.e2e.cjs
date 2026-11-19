@@ -1,9 +1,9 @@
 const {run}=require('./qa-fixture.cjs')
 run(async({p,assert,builder,add,execute,review,save,saved,shot,calls})=>{
  await builder();await p.getByRole('textbox',{name:'Scenario name',exact:true}).fill('Pick an invoice row');await add('Invoice rows');await add('Create invoice')
- const body=p.getByRole('region',{name:'Request body schema',exact:true}),field=pointer=>body.locator(`[data-body-path="${pointer}"]`)
+ const body=p.getByRole('region',{name:'Request body schema',exact:true}),panel=body.getByRole('region',{name:'Configure body field'})
  await body.getByRole('combobox',{name:'Source for customerId',exact:true}).selectOption('random')
- const random=field('/customerId').locator('.random-source')
+ const random=panel.locator('.random-source')
  await random.getByRole('combobox',{name:'Random source step',exact:true}).selectOption({label:'Invoice rows'})
  await random.getByRole('textbox',{name:'Random item pointer',exact:true}).fill('/id')
  await save();const definition=await saved();assert.equal(definition.version,7);assert.equal(definition.steps[1].inputs[0].source,'random');assert.equal(calls.length,0)
@@ -12,9 +12,13 @@ run(async({p,assert,builder,add,execute,review,save,saved,shot,calls})=>{
  await p.getByRole('button',{name:'Variables (0)',exact:true}).click();const vars=p.getByRole('dialog',{name:'Shared variables',exact:true})
  await vars.getByRole('button',{name:'Add variable',exact:true}).click();await vars.getByLabel('Variable name',{exact:true}).fill('selectedRow');await vars.getByLabel('Variable source',{exact:true}).selectOption('random')
  await vars.getByLabel('Random source step',{exact:true}).selectOption({label:'Invoice rows'});await vars.getByRole('button',{name:'Apply variables',exact:true}).click()
+ await p.locator('.map-node').filter({hasText:'Create invoice'}).click()
  for(const [pointer,name,code] of [['/customerId','customerId','return selected.id;'],['/name','name','return selected.name;']]){
-  await body.getByRole('combobox',{name:'Source for '+name,exact:true}).selectOption('expression')
-  const editor=field(pointer).locator('.expression-editor');await editor.getByLabel('Expression code',{exact:true}).fill(code);await editor.getByRole('button',{name:'Add expression input',exact:true}).click();await editor.getByLabel('Expression input name',{exact:true}).fill('selected');await editor.getByLabel('Expression input source',{exact:true}).selectOption('variable');await editor.getByLabel('Expression variable',{exact:true}).selectOption({label:'selectedRow'})
+  if (pointer === '/customerId') {
+   await body.getByRole('button',{name:'Edit source for customerId: Pick random'}).click()
+   await panel.getByLabel('Value source',{exact:true}).selectOption('expression')
+  } else await body.getByRole('combobox',{name:'Source for '+name,exact:true}).selectOption('expression')
+  const editor=panel.locator('.expression-editor');await editor.getByLabel('Expression code',{exact:true}).fill(code);await editor.getByRole('button',{name:'Add expression input',exact:true}).click();await editor.getByLabel('Expression input name',{exact:true}).fill('selected');await editor.getByLabel('Expression input source',{exact:true}).selectOption('variable');await editor.getByLabel('Expression variable',{exact:true}).selectOption({label:'selectedRow'});await panel.getByRole('button',{name:'Back to body'}).click()
  }
  await save();const shared=await saved();assert.equal(shared.variables[0].source,'random');assert.equal(shared.variables[0].itemPointer,'')
  await execute(2);const sent=calls.at(-1).body;assert.equal(sent.name,'Invoice '+sent.customerId)

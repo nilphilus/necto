@@ -2,6 +2,11 @@ import { applyInput } from './model.js'
 import { pointerParts, readPointer } from './pointers.js'
 import { schemaTemplate } from '../request-runner/schemaTemplate.js'
 export const BODY_VALUE=Symbol('necto-body-value')
+export const BODY_FIELD_EDITOR = Symbol('necto-body-field-editor')
+export const BODY_SOURCE_LABELS = {
+  response: 'From response', variable: 'Shared variable', preset: 'Preset',
+  generate: 'Generate data', expression: 'Expression', random: 'Pick random', human: 'Ask at run time',
+}
 export const pointer = parts => parts.length ? '/' + parts.map(part=>String(part).replaceAll('~','~0').replaceAll('/','~1')).join('/') : ''
 export const prefix = (a,b) => a.length<=b.length && a.every((part,index)=>String(part)===String(b[index]))
 export function schemaView(operation, raw, variant=0, seen=new Set()) {
