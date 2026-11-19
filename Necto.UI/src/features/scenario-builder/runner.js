@@ -197,7 +197,7 @@ export function remainingSteps(plan) {
   while (changed) {
     changed = false
     for (const step of plan) {
-      if (available.has(step.id) || step.status !== 'skipped' || step.request) continue
+      if (available.has(step.id) || !['skipped', 'cancelled'].includes(step.status) || step.request) continue
       if (!step.dependencies.every(id => available.has(id))) continue
       available.add(step.id)
       remaining.push(step)
@@ -218,7 +218,9 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
     if (!canRetryStep(target)) throw new Error('This step has no failed request to retry.')
     Object.assign(target, { status: 'waiting', error: '', problemTarget: undefined })
   }
-  if (resume) for (const step of remainingSteps(plan)) step.status = 'waiting'
+  if (resume) for (const step of remainingSteps(plan)) {
+    Object.assign(step, { status: 'waiting', error: '', attempt: undefined, maxAttempts: undefined })
+  }
   let failure, activeRequests = 0
   const waiting = []
   function release() { activeRequests--; waiting.shift()?.grant() }
@@ -261,6 +263,8 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
   }
   const run = async step => {
     step.status = 'preparing'
+    const preparedBody = step.session.body
+    const preparedFields = { ...step.session.fields }
     let releaseSlot, issueInput
     const policies = step.entryPolicies ?? [step]
     const delayMs = Math.max(0, ...policies.map(policy => policy.delayMs ?? 0))
@@ -360,6 +364,10 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
     } catch (cause) {
       step.status = combined.aborted ? 'cancelled' : 'failed'
       step.error = combined.aborted ? 'Canceled.' : cause.message
+      if (combined.aborted && !step.request) {
+        // Resume re-evaluates bindings against the original prepared request.
+        Object.assign(step.session, { body: preparedBody, fields: preparedFields })
+      }
       if (!combined.aborted && !failure) {
         const issue = stepIssue(cause, step, issueInput)
         step.problemTarget = issue.target

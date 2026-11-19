@@ -561,3 +561,27 @@ test('human waiting does not consume a network slot, even with parallelism set t
   assert.equal((await run).status, 'completed')
   assert.deepEqual(calls, ['independent', 'ask'])
 })
+
+test('resume includes queued requests cancelled before dispatch and keeps completed writes', async () => {
+  const plan = [
+    ['write', []], ['queued', []], ['child', ['write']],
+  ].map(([id, dependencies]) => ({
+    id, label: id, dependencies, operation: { id, method: 'POST' },
+    session: { fields: {} }, inputs: [], status: 'waiting',
+  }))
+  const calls = []
+  const options = {
+    concurrency: 1, signal: new AbortController().signal,
+    execute: async (operation, session, values, signal, onRequest) => {
+      calls.push(operation.id)
+      onRequest({ url: 'https://api.example.test', options: { method: 'POST', headers: {} } })
+      return calls.length === 1 ? { ok: false, status: 503 } : { ok: true, status: 200 }
+    },
+  }
+  assert.equal((await executeBlueprint(plan, options)).status, 'failed')
+  assert.equal(plan[1].status, 'cancelled')
+  assert.equal(plan[1].request, undefined)
+  assert.equal((await executeBlueprint(plan, { ...options, retryStepId: 'write' })).status, 'incomplete')
+  assert.equal((await executeBlueprint(plan, { ...options, resume: true })).status, 'completed')
+  assert.deepEqual(calls, ['write', 'write', 'queued', 'child'])
+})
