@@ -5631,6 +5631,11 @@ function evaluateExpression(code, values) {
 	}
 }
 // Necto.UI/src/features/workbench/body.js
+var isJson = (type) => /(?:\/|\+)json(?:;|$)/i.test(type);
+function bodyContent(operation, draft = {}) {
+	const entries = Object.entries(operation.requestBody?.content ?? {});
+	return entries.find(([type]) => type === draft.mediaType) ?? entries.find(([type]) => isJson(type)) ?? entries[0];
+}
 function validatePayloadSnapshot(snapshot) {
 	if (snapshot.bodyVariants !== void 0 && (!snapshot.bodyVariants || Array.isArray(snapshot.bodyVariants) || typeof snapshot.bodyVariants !== "object" || Object.keys(snapshot.bodyVariants).length > 1e3 || Object.entries(snapshot.bodyVariants).some(([key, index]) => key !== "" && !key.startsWith("/") || key.length > 2048 || !Number.isInteger(index) || index < 0 || index > 1e3))) throw new Error("Invalid body schema variants.");
 	if (snapshot.extraHeaders !== void 0 && (!snapshot.extraHeaders || Array.isArray(snapshot.extraHeaders) || typeof snapshot.extraHeaders !== "object" || Object.keys(snapshot.extraHeaders).length > 100 || Object.values(snapshot.extraHeaders).some((value) => typeof value !== "string"))) throw new Error("Invalid imported headers.");
@@ -5986,4 +5991,149 @@ function validateBlueprint(blueprint) {
 	layers(blueprint);
 	return blueprint;
 }
-export { evaluateExpression, layers, validateBlueprint };
+// Necto.UI/src/features/scenario-builder/bodySchema.js
+var pointer = (parts) => parts.length ? "/" + parts.map((part) => String(part).replaceAll("~", "~0").replaceAll("/", "~1")).join("/") : "";
+var prefix = (a, b) => a.length <= b.length && a.every((part, index) => String(part) === String(b[index]));
+function schemaView(operation, raw, variant = 0, seen = /* @__PURE__ */ new Set()) {
+	const schema = operation.resolve(raw) ?? {};
+	if (seen.has(schema)) return schema;
+	const next = new Set(seen).add(schema), variants = schema.oneOf ?? schema.anyOf ?? [];
+	const parts = [
+		schema,
+		...(schema.allOf ?? []).map((part) => schemaView(operation, part, 0, next)),
+		...variants.length ? [schemaView(operation, variants[variant] ?? variants[0], 0, next)] : []
+	];
+	const view = Object.assign(Object.create(null), ...parts, {
+		properties: Object.assign(Object.create(null), ...parts.map((part) => part.properties ?? {})),
+		required: [...new Set(parts.flatMap((part) => part.required ?? []))]
+	});
+	delete view.allOf;
+	delete view.oneOf;
+	delete view.anyOf;
+	return view;
+}
+function inferVariant(operation, raw, value, stored) {
+	const schema = operation.resolve(raw) ?? {}, variants = schema.oneOf ?? schema.anyOf ?? [];
+	if (!value || typeof value !== "object") return Number.isInteger(stored) && stored >= 0 && stored < variants.length ? stored : 0;
+	const tag = schema.discriminator?.propertyName, mapping = schema.discriminator?.mapping ?? {};
+	if (tag && Object.hasOwn(value, tag)) {
+		const index = variants.findIndex((variant) => variant.$ref === mapping[value[tag]] || operation.resolve(variant)?.properties?.[tag]?.const === value[tag] || operation.resolve(variant)?.properties?.[tag]?.enum?.includes(value[tag]));
+		if (index >= 0) return index;
+	}
+	const scores = variants.map((variant) => Object.keys(schemaView(operation, variant).properties ?? {}).filter((key) => Object.hasOwn(value, key)).length), best = Math.max(0, ...scores);
+	return best && scores.filter((score) => score === best).length === 1 ? scores.indexOf(best) : Number.isInteger(stored) && stored >= 0 && stored < variants.length ? stored : 0;
+}
+// Necto.UI/src/features/scenario-builder/bodyFieldNames.js
+function fieldName(properties, key) {
+	if (Object.hasOwn(properties, key)) return key;
+	const lower = key.toLowerCase();
+	const matches = Object.keys(properties).filter((name) => name.toLowerCase() === lower);
+	return matches.length === 1 ? matches[0] : key;
+}
+function normalizeBodyFieldNames(operation, request, inputs) {
+	const media = bodyContent(operation, request);
+	if (!isJson(media?.[0] ?? "") || !media[1].schema) return {
+		body: request.body,
+		inputs
+	};
+	let body;
+	try {
+		body = JSON.parse(request.body || "{}");
+	} catch {
+		return {
+			body: request.body,
+			inputs
+		};
+	}
+	let changed = false;
+	let conflict;
+	const viewFor = (raw, value, path) => schemaView(operation, raw, inferVariant(operation, raw, value, request.bodyVariants?.[pointer(path)]));
+	function normalizeValue(raw, value, path) {
+		if (!raw || !value || typeof value !== "object" || path.length >= 32) return value;
+		const schema = viewFor(raw, value, path);
+		if (Array.isArray(value)) return value.map((item, index) => normalizeValue(schema.items, item, [...path, index]));
+		const mapped = Object.entries(value).map(([key, item]) => [
+			fieldName(schema.properties, key),
+			key,
+			item
+		]);
+		const counts = /* @__PURE__ */ new Map();
+		for (const [name] of mapped) counts.set(name, (counts.get(name) ?? 0) + 1);
+		return Object.fromEntries(mapped.map(([name, key, item]) => {
+			if (name !== key && counts.get(name) > 1) {
+				conflict ??= `Both ${pointer([...path, key])} and ${pointer([...path, name])} refer to the same OpenAPI field. Keep one spelling in Raw JSON.`;
+				return [key, item];
+			}
+			if (name !== key) changed = true;
+			return [name, normalizeValue(schema.properties[name], item, [...path, name])];
+		}));
+	}
+	body = normalizeValue(media[1].schema, body, []);
+	function normalizeInput(input) {
+		if (input.location !== "body" || !input.pointer) return input;
+		let original;
+		try {
+			original = pointerParts(input.pointer);
+		} catch {
+			return input;
+		}
+		let raw = media[1].schema;
+		let value = body;
+		const parts = [];
+		for (const part of original) {
+			const schema = viewFor(raw, value, parts);
+			const array = Array.isArray(value) || schema.type === "array";
+			const name = array ? part : fieldName(schema.properties, part);
+			parts.push(name);
+			raw = array ? schema.items : schema.properties[name];
+			value = value && typeof value === "object" && Object.hasOwn(value, name) ? value[name] : void 0;
+		}
+		const target = pointer(parts);
+		if (target === input.pointer) return input;
+		try {
+			pointerParts(target);
+		} catch {
+			return input;
+		}
+		return {
+			...input,
+			pointer: target
+		};
+	}
+	const normalized = inputs.map(normalizeInput);
+	const targets = [];
+	for (const input of normalized) {
+		if (input.location !== "body") continue;
+		let path;
+		try {
+			path = pointerParts(input.pointer);
+		} catch {
+			continue;
+		}
+		if (targets.some((target) => prefix(path, target) || prefix(target, path))) conflict ??= `Conflicting sources for ${input.pointer || "(whole body)"} after matching OpenAPI field names. Keep one source in Advanced body bindings.`;
+		targets.push(path);
+	}
+	return conflict ? {
+		body: request.body,
+		inputs,
+		conflict
+	} : {
+		body: changed ? JSON.stringify(body, null, 2) : request.body,
+		inputs: normalized
+	};
+}
+// Necto.UI/src/features/workbench/openapiReference.js
+function resolveReference(spec, value) {
+	const visited = /* @__PURE__ */ new Set();
+	while (value?.$ref) {
+		const reference = value.$ref;
+		if (!reference.startsWith("#/") || visited.has(reference)) return void 0;
+		visited.add(reference);
+		value = decodeURIComponent(reference.slice(2)).split("/").reduce((node, key) => {
+			const name = key.replaceAll("~1", "/").replaceAll("~0", "~");
+			return node && Object.hasOwn(node, name) ? node[name] : void 0;
+		}, spec);
+	}
+	return value;
+}
+export { evaluateExpression, layers, normalizeBodyFieldNames, resolveReference, validateBlueprint };

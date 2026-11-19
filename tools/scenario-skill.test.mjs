@@ -58,6 +58,39 @@ test('version-7 shared variables, generated JSON body and polling are accepted b
  })
  assert.doesNotThrow(()=>validateText(value));assert.doesNotThrow(()=>parseShared(value))
 })
+test('optional OpenAPI review checks saved JSON keys and target pointers independently', () => {
+ const scenario = (bodyKey, pointerKey) => mutate(b => {
+  const step = b.steps[2]
+  step.method = 'POST'
+  step.operationKey = 'POST ' + step.path
+  step.request.body = JSON.stringify({ Items: [{ [bodyKey]: 0 }] })
+  step.inputs.push({ location: 'body', pointer: '/Items/0/' + pointerKey,
+   source: 'expression', expression: 'return 7;', bindings: [] })
+ })
+ const spec = {
+  openapi: '3.1.0',
+  paths: {
+   '/invoices/by-reference': { get: {} },
+   '/weatherforecast': { get: {} },
+   '/invoices/{invoiceId}/lines': { post: { requestBody: { $ref: '#/components/requestBodies/Lines' } } },
+  },
+  components: {
+   requestBodies: {
+    Lines: { content: { 'application/json': { schema: { $ref: '#/components/schemas/Lines' } } } },
+   },
+   schemas: {
+    Lines: { properties: { Items: { type: 'array', items: { $ref: '#/components/schemas/Line' } } } },
+    Line: { properties: { Type: { type: 'integer' } } },
+   },
+  },
+ }
+ assert.doesNotThrow(() => validateText(scenario('Type', 'Type'), spec))
+ assert.throws(() => validateText(scenario('type', 'Type'), spec), /Step 3: JSON body key or target pointer/)
+ assert.throws(() => validateText(scenario('Type', 'type'), spec), /Step 3: JSON body key or target pointer/)
+ spec.components.schemas.Line.properties.type = { type: 'integer' }
+ assert.doesNotThrow(() => validateText(scenario('type', 'Type'), spec))
+})
+
 test('rejects excessive embedded JSON and outer structures without recursive crashes',()=>{
  const deep='['.repeat(66)+'0'+']'.repeat(66)
  assert.throws(()=>validateText(mutate(b=>b.steps[0].request.body=deep)),/structural/)
