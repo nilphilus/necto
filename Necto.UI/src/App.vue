@@ -22,7 +22,7 @@ import RequestSamples from './features/request-runner/RequestSamples.vue'
 import { createSampleDrafts } from './features/request-runner/samples.js'
 import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
 import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
-import { createRelatedDrafts } from './features/related-endpoints/drafts.js'
+import { useRelatedTargets } from './features/related-endpoints/useRelatedTargets.js'
 import RelatedTargets from './features/related-endpoints/RelatedTargets.vue'
 import ExternalApiSettings from './features/external-apis/ExternalApiSettings.vue'
 import EndpointGraph from './features/endpoint-graph/EndpointGraph.vue'
@@ -39,7 +39,7 @@ import { useScenarios } from './features/scenarios/useScenarios.js'
 import { rememberBinding } from './features/scenarios/scenario.js'
 import { readRoute, routePath } from './features/routing/routes.js'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
-import { buildRequest, contextKey, hasPresetFor, presetInputs } from './features/request-runner/request.js'
+import { buildRequest, hasPresetFor } from './features/request-runner/request.js'
 
 const authentication = useAuthentication()
 const authorizationOpen = ref(false)
@@ -380,29 +380,7 @@ const relatedResults = computed(() => {
   return results
 })
 
-const relatedDraftFor = createRelatedDrafts()
-const relatedTargets = computed(() => {
-  if (!current.value) return []
-  const { operation, session } = current.value
-  const selected = session.result?.selectedPath
-    ? targetsFor(operation, session.result) : []
-  const result = session.result ? { ...session.result, selectedPath: undefined } : null
-  return targetsFor(operation, result).map(target => {
-    const values = valuesFor(target.operation)
-    return {
-      ...target,
-      drafts: relatedDraftFor(session.result, target.operation.key),
-      presetInputs: presetInputs(target.operation, createDraft(target.operation).body, values),
-      sourceParameters: target.operation.parameters.filter(parameter =>
-        ['path', 'query', 'header'].includes(parameter.in) &&
-        (parameter.required || parameter.in === 'path') && !values.has(contextKey(parameter)) && sourcesFor(target.operation, parameter.in, parameter.name).length),
-      selectedCandidates: selected.find(entry => entry.operation.key === target.operation.key)?.candidates ?? [],
-      candidates: target.candidates.filter(choice =>
-        choice.location === 'body' || !values.has(contextKey({ in: choice.location, name: choice.name })),
-      ),
-    }
-  })
-})
+const relatedTargets = useRelatedTargets(current, { targetsFor, sourcesFor, createDraft, valuesFor })
 
 async function focusEndpoint() {
   await nextTick()
