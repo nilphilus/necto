@@ -32,6 +32,8 @@ export function validateAssertions(checks = []) {
       typeof (check.path ?? '') !== 'string'
     )
       throw new Error('Invalid request check.')
+    if (check.comparison !== undefined && (check.kind !== 'equals' || check.comparison !== 'arazzo-simple'))
+      throw new Error('Invalid response comparison.')
     pointerPath(check.path)
     if (
       ['status', 'duration'].includes(check.kind) &&
@@ -40,7 +42,8 @@ export function validateAssertions(checks = []) {
       throw new Error('Enter a valid numeric expectation.')
     if (check.kind === 'equals') {
       try {
-        JSON.parse(check.expected)
+        const expected = JSON.parse(check.expected)
+        if (check.comparison === 'arazzo-simple' && expected !== null && typeof expected === 'object') throw new Error()
       } catch {
         throw new Error(
           'The expected value must be JSON, for example 42 or "PLN".'
@@ -48,6 +51,14 @@ export function validateAssertions(checks = []) {
       }
     }
   }
+}
+function equals(actual, expected, comparison) {
+  if (comparison !== 'arazzo-simple') return jsonEqual(actual, expected)
+  if (typeof actual === 'string' && typeof expected === 'string')
+    return actual.toLowerCase() === expected.toLowerCase()
+  if (actual === undefined || actual !== null && typeof actual === 'object') return false
+  // Arazzo simple criteria compare scalar values loosely.
+  return actual == expected
 }
 export function evaluateAssertions(checks = [], result) {
   validateAssertions(checks)
@@ -73,11 +84,11 @@ export function evaluateAssertions(checks = [], result) {
                   : typeof actual === 'object'
                     ? Object.keys(actual).length > 0
                     : true)
-              : jsonEqual(actual, JSON.parse(check.expected))
+              : equals(actual, JSON.parse(check.expected), check.comparison)
     return {
       ...check,
       passed,
-      label: `${assertionKinds[check.kind]}${check.path ? ' ' + check.path : ''}`,
+      label: `${check.comparison === 'arazzo-simple' ? 'Arazzo field equals' : assertionKinds[check.kind]}${check.path ? ' ' + check.path : ''}`,
       actual:
         actual === undefined
           ? '(missing)'

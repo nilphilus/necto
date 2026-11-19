@@ -29,6 +29,7 @@ import EntityGraph from './features/entity-graph/EntityGraph.vue'
 import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
 import CaptureRequestsDialog from './features/scenario-builder/CaptureRequestsDialog.vue'
 import { appendHistoryRequests } from './features/scenario-builder/captureHistory.js'
+import { importArazzoWorkflow, readArazzo } from './features/scenario-builder/arazzoImport.js'
 import { parseBuilderImport } from './features/scenario-builder/definitionImport.js'
 import { FILE_LIMIT } from './features/scenario-folder/format.js'
 import { useBuilder } from './features/scenario-builder/useBuilder.js'
@@ -467,18 +468,29 @@ async function openBuilderScenario(id, review = false) {
   if (review && graphView.value === 'builder' && !scenarioBusy.value) builderView.value?.reviewRun()
 }
 
-async function importLibraryScenario(file) {
+async function importLibraryScenario(file, choice) {
   const workspace = workspaceIdentity(configuration.value)
+  if (choice && workspace !== choice.workspace) throw new Error('The API workspace changed. Select the Arazzo file again.')
   if (scenarioBusy.value || !workspace) throw new Error('Load an API and wait for active requests before importing.')
   if (file.size > FILE_LIMIT) throw new Error('Scenario imports are limited to 2 MiB.')
   const text = await file.text()
   const content = new Blob([text], { type: 'application/json' })
-  let format
-  try { format = JSON.parse(text)?.format } catch { throw new Error('Invalid JSON in scenario file.') }
+  let json
+  try { json = JSON.parse(text) } catch { /* Arazzo can also be YAML. */ }
+  const arazzo = readArazzo(text, json)
+  const format = json?.format
   if (scenarioBusy.value || workspace !== workspaceIdentity(configuration.value))
     throw new Error('The API workspace changed. Import the scenario again.')
   let scenario
-  if (format === 'necto-shared-scenario') {
+  if (arazzo) {
+    if (!choice) return { workspace, workflows: arazzo.workflows.map(workflow => ({
+      id: workflow.workflowId, summary: typeof workflow.summary === 'string' ? workflow.summary.slice(0, 200) : '',
+      steps: workflow.steps.map((step, index) => typeof step?.stepId === 'string' ? step.stepId.slice(0, 120) : 'Step ' + (index + 1)),
+    })) }
+    scenario = importArazzoWorkflow(arazzo, choice.workflowId, operations.value,
+      activeServerDocument.value ?? configuration.value?.openApiUrl)
+    builderStore.saveCaptured(scenario)
+  } else if (format === 'necto-shared-scenario') {
     const imported = await scenarioFolder.importFile(content)
     if (!imported) {
       if (scenarioFolder.error) throw new Error(scenarioFolder.error)

@@ -5673,10 +5673,12 @@ function validateAssertions(checks = []) {
 	if (!Array.isArray(checks) || checks.length > 50) throw new Error("A request supports at most 50 checks.");
 	for (const check of checks) {
 		if (!Object.hasOwn(assertionKinds, check.kind) || typeof (check.path ?? "") !== "string") throw new Error("Invalid request check.");
+		if (check.comparison !== void 0 && (check.kind !== "equals" || check.comparison !== "arazzo-simple")) throw new Error("Invalid response comparison.");
 		pointerPath(check.path);
 		if (["status", "duration"].includes(check.kind) && (!Number.isFinite(Number(check.expected)) || Number(check.expected) < 0)) throw new Error("Enter a valid numeric expectation.");
 		if (check.kind === "equals") try {
-			JSON.parse(check.expected);
+			const expected = JSON.parse(check.expected);
+			if (check.comparison === "arazzo-simple" && expected !== null && typeof expected === "object") throw new Error();
 		} catch {
 			throw new Error("The expected value must be JSON, for example 42 or \"PLN\".");
 		}
