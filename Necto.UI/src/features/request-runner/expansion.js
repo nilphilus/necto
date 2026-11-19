@@ -18,23 +18,9 @@ export function expansionPlan(value, path = [], pages = new Map(), budget = EXPA
  return {paths,limited}
 }
 
-// Use the same page, depth and node limits as expansion itself.
-export function hasExpandableArray(value, path, pages) {
-  const queue = [{ value, path, depth: 0 }]
-  let remaining = EXPANSION_NODE_BUDGET - 1
-  for (const node of queue) {
-    if (!node.value || typeof node.value !== 'object' || node.depth >= EXPANSION_DEPTH_LIMIT) continue
-    const array = Array.isArray(node.value)
-    const keys = array ? null : Object.keys(node.value)
-    const range = pageRange(array ? node.value.length : keys.length,
-      pages.get(JSON.stringify(node.path)) ?? 1, PREVIEW_PAGE_SIZE)
-    const cost = range.end - range.start
-    if (cost > remaining) continue
-    if (array && cost) return true
-    remaining -= cost
-    for (const [key, child] of childEntries(node.value, range, keys)) {
-      if (child && typeof child === 'object') queue.push({ value: child, path: [...node.path, key], depth: node.depth + 1 })
-    }
-  }
-  return false
+// A bulk action is useful only when this page contains a child with contents.
+export function hasExpandableChildren(value, range, keys) {
+  return childEntries(value, range, keys).some(([, child]) =>
+    child !== null && typeof child === 'object' &&
+    (Array.isArray(child) ? child.length > 0 : Object.keys(child).length > 0))
 }

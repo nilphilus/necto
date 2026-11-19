@@ -2,7 +2,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright'),http=requi
 const root=path.resolve(__dirname,'../dist'),errors=[]
 const response={description:'Collections',content:{'application/json':{schema:{type:'object'}}}}
 const spec={openapi:'3.1.0',info:{title:'Nested collection preview',version:'1'},paths:{'/small':{get:{operationId:'Small',summary:'Nested invoice lists',responses:{200:response}}},'/large':{get:{operationId:'Large',summary:'Large nested lists',responses:{200:response}}}}}
-const small={invoices:Array.from({length:60},(_,id)=>({id,lines:[{lineId:id*10,metadata:{status:id===59?'Last invoice marker':'Ready'}}]})),events:[{event:{name:'Created'}}],errors:{email:['Required'],nested:{phone:['Invalid']}}}
+const small={invoices:Array.from({length:60},(_,id)=>({id,lines:[{lineId:id*10,metadata:{status:id===59?'Last invoice marker':'Ready'}}]})),events:[{event:{name:'Created'}}],errors:{email:['Required'],nested:{phone:['Invalid']}},details:{validation:{identity:{reason:'Object-only branch'}}},leaves:{plain:true,empty:{},list:[]}}
 const large={collections:Array.from({length:10000},(_,id)=>({id,rows:Array.from({length:25},(_,line)=>({line,metadata:{status:'Ready'}}))}))}
 let browser,server,page,base
 ;(async()=>{
@@ -11,7 +11,7 @@ let browser,server,page,base
  const open=async (name,list)=>{await page.getByRole('searchbox',{name:'Find an endpoint',exact:true}).fill(name);await page.locator('.catalog-operation').filter({hasText:name}).click();await page.getByRole('button',{name:'Send request',exact:true}).click();await page.getByRole('button',{name:'Expand children at '+JSON.stringify([list]),exact:true}).waitFor()}
  await open('Nested invoice lists','invoices');const preview=page.getByLabel('JSON response preview',{exact:true});assert.equal(await preview.getByRole('button',{name:'Expand ["invoices",0]',exact:true}).count(),1)
  const expandErrors = preview.getByRole('button', {name:'Expand children at ["errors"]',exact:true})
- assert.match(await expandErrors.getAttribute('title'),/including arrays/)
+ assert.match(await expandErrors.getAttribute('title'),/children under this object/)
  await expandErrors.click()
  await preview.getByText('"Required"', {exact:true}).waitFor()
  await preview.getByText('"Invalid"', {exact:true}).waitFor()
@@ -19,6 +19,11 @@ let browser,server,page,base
  await preview.getByRole('button',{name:'Collapse children at ["errors"]',exact:true}).click()
  assert.equal(await preview.getByText('"Invalid"',{exact:true}).count(),0)
  assert.equal(await preview.getByRole('button',{name:'Collapse ["errors"]',exact:true}).count(),1)
+ await preview.getByRole('button',{name:'Expand children at ["details"]',exact:true}).click()
+ await preview.getByText('"Object-only branch"',{exact:true}).waitFor()
+ await preview.getByRole('button',{name:'Collapse children at ["details"]',exact:true}).click()
+ assert.equal(await preview.getByText('"Object-only branch"',{exact:true}).count(),0)
+ assert.equal(await preview.getByRole('button',{name:'Expand children at ["leaves"]',exact:true}).count(),0)
  await page.getByRole('button',{name:'Expand children at ["invoices"]',exact:true}).click();await preview.getByRole('button',{name:'Collapse ["invoices",0,"lines",0,"metadata"]',exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Collapse children at ["invoices"]',exact:true}).getAttribute('aria-pressed'),'true')
  assert.equal(await preview.getByRole('button',{name:'Expand ["events",0]',exact:true}).count(),1)
  const events=preview.getByRole('button',{name:'Expand children at ["events"]',exact:true});assert.match(await events.getAttribute('title'),/Expand children in this list/);await events.click();await preview.getByRole('button',{name:'Collapse ["events",0,"event"]',exact:true}).waitFor()
