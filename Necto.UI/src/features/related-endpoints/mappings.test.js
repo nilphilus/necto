@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readValues, matchesPath, applyChoice } from './mappings.js'
+import { readValues, matchesPath, applyChoice, indexValueSources } from './mappings.js'
 
 test('selection uses only the chosen invoice line and preserves legacy mappings', () => {
   const response = [{ lineId: 17 }, { lineId: 18 }]
@@ -42,4 +42,15 @@ test('bounded suggestions and late-page selections do not enumerate the response
   reads = 0
   assert.deepEqual(readValues(array, source, [199999], 200), [199999])
   assert.equal(reads, 1)
+})
+
+test('value sources use incoming links without depending on a response', () => {
+  const from = { key: 'list', method: 'GET' }
+  const to = { key: 'details' }
+  const link = { from, to, location: 'path', name: 'assetId' }
+  const declared = { ...link, origin: 'openapi', source: { objectPath: [0], property: 'id', responseStatus: '200' } }
+  const inferred = { ...link, origin: 'mapping', source: { objectPath: ['invoice.lines', null], property: 'id' } }
+  const sources = indexValueSources([declared, inferred, inferred, { ...link, constant: 0 }, { ...link, navigationOnly: true }])
+  assert.deepEqual(sources.get(JSON.stringify(['details', 'path', 'assetId'])).map(source => source.path),
+    ['$[0].id', '$["invoice.lines"][*].id'])
 })

@@ -1,4 +1,5 @@
 <script setup>
+import ValueSourceHelp from '../related-endpoints/ValueSourceHelp.vue'
 import DescriptionHelp from '../workbench/DescriptionHelp.vue'
 import { computed, nextTick, ref, useId, watch, watchPostEffect } from 'vue'
 import { bodyFields, hasBodyExample } from './bodyHelp.js'
@@ -31,9 +32,10 @@ const props = defineProps({
   configuration: Object,
   history: Object,
   parameterChoices: Function,
+  valueSources: { type: Function, default: () => [] },
 })
 
-const emit = defineEmits(['edit-preset', 'choose-parameter', 'capture-requests'])
+const emit = defineEmits(['edit-preset', 'choose-parameter', 'capture-requests', 'open-source'])
 const target = computed(() => { try { return effectiveTarget(props.operation, props.configuration, props.session, props.values) } catch { return null } })
 const responseStale = computed(() => {
   if (!props.session.result) return false
@@ -260,6 +262,8 @@ function sendShortcut(event) {
               <code>{{ parameter.name }}</code>{{ ' ' }}
               <small>{{ parameter.in }}<template v-if="parameter.required || parameter.in === 'path'"> · required</template></small>
             </component>
+            <ValueSourceHelp v-if="!values.has(key)" :label="'Where to get ' + parameter.name"
+              :sources="valueSources(parameter.in, parameter.name)" @open-source="emit('open-source', $event)" />
             <DescriptionHelp :label="'About parameter ' + parameter.name" :description="parameter.description" />
           </div>
           <div v-if="values.has(key)" class="preset-field"
@@ -307,6 +311,8 @@ function sendShortcut(event) {
           <div class="body-heading">
             <label :for="`${parameterIdPrefix}-body`" @click="focusFirstBodyValue">Request body <small>{{ content[0] }}</small></label>
             <div class="body-actions">
+              <ValueSourceHelp label="Where to get request body values" :sources="valueSources('body')" show-targets
+                @open-source="emit('open-source', $event)" />
               <slot name="openapi-examples" />
               <ExpandedBodyEditor :session="session" @tab="tabBodyValue" />
             </div>

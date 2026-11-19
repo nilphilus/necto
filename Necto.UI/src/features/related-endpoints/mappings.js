@@ -73,6 +73,33 @@ export function resolveMappingLinks(operations, catalogs) {
   return links
 }
 
+export function indexValueSources(links) {
+  const index = new Map()
+  for (const link of links) {
+    if (link.navigationOnly || Object.hasOwn(link, 'constant')) continue
+    const key = valueSourceKey(link.to, link.location, link.name)
+    const entries = index.get(key) ?? new Map()
+    const parts = [...sourcePath(link.source)]
+    if (link.source.property != null) parts.push(link.source.property)
+    const path = parts.reduce((text, part) => text + (part === null ? '[*]' :
+      typeof part === 'number' ? `[${part}]` :
+      /^[a-zA-Z_$][\w$]*$/.test(part) ? '.' + part : `[${JSON.stringify(part)}]`), '$')
+    const id = JSON.stringify([link.from.key, link.location, link.name, path, link.source.responseStatus])
+    if (!entries.has(id)) entries.set(id, {
+      id, operation: link.from, name: link.name, path, status: link.source.responseStatus, origin: link.origin, match: link.match,
+    })
+    index.set(key, entries)
+  }
+  for (const [key, entries] of index) index.set(key, [...entries.values()].sort((a, b) =>
+    Number(b.origin === 'openapi') - Number(a.origin === 'openapi') ||
+    Number(['GET', 'HEAD'].includes(b.operation.method)) - Number(['GET', 'HEAD'].includes(a.operation.method))))
+  return index
+}
+
+function valueSourceKey(operation, location, name) {
+  return JSON.stringify([operation.key, location, location === 'body' ? null : name])
+}
+
 export function useRelatedEndpoints(configuration, operations, externalContexts = ref([]), authentication) {
   const mappings = ref([])
   const error = ref('')
@@ -107,6 +134,12 @@ export function useRelatedEndpoints(configuration, operations, externalContexts 
     { apiId: 'local', mappings: mappings.value },
     ...externalContexts.value.map(api => ({ apiId: api.id, mappings: api.mappings })),
   ]))
+
+  const valueSources = computed(() => indexValueSources(links.value))
+  function sourcesFor(operation, location, name) {
+    const sources = valueSources.value.get(valueSourceKey(operation, location, name)) ?? []
+    return location === 'body' && name !== undefined ? sources.filter(source => source.name === name) : sources
+  }
 
   function mappedEntries(link, result) {
     if (!result || result.incomplete || (!result.ok && link.origin !== 'openapi')) return []
@@ -163,7 +196,7 @@ export function useRelatedEndpoints(configuration, operations, externalContexts 
     return links.value.filter(link => !link.navigationOnly && !Object.hasOwn(link, 'constant') && link.from.key === operation.key).map(link => sourcePath(link.source))
   }
 
-  return { error, targetsFor, choicesFor, selectablePaths, mappings: graphMappings, links, pending }
+  return { error, targetsFor, choicesFor, sourcesFor, selectablePaths, mappings: graphMappings, links, pending }
 }
 
 export function applyChoice(session, location, choice) {

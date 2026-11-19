@@ -56,7 +56,7 @@ const { sampleStorageKey, createDraft } = createSampleDrafts({
   getConfiguration: () => configuration.value,
   storage: localStorage,
 })
-const { error: mappingError, targetsFor, choicesFor, selectablePaths, mappings: endpointMappings, links: mappingLinks, pending: mappingPending } = useRelatedEndpoints(configuration, operations, externalApis.contexts, authentication)
+const { error: mappingError, targetsFor, choicesFor, sourcesFor, selectablePaths, mappings: endpointMappings, links: mappingLinks, pending: mappingPending } = useRelatedEndpoints(configuration, operations, externalApis.contexts, authentication)
 
 const { connections, show: showExternalApis, statuses: externalStatuses, storageError: externalStorageError } = externalApis
 const externalPending = computed(() => showExternalApis.value && [...externalStatuses.values()].some(status => status.pending))
@@ -390,6 +390,9 @@ const relatedTargets = computed(() => {
     return {
       ...target,
       presetInputs: presetInputs(target.operation, createDraft(target.operation).body, values),
+      sourceParameters: target.operation.parameters.filter(parameter =>
+        ['path', 'query', 'header'].includes(parameter.in) &&
+        (parameter.required || parameter.in === 'path') && !values.has(contextKey(parameter)) && sourcesFor(target.operation, parameter.in, parameter.name).length),
       selectedCandidates: selected.find(entry => entry.operation.key === target.operation.key)?.candidates ?? [],
       candidates: target.candidates.filter(choice =>
         choice.location === 'body' || !values.has(contextKey({ in: choice.location, name: choice.name })),
@@ -1245,7 +1248,9 @@ function removeScenario(id) {
             </dialog>
             <CaptureRequestsDialog ref="captureDialog" :scenarios="builderScenarios" :save="saveCapturedRequests" />
             <OperationRunner @capture-requests="captureRequests" :prepare="prepareRequest" :cancel="cancelRequest" :history="requestHistory" :configuration="configuration" :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :preset-colors="presetColors" :default-preset-color="defaultPresetColor" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" :parameter-choices="parameter => choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
-              @choose-parameter="(location, choice) => choose(current.session, location, choice)" @edit-preset="editActivePreset">
+              @choose-parameter="(location, choice) => choose(current.session, location, choice)" @edit-preset="editActivePreset"
+              :value-sources="(location, name) => sourcesFor(current.operation, location, name)"
+              @open-source="operation => selectCatalogOperation(operation, operation.tags[0])">
               <template #request-actions>
                 <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">
                   Save request
@@ -1269,7 +1274,8 @@ function removeScenario(id) {
                 <RelatedTargets
                   :targets="relatedTargets" @search-response="searchResponse"
                   :can-send="canSendRelated"
-                  @follow="follow" @edit-preset="editActivePreset"
+                  @follow="follow" @edit-preset="editActivePreset" :sources-for="sourcesFor"
+                  @open-source="operation => selectCatalogOperation(operation, operation.tags[0])"
                 />
               </template>
             </OperationRunner>

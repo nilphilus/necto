@@ -1,13 +1,13 @@
 <script setup>
 import RelatedTarget from './RelatedTarget.vue'
-defineProps({ targets: { type: Array, required: true }, canSend: { type: Function, required: true } })
-defineEmits(['follow', 'edit-preset', 'search-response'])
+defineProps({ targets: { type: Array, required: true }, sourcesFor: Function, canSend: { type: Function, required: true } })
+defineEmits(['follow', 'edit-preset', 'search-response', 'open-source'])
 </script>
 
 <template>
   <section v-if="targets.length" class="related-targets" aria-label="Continue from this response">
     <ul>
-      <RelatedTarget v-for="target in targets" :key="target.operation.key" :target="target" :can-send="canSend"
+      <RelatedTarget v-for="target in targets" :key="target.operation.key" :target="target" :can-send="canSend" :sources-for="sourcesFor" @open-source="$emit('open-source', $event)"
         @search-response="$emit('search-response', $event)" @follow="(operation, choices, send) => $emit('follow', operation, choices, send)" @edit-preset="$emit('edit-preset', $event)" />
     </ul>
   </section>

@@ -3,9 +3,10 @@ import DescriptionHelp from '../workbench/DescriptionHelp.vue'
 import { preferredRelatedChoice } from './mappings.js'
 import RequestSendIcon from '../request-runner/RequestSendIcon.vue'
 import { computed, reactive, watch } from 'vue'
+import ValueSourceHelp from './ValueSourceHelp.vue'
 import ValueInput from './ValueInput.vue'
-const props = defineProps({ target: Object, canSend: Function })
-const emit = defineEmits(['follow', 'edit-preset', 'search-response'])
+const props = defineProps({ target: Object, canSend: Function, sourcesFor: Function })
+const emit = defineEmits(['follow', 'edit-preset', 'search-response', 'open-source'])
 const drafts = reactive({})
 const fields = computed(() => {
   const groups = new Map()
@@ -13,6 +14,10 @@ const fields = computed(() => {
     const key = JSON.stringify([choice.location, choice.name])
     if (!groups.has(key)) groups.set(key, { key, ...choice, choices: [] })
     groups.get(key).choices.push(choice)
+  }
+  for (const parameter of props.target.sourceParameters ?? []) {
+    const key = JSON.stringify([parameter.in, parameter.name])
+    if (!groups.has(key)) groups.set(key, { key, name: parameter.name, location: parameter.in, choices: [] })
   }
   return [...groups.values()].map(field => ({ ...field,
     selected: (props.target.selectedCandidates ?? []).filter(choice =>
@@ -69,6 +74,11 @@ const ready = computed(() => props.canSend(props.target.operation, choices.value
         <div v-for="(field, index) in fields" :key="field.key" class="field">
           <ValueInput v-model="drafts[field.key]" :choices="field.choices" dropdown searchable-response @search-response="emit('search-response', { query: $event, field: searchField(field) })" placeholder="Type or choose a value…">
             <template #label>{{ field.name ?? 'body' }} <small>{{ field.location }}</small></template>
+            <template #label-actions>
+              <ValueSourceHelp :label="'Where to get ' + (field.name ?? 'request body')"
+                :sources="sourcesFor(target.operation, field.location, field.name)"
+                @open-source="emit('open-source', $event)" />
+            </template>
             <template v-if="index === 0 && quickSend" #trailing>
               <button type="submit" class="send send-joined" :disabled="!ready"
                 :aria-label="'Send ' + target.operation.name">Send <RequestSendIcon /></button>
