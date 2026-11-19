@@ -1,10 +1,10 @@
 <script setup>
-import { createEdgeRouter } from './edgeRouting.js'
+import { CARD_HEIGHT, CARD_WIDTH, createEdgeRouter, placeConnectionControls } from './edgeRouting.js'
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
 import { inputProducers } from './variables.js'
 import { layers } from './model.js'
 import { allConnections, connectionKey, hasTiming } from './connections.js'
-const props = defineProps({ blueprint: Object, selected: String, steps: Array, disabled: Boolean })
+const props = defineProps({ blueprint: Object, selected: String, steps: Array, disabled: Boolean, activeConnection: String })
 const emit = defineEmits(['select', 'inspect', 'add-first', 'connect', 'configure', 'create-next'])
 const zoom = ref(1),
   canvas = ref(null),
@@ -13,6 +13,10 @@ const zoom = ref(1),
   toChoice = ref('')
 const connectionsList = ref(null)
 const connectionFilter = ref('')
+const hoveredConnection = ref('')
+const focusedConnection = ref('')
+const highlightedKey = computed(() => props.activeConnection || hoveredConnection.value || focusedConnection.value)
+const highlightedEdge = computed(() => layout.value.routed.find(edge => edge.key === highlightedKey.value))
 const visibleConnections = computed(() => {
   const query = connectionFilter.value.trim().toLowerCase()
   return layout.value.edges.filter((edge) =>
@@ -77,8 +81,9 @@ const layout = computed(() => {
   const height = Math.max(baseHeight, ...nodes.map((node) => node.y + 150)),
     width = Math.max(baseWidth, ...nodes.map((node) => node.x + 250))
   const byId = new Map(nodes.map((node) => [node.step.id, node]))
-  const route = createEdgeRouter(nodes, height)
-  const edges = allConnections(props.blueprint).flatMap((edge) => {
+  const connections = allConnections(props.blueprint)
+  const route = createEdgeRouter(nodes, height, { connections })
+  const edges = connections.flatMap((edge) => {
     const from = byId.get(edge.from),
       to = byId.get(edge.to)
     if (!to || (edge.from !== null && !from)) return []
@@ -102,11 +107,17 @@ const layout = computed(() => {
     routeHeight = height
   for (const edge of routed)
     for (const point of edge.points) {
-      routeWidth = Math.max(routeWidth, point.x + 20)
-      routeHeight = Math.max(routeHeight, point.y + 20)
+      routeWidth = Math.max(routeWidth, point.x + 26)
+      routeHeight = Math.max(routeHeight, point.y + 26)
     }
   return { width: routeWidth, height: routeHeight, startY: height / 2, nodes, edges, routed }
 })
+const controls = computed(() => placeConnectionControls(layout.value.routed, [
+  { x: 24, y: layout.value.startY - 24, width: 84, height: 48 },
+  ...layout.value.nodes.map(({ x, y }) => ({ x, y, width: CARD_WIDTH, height: CARD_HEIGHT })),
+], zoom.value))
+const configurableEdges = computed(() => layout.value.routed.filter(edge => controls.value.has(edge.key)))
+const hasListOnlyConnections = computed(() => configurableEdges.value.length < layout.value.edges.length)
 function curve(x, y, tx, ty) {
   return `M ${x} ${y} C ${x + 36} ${y}, ${tx - 36} ${ty}, ${tx} ${ty}`
 }
@@ -210,6 +221,8 @@ watch(
     fromChoice.value = ''
     toChoice.value = ''
     connectionFilter.value = ''
+    hoveredConnection.value = ''
+    focusedConnection.value = ''
     connectionsList.value?.close()
   }
 )
@@ -235,8 +248,8 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
         </select></label
       >
     </header>
-    <p v-if="layout.edges.some((edge) => !edge.routed)" class="route-notice" role="status">
-      Some connections cannot be drawn without crossing a request.
+    <p v-if="hasListOnlyConnections" class="route-notice" role="status">
+      Some connection controls are available in the list.
       <button type="button" class="secondary" @click="showConnections(true)">
         Show connections
       </button>
@@ -287,9 +300,12 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
               :d="edge.d"
               :data-route="edge.key"
               class="edge"
-              :class="{ data: edge.data, timed: hasTiming(edge) }"
+              :class="{ data: edge.data, timed: hasTiming(edge), muted: highlightedEdge && edge.key !== highlightedKey,
+                        hidden: highlightedEdge && edge.key === highlightedKey }"
               marker-end="url(#builder-arrow)"
             />
+            <path v-if="highlightedEdge" :d="highlightedEdge.d" class="edge highlighted"
+              :data-highlighted-route="highlightedEdge.key" marker-end="url(#builder-arrow)" />
             <path v-if="ghost" :d="ghost" class="edge ghost" />
           </svg>
           <div
@@ -374,18 +390,22 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
             </button>
           </div>
           <button
-            v-for="edge in layout.routed"
+            v-for="edge in configurableEdges"
             :key="edge.key"
             type="button"
             class="edge-settings"
-            :class="{ timed: hasTiming(edge) }"
+            :class="{ timed: hasTiming(edge), active: highlightedKey === edge.key }"
             :data-connection="edge.key"
-            :style="{ left: edge.x + 'px', top: edge.y + 'px', width: 32 / zoom + 'px', height: 32 / zoom + 'px' }"
+            :style="{ left: controls.get(edge.key).x + 'px', top: controls.get(edge.key).y + 'px', width: 32 / zoom + 'px', height: 32 / zoom + 'px' }"
             :aria-label="'Configure connection ' + edge.fromLabel + ' → ' + edge.toLabel"
             :aria-description="connectionDetails(edge) || undefined"
             :title="
               [edge.fromLabel + ' → ' + edge.toLabel, connectionDetails(edge)].filter(Boolean).join(' · ')
             "
+            @mouseenter="hoveredConnection = edge.key"
+            @mouseleave="hoveredConnection = ''"
+            @focus="focusedConnection = edge.key"
+            @blur="focusedConnection = ''"
             @click="configure(edge, $event)"
           >
             {{ hasTiming(edge) ? '◷' : '⚙' }}
@@ -434,7 +454,7 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
         <li v-for="edge in visibleConnections" :key="edge.key">
           <button
             type="button"
-            :data-unrouted="edge.routed ? undefined : ''"
+            :data-unrouted="controls.has(edge.key) ? undefined : ''"
             @click="configure(edge, $event)"
           >
             <strong>{{ edge.fromLabel }} → {{ edge.toLabel }}</strong>
@@ -507,6 +527,14 @@ header select {
   stroke: #849e91;
   stroke-width: 2;
   stroke-dasharray: 5 4;
+}
+.edge.muted { opacity: .3; }
+.edge.hidden { visibility: hidden; }
+.edge.highlighted {
+  stroke: var(--accent);
+  stroke-width: 4;
+  stroke-dasharray: none;
+  filter: drop-shadow(0 0 2px var(--surface));
 }
 .edge.data {
   stroke: var(--accent);
@@ -659,7 +687,8 @@ marker path {
   border-color: #b79b55;
   color: #755018;
 }
-.edge-settings:hover {
+.edge-settings:hover, .edge-settings:focus-visible, .edge-settings.active {
+  z-index: 4;
   outline: 2px solid var(--accent);
 }
 .new-request-hint {
