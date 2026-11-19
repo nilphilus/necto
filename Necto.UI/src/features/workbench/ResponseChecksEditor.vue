@@ -12,7 +12,7 @@ function addCheck(session){(session.assertions??=[]).push({kind:'status',path:''
         :key="index"
         class="check"
       >
-        <select v-model="check.kind" aria-label="Check type">
+        <select v-model="check.kind" aria-label="Check type" @change="delete check.comparison">
           <option
             v-for="(label, kind) in assertionKinds"
             :value="kind"
@@ -33,7 +33,8 @@ function addCheck(session){(session.assertions??=[]).push({kind:'status',path:''
         /><button type="button" @click="session.assertions.splice(index, 1)">
           Remove
         </button>
-      </div>
+          <small v-if="check.comparison === 'arazzo-simple'">Arazzo scalar comparison</small>
+    </div>
       <button
         type="button"
         :disabled="session.assertions?.length >= 50"

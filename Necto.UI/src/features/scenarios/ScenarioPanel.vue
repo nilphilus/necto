@@ -18,6 +18,9 @@ const importInput = ref(null)
 const importResult = ref(null)
 const importError = ref('')
 const importing = ref(false)
+const arazzoDialog = ref(null)
+const arazzoImport = ref(null)
+const workflowId = ref('')
 async function importFile(event) {
   const file = event.target.files?.[0]
   event.target.value = ''
@@ -25,8 +28,28 @@ async function importFile(event) {
   importing.value = true
   importResult.value = null
   importError.value = ''
-  try { importResult.value = await props.importScenario(file) }
-  catch (cause) { importError.value = cause.message }
+  try {
+    const result = await props.importScenario(file)
+    if (result?.workflows) {
+      arazzoImport.value = { ...result, file }
+      workflowId.value = result.workflows[0].id
+      await nextTick()
+      arazzoDialog.value?.showModal()
+    } else importResult.value = result
+  } catch (cause) { importError.value = cause.message }
+  finally { importing.value = false }
+}
+async function importWorkflow() {
+  if (!arazzoImport.value || importing.value || props.busy) return
+  importing.value = true
+  importError.value = ''
+  try {
+    const { file, workspace } = arazzoImport.value
+    const result = await props.importScenario(file, { workflowId: workflowId.value, workspace })
+    importResult.value = result
+    arazzoDialog.value?.close()
+    if (result) emit('open-builder-scenario', result.scenario.id)
+  } catch (cause) { importError.value = cause.message }
   finally { importing.value = false }
 }
 const runId = ref('')
@@ -67,14 +90,35 @@ function runScenario(scenario) {
       <h2 id="scenarios-title" ref="title" tabindex="-1">Scenarios</h2>
       <div class="library-actions">
         <button type="button" class="primary" :disabled="busy || importing" @click="importInput.click()">Import scenario</button>
-        <input ref="importInput" hidden type="file" accept=".json,application/json" @change="importFile">
+        <input ref="importInput" hidden type="file" accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml" @change="importFile">
         <button type="button" class="secondary" :disabled="busy" @click="emit('builder')">Scenario Builder →</button>
       </div>
     </div>
     <p class="builder-intro muted">
       <ScenarioSkillLink :version="configuration?.nectoPackageVersion" /> to create scenarios with your agent.
     </p>
-    <p v-if="importError" class="error" role="alert">{{ importError }}</p>
+    <dialog ref="arazzoDialog" class="endpoint-dialog arazzo-import" aria-label="Import Arazzo workflow"
+      @close="arazzoImport = null; importError = ''">
+      <form v-if="arazzoImport" @submit.prevent="importWorkflow">
+        <h3>Import Arazzo workflow</h3>
+        <label>Workflow
+          <select v-model="workflowId" :disabled="importing">
+            <option v-for="workflow in arazzoImport.workflows" :key="workflow.id" :value="workflow.id">
+              {{ workflow.summary || workflow.id }}
+            </option>
+          </select>
+        </label>
+        <ol aria-label="Workflow steps">
+          <li v-for="(step, index) in arazzoImport.workflows.find(item => item.id === workflowId)?.steps" :key="index">{{ step }}</li>
+        </ol>
+        <p v-if="importError" class="error" role="alert">{{ importError }}</p>
+        <div class="actions">
+          <button type="button" class="secondary" :disabled="importing" @click="arazzoDialog.close()">Cancel</button>
+          <button type="submit" class="primary" :disabled="importing || busy">Import and open</button>
+        </div>
+      </form>
+    </dialog>
+    <p v-if="importError && !arazzoImport" class="error" role="alert">{{ importError }}</p>
     <p v-if="importResult" class="import-result" role="status">
       Imported “{{ importResult.scenario.name }}” · {{ importResult.scenario.steps.length }} steps.
       <span v-if="importResult.missing.length">Unavailable endpoints: {{ importResult.missing.join(', ') }}.</span>
@@ -179,4 +223,6 @@ function runScenario(scenario) {
 .actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }.actions button { font-size: .8rem; }
 .review { margin-top: .4rem; font-size: .78rem; }.review summary { color: var(--muted); }.review ol { padding-left: 1.3rem; margin: .5rem 0; }.review li { padding: .3rem 0; overflow-wrap: anywhere; }.review small { display: block; color: var(--muted); }.review .binding-note { font-size: .72rem; margin: .2rem 0; color: var(--accent); }
 .run-status { margin-top: .7rem; border-top: 1px solid var(--line); padding-top: .7rem; }
+.arazzo-import label { display: grid; gap: .3rem; }
+.arazzo-import ol { max-height: 35vh; overflow: auto; margin: 0; overflow-wrap: anywhere; }
 </style>
