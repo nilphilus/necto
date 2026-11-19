@@ -69,6 +69,39 @@ test('switch, if, const, JSON values, typed arithmetic and nullish fallback', ()
     5
   )
 })
+test('typeof branches on JSON input without coercion or global access', () => {
+  const code = "switch (typeof previous.value) { case 'string': return 'text'; case 'number': return previous.value * 2; case 'boolean': return previous.value; default: return null; }"
+  for (const [previous, expected] of [[{ value: '42' }, 'text'], [{ value: 42 }, 84], [{ value: false }, false], [{}, null]]) {
+    assert.equal(evaluateExpression(code, { previous }), expected)
+  }
+  assert.throws(() => evaluateExpression('return typeof globalThis;', {}), /unknown input/)
+  assert.throws(() => evaluateExpression('return typeof previous.constructor;', { previous: {} }))
+})
+test('a body expression sends different JSON types based on an earlier response', async () => {
+  const blueprint = make()
+  const target = { ...op('join'), key: 'POST /join', method: 'POST',
+    requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } }
+  blueprint.steps[2] = {
+    ...newStep(target, { fields: {}, body: '{}' }), id: 'join',
+    inputs: [{
+      ...input("return typeof response.value === 'number' ? response.value * 2 : response.value;", [binding('response', 'a')]),
+      location: 'body', pointer: '/value',
+    }],
+  }
+  for (const [value, expected] of [['42', '42'], [42, 84]]) {
+    const plan = prepareBlueprint(blueprint, { ...context, operations: [op('a'), op('b'), target] })
+    let sent
+    const result = await executeBlueprint(plan, {
+      signal: new AbortController().signal,
+      execute: async (operation, session) => {
+        if (operation.path === '/join') sent = JSON.parse(session.body)
+        return { ok: true, status: 200, json: { value } }
+      },
+    })
+    assert.equal(result.status, 'completed')
+    assert.deepEqual(sent, { value: expected })
+  }
+})
 test('reject every host capability, function, mutation, loop and module syntax, including dead code', () => {
   for (const code of [
     'import x from "x";',

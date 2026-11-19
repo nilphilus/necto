@@ -3,6 +3,7 @@ import { computed, ref, provide, nextTick } from 'vue'
 import { bodyContent, isJson } from '../workbench/body.js'
 import BodyEditor from '../workbench/BodyEditor.vue'
 import BodySchemaField from './BodySchemaField.vue'
+import ExpressionEditor from './ExpressionEditor.vue'
 import { BODY_VALUE } from './bodySchema.js'
 import StepInputs from './StepInputs.vue'
 const props=defineProps({step:Object,operation:Object,steps:Array,operations:Array,variables:Array,results:Array,disabled:Boolean})
@@ -15,6 +16,8 @@ const parsed=computed(()=>{try{return {value:props.step.request.body.trim()?JSON
 const parseError=computed(()=>parsed.value.error)
 const bodyInputs = computed(() => props.step.inputs.filter(input => input.location === 'body'))
 const expressions = computed(() => bodyInputs.value.filter(input => input.source === 'expression'))
+const selectedExpressionPath = ref(null)
+const selectedExpression = computed(() => expressions.value.find(input => input.pointer === selectedExpressionPath.value))
 const wholeBodySources = computed(() => /^(?:text\/|application\/(?:.+\+)?xml)/i.test(media.value?.[0] ?? ''))
 provide(BODY_VALUE,computed(()=>parsed.value.value))
 </script>
@@ -24,7 +27,17 @@ provide(BODY_VALUE,computed(()=>parsed.value.value))
   <Teleport :disabled="!expanded" :to="dialogHost??'body'"><div class="body-editor-content"><p class="body-guidance" v-if="json">Edit values inside the JSON structure. Choose a source beside each value. Payload expressions take priority unless you allow preset overrides in the run review.</p>
   <details v-if="expressions.length" class="body-sources">
     <summary>Expression targets ({{ expressions.length }})</summary>
-    <ul><li v-for="input in expressions" :key="input.pointer"><code>{{ input.pointer || '(whole body)' }}</code></li></ul>
+    <ul>
+      <li v-for="input in expressions" :key="input.pointer">
+        <button type="button" class="secondary"
+          :aria-expanded="selectedExpression === input"
+          @click="selectedExpressionPath = selectedExpression === input ? null : input.pointer">
+          Edit expression <code>{{ input.pointer || '(whole body)' }}</code>
+        </button>
+      </li>
+    </ul>
+    <ExpressionEditor v-if="selectedExpression" :key="selectedExpression.pointer"
+      :input="selectedExpression" :step="step" :steps="steps" :variables="variables" :disabled="disabled" />
   </details>
   <div v-if="json&&mode==='fields'">
    <p v-if="parseError" class="error" role="alert">{{parseError}}</p>

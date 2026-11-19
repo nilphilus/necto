@@ -107,7 +107,7 @@ function validateNodeSyntax(node) {
       if (!binary.has(node.operator)) syntax()
       break
     case 'UnaryExpression':
-      if (!['!', '-', '+'].includes(node.operator)) syntax()
+      if (!['!', '-', '+', 'typeof'].includes(node.operator)) syntax()
       break
     case 'LogicalExpression':
       if (!['&&', '||', '??'].includes(node.operator)) syntax()
@@ -315,6 +315,7 @@ export function evaluateExpression(code, values) {
         case 'UnaryExpression': {
           const value = expr(node.argument, scope)
           if (node.operator === '!') return !unwrap(value)
+          if (node.operator === 'typeof') return typeof unwrap(value)
           requireValue(value)
           if (typeof value !== 'number') invalid()
           return bounded(node.operator === '-' ? -value : +value)

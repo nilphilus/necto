@@ -10,7 +10,9 @@ run(async ({ p, assert, calls, review, shot }) => {
   })
   await p.route('**/workflow-openapi.json', async (route) => {
     const response = await p.request.get(origin + '/openapi.json')
-    await route.fulfill({ response })
+    const document = await response.json()
+    document.paths['/invoices'].post.requestBody.content['application/json'].schema.properties.lines.type = ['string', 'array']
+    await route.fulfill({ response, json: document })
   })
   await p.evaluate(() => localStorage.setItem(
     'necto:environments:' + location.origin + '/workflow-openapi.json',
@@ -26,10 +28,13 @@ run(async ({ p, assert, calls, review, shot }) => {
     steps: [{
       id: 'target', label: 'Send payload', apiId: 'local', operationKey: 'POST /invoices',
       method: 'POST', path: '/invoices', dependsOn: [],
-      request: { fields: {}, body: '{"customerId":7,"name":"Draft"}' },
+      request: { fields: {}, body: '{"customerId":7,"name":"Draft","lines":[{}]}' },
       inputs: [{
         location: 'body', pointer: '/limits/min', source: 'expression',
         expression: 'return -1;', bindings: [],
+      }, {
+        location: 'body', pointer: '/lines/0/quantity', source: 'expression',
+        expression: 'return 2;', bindings: [],
       }],
     }],
   }
@@ -44,24 +49,28 @@ run(async ({ p, assert, calls, review, shot }) => {
   const min = body.locator('[data-body-path="/limits/min"]')
   assert.equal(await min.getByLabel('Source for min').inputValue(), 'expression')
   assert.equal(await min.getByLabel('Expression code').inputValue(), 'return -1;')
-  await body.getByText('Expression targets (1)', { exact: true }).click()
+  const quantity = body.locator('[data-body-path="/lines/0/quantity"]')
+  assert.equal(await quantity.getByLabel('Source for quantity').inputValue(), 'expression')
+  await body.getByText('Expression targets (2)', { exact: true }).click()
+  await body.getByRole('button', { name: 'Edit expression /lines/0/quantity' }).click()
+  assert.equal(await body.locator('.body-sources').getByLabel('Expression code').inputValue(), 'return 2;')
   await body.getByRole('button', { name: 'Raw JSON', exact: true }).click()
-  assert.deepEqual(JSON.parse(await body.getByLabel('Raw request body').inputValue()), { customerId: 7, name: 'Draft' })
+  assert.deepEqual(JSON.parse(await body.getByLabel('Raw request body').inputValue()), { customerId: 7, name: 'Draft', lines: [{}] })
   await body.getByRole('button', { name: 'JSON builder', exact: true }).click()
   await shot('expression-target')
 
   const protectedReview = await review()
   const overrides = protectedReview.getByRole('checkbox', { name: 'Allow presets to override payload expressions' })
   assert.equal(await overrides.isChecked(), false)
-  await protectedReview.getByText('Expression evaluated before send', { exact: false }).waitFor()
+  await protectedReview.getByText('/lines/0/quantity · Expression evaluated before send').waitFor()
   await protectedReview.getByRole('button', { name: 'Run scenario', exact: true }).click()
   await p.locator('.builder-run-status').filter({ hasText: '1 / 1 completed' }).waitFor()
-  assert.deepEqual(calls[0].body, { customerId: 7, name: 'Preset name', limits: { min: -1 } })
+  assert.deepEqual(calls[0].body, { customerId: 7, name: 'Preset name', lines: [{ quantity: 2 }], limits: { min: -1 } })
 
   const overrideReview = await review()
   await overrideReview.getByRole('checkbox', { name: 'Allow presets to override payload expressions' }).check()
   await overrideReview.getByText('Expression overridden by preset', { exact: false }).waitFor()
   await overrideReview.getByRole('button', { name: 'Run scenario', exact: true }).click()
   await p.locator('.builder-run-status').filter({ hasText: '1 / 1 completed' }).waitFor()
-  assert.deepEqual(calls[1].body, { customerId: 7, name: 'Preset name', limits: { min: 0 } })
+  assert.deepEqual(calls[1].body, { customerId: 7, name: 'Preset name', lines: [{ quantity: 2 }], limits: { min: 0 } })
 })
