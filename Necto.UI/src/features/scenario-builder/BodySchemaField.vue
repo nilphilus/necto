@@ -101,8 +101,10 @@ const arrayRows = computed(() => {
 watch(() => descendantFields.value.size, (count) => { if (count) open.value = true }, { immediate: true })
 const type = computed(() => {
   const t = schema.value.type
+  const container = Array.isArray(value.value) ? 'array'
+    : value.value && typeof value.value === 'object' ? 'object' : undefined
   return Array.isArray(t)
-    ? t.find((t) => t !== 'null')
+    ? (t.includes(container) ? container : t.find((item) => item !== 'null'))
     : (t ??
         (properties.value.length
           ? 'object'

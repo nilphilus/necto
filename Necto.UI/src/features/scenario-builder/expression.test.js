@@ -69,6 +69,31 @@ test('switch, if, const, JSON values, typed arithmetic and nullish fallback', ()
     5
   )
 })
+test('a body expression selects a typed value from an earlier response type descriptor', async () => {
+  const blueprint = make()
+  const target = { ...op('join'), key: 'POST /join', method: 'POST',
+    requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } }
+  blueprint.steps[2] = {
+    ...newStep(target, { fields: {}, body: '{}' }), id: 'join',
+    inputs: [{
+      ...input("switch (response.type) { case 'integer': return 42; case 'string': return '42'; default: return null; }", [binding('response', 'a')]),
+      location: 'body', pointer: '/value',
+    }],
+  }
+  for (const [type, expected] of [['string', '42'], ['integer', 42], ['unknown', null]]) {
+    const plan = prepareBlueprint(blueprint, { ...context, operations: [op('a'), op('b'), target] })
+    let sent
+    const result = await executeBlueprint(plan, {
+      signal: new AbortController().signal,
+      execute: async (operation, session) => {
+        if (operation.path === '/join') sent = JSON.parse(session.body)
+        return { ok: true, status: 200, json: { type } }
+      },
+    })
+    assert.equal(result.status, 'completed')
+    assert.deepEqual(sent, { value: expected })
+  }
+})
 test('reject every host capability, function, mutation, loop and module syntax, including dead code', () => {
   for (const code of [
     'import x from "x";',
