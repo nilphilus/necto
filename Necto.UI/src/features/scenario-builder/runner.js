@@ -3,7 +3,7 @@ import { normalizeBodyFieldNames } from './bodyFieldNames.js'
 import { stepIssue } from './stepIssue.js'
 import { pickRandom } from './random.js'
 import { evaluateExpression, expressionContext } from './expression.js'
-import { applyBodyPresets, buildRequest, contextKey, fieldKey, protectedBodyPaths } from '../request-runner/request.js'
+import { applyBodyPresets, buildRequest, contextKey, fieldKey, presetSource, protectedBodyPaths } from '../request-runner/request.js'
 import { bodyContent, isJson } from '../workbench/body.js'
 import { pointer, prefix, schemaView } from './bodySchema.js'
 import { effectiveTarget } from '../workbench/target.js'
@@ -23,6 +23,7 @@ function missingRequiredBody(operation, draft, inputs) {
   try { body = JSON.parse(draft.body || '{}') } catch { return undefined }
   const dynamic = inputs.filter(input => input.location === 'body').map(input => pointerParts(input.pointer))
   let remaining = 5000
+  const missing = []
 
   function visit(raw, value, path) {
     if (!raw || remaining-- <= 0 || path.length > 24 ||
@@ -35,34 +36,40 @@ function missingRequiredBody(operation, draft, inputs) {
     const schema = schemaView(operation, base, variant)
     if (Array.isArray(value)) {
       for (let index = 0; index < value.length && remaining > 0 && schema.items; index++) {
-        const missing = visit(schema.items, value[index], [...path, index])
-        if (missing !== undefined) return missing
+        visit(schema.items, value[index], [...path, index])
       }
       return undefined
     }
     for (const name of schema.required) {
-      if (!Object.hasOwn(value, name) && !operation.resolve(schema.properties[name])?.readOnly) return pointer([...path, name])
+      if (!Object.hasOwn(value, name) && !operation.resolve(schema.properties[name])?.readOnly) missing.push(pointer([...path, name]))
     }
     for (const [name, child] of Object.entries(schema.properties)) {
       if (!Object.hasOwn(value, name)) continue
-      const missing = visit(child, value[name], [...path, name])
-      if (missing !== undefined) return missing
+      visit(child, value[name], [...path, name])
     }
   }
-  return visit(media[1].schema, body, [])
+  visit(media[1].schema, body, [])
+  return missing
 }
 
 function missingInput(message) {
   return Object.assign(new Error(message), { missingInput: true })
 }
 
-export function prepareBlueprint(blueprint, { operations, configuration, createSession, valuesFor, protectBodyExpressions = false, requestOverrides }) {
+export function prepareBlueprint(blueprint, { operations, configuration, createSession, valuesFor, protectBodyExpressions = false, requestOverrides }, { collectIssues = false } = {}) {
   validateBlueprint(blueprint)
   blueprint = upgradeBlueprint(blueprint)
   const edges = allConnections(blueprint)
   if (!blueprint.steps.length) throw new Error('Add at least one request.')
   const byKey = new Map(operations.map(operation => [operation.key, operation]))
-  const plan = blueprint.steps.map(definition => {
+  const issues = [], presetEffects = []
+  const plan = blueprint.steps.flatMap(definition => {
+    const missing = []
+    function reportMissing(input, message) {
+      const issue = stepIssue(missingInput(`${definition.label}: ${message}`), definition, input)
+      if (missing.some(item => item.target?.location === issue.target?.location && item.target?.name === issue.target?.name)) return
+      missing.push(issue)
+    }
     let issueInput
     try {
       if (!definition.operationKey) throw new Error(`${definition.label}: choose an endpoint before running.`)
@@ -112,11 +119,8 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
       for (const input of inputs) if (input.location === 'body' && !activeInputs.includes(input) && !coveredBody(input, presetBody.paths ?? [])) {
         applyInput(session, operation, input, readPointer(JSON.parse(probed.body), input.pointer))
       }
-      const missingPreset = activeInputs.find(input => input.source === 'preset')
-      if (missingPreset) {
-        issueInput = missingPreset
-        const input = missingPreset
-        throw missingInput(`${definition.label}: supply a value or activate a matching preset for ${input.location === 'body' ? input.pointer || '(whole body)' : input.name}.`)
+      for (const input of activeInputs.filter(input => input.source === 'preset')) {
+        reportMissing(input, `supply a value or activate a matching preset for ${input.location === 'body' ? input.pointer || '(whole body)' : input.name}.`)
       }
       for (const input of inputs) {
         issueInput = input
@@ -127,6 +131,14 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
       const step = { id: definition.id, label: definition.label, operation, session, values,
         bodyExpressions: expressions.map(input => ({ pointer: input.pointer, overridden: !activeInputs.includes(input) })),
         entryPolicies: edges.filter(edge => edge.to === definition.id).map(edge => ({ ...edge, label: connectionSummary(edge, blueprint.steps) })), presetOverrides: [...new Set([...values.keys()].filter(key => typeof key === 'string').concat(paths.map(path => 'body:/' + path.map(part => String(part).replaceAll('~','~0').replaceAll('/','~1')).join('/'))))], inputs: JSON.parse(JSON.stringify(activeInputs)), dependencies: dependencies(definition, blueprint), status: 'waiting', error: '' }
+      if (collectIssues) {
+        const fields = [...values.keys()].filter(key => typeof key === 'string')
+          .map(field => ({ field, preset: presetSource(context, field) }))
+        for (const { path, preset } of [...presetBody.sources, ...probed.sources]) {
+          fields.push({ field: 'body:' + pointer(path), preset })
+        }
+        presetEffects.push({ label: definition.label, fields })
+      }
       // Check every static request before sending anything. Dynamic values are checked again at dispatch.
       const draft = { ...session, fields: { ...session.fields } }
       try {
@@ -137,19 +149,20 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
           const value = schema?.type === 'array' ? [] : schema?.type === 'object' ? {} : schema?.type === 'integer' || schema?.type === 'number' ? 1 : schema?.type === 'boolean' ? true : 'run-value'
           applyInput(draft, operation, input, value)
         }
-        issueInput = (operation.parameters ?? []).find(parameter =>
-          (parameter.required || parameter.in === 'path') &&
-          (values.has(contextKey(parameter))
+        issueInput = undefined
+        for (const parameter of operation.parameters ?? []) {
+          if (!(parameter.required || parameter.in === 'path')) continue
+          const missingValue = values.has(contextKey(parameter))
             ? values.get(contextKey(parameter)) === '' || values.get(contextKey(parameter)) === undefined
-            : !draft.fields[fieldKey(parameter)]))
-        if (issueInput) {
-          issueInput = { location: issueInput.in, name: issueInput.name }
-          throw missingInput(`${issueInput.name} is required.`)
+            : !draft.fields[fieldKey(parameter)]
+          if (missingValue) reportMissing({ location: parameter.in, name: parameter.name }, `${parameter.name} is required.`)
         }
-        const bodyTarget = missingRequiredBody(operation, draft, step.inputs)
-        if (bodyTarget !== undefined) {
-          issueInput = { location: 'body', pointer: bodyTarget }
-          throw missingInput(`Required body field ${bodyTarget} is missing.`)
+        for (const bodyTarget of missingRequiredBody(operation, draft, step.inputs) ?? []) {
+          reportMissing({ location: 'body', pointer: bodyTarget }, `Required body field ${bodyTarget} is missing.`)
+        }
+        if (missing.length) {
+          issues.push(...missing)
+          return []
         }
         buildRequest(operation, configuration, draft, values)
       } catch (cause) {
@@ -158,11 +171,17 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
         throw problem
       }
       step.target = effectiveTarget(operation, configuration, draft, values)
-      return step
+      return [step]
     } catch (cause) {
-      throw stepIssue(cause, definition, issueInput)
+      issues.push(...missing, stepIssue(cause, definition, issueInput))
+      return []
     }
   })
+  if (issues.length) {
+    if (!collectIssues) throw issues[0]
+    throw Object.assign(new AggregateError(issues, issues[0].message), { plan, presetEffects })
+  }
+  if (collectIssues) plan.presetEffects = presetEffects
   plan.variables = JSON.parse(JSON.stringify(blueprint.variables))
   return plan
 }
@@ -171,9 +190,26 @@ export function canRetryStep(step) {
   return Boolean(step?.request && ['failed', 'cancelled'].includes(step.status))
 }
 
+export function remainingSteps(plan) {
+  const available = new Set(plan.filter(step => step.status === 'completed').map(step => step.id))
+  const remaining = []
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const step of plan) {
+      if (available.has(step.id) || step.status !== 'skipped' || step.request) continue
+      if (!step.dependencies.every(id => available.has(id))) continue
+      available.add(step.id)
+      remaining.push(step)
+      changed = true
+    }
+  }
+  return remaining
+}
+
 // DAG scheduler: ready nodes start immediately; a join waits for every dependency.
 // Only explicit response-wait policies repeat requests. Errors stop the run.
-export async function executeBlueprint(plan, { concurrency = 4, execute, signal, ask, generate = generateValue, sleep = abortableDelay, pick = pickRandom, retryStepId }) {
+export async function executeBlueprint(plan, { concurrency = 4, execute, signal, ask, generate = generateValue, sleep = abortableDelay, pick = pickRandom, retryStepId, resume = false, resolvedVariables = new Map() }) {
   const controller = new AbortController(), combined = AbortSignal.any([signal, controller.signal])
   const byId = new Map(plan.map(step => [step.id, step])), running = new Map()
   const retryOnly = retryStepId !== undefined
@@ -182,6 +218,7 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
     if (!canRetryStep(target)) throw new Error('This step has no failed request to retry.')
     Object.assign(target, { status: 'waiting', error: '', problemTarget: undefined })
   }
+  if (resume) for (const step of remainingSteps(plan)) step.status = 'waiting'
   let failure, activeRequests = 0
   const waiting = []
   function release() { activeRequests--; waiting.shift()?.grant() }
@@ -198,6 +235,7 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
   const questionIds = new Map(), reservedIds = new Set(byId.keys())
   for (const variable of variableDefinitions.values()) { let id = 'variable:' + variable.id; while (reservedIds.has(id)) id += ':'; reservedIds.add(id); questionIds.set(variable.id, id) }
   function resolveVariable(id) {
+    if (resolvedVariables.has(id)) return Promise.resolve(resolvedVariables.get(id))
     if (!variableValues.has(id)) variableValues.set(id, (async () => {
       const variable = variableDefinitions.get(id)
       if (!variable) throw new Error('Shared variable is unavailable.')
@@ -216,6 +254,7 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
         value = answers[0]
       }
       combined.throwIfAborted()
+      resolvedVariables.set(id, value)
       return value
     })())
     return variableValues.get(id)

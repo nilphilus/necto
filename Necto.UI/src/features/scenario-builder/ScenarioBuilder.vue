@@ -23,7 +23,7 @@ import {
 } from './model.js'
 import { configureEndpoint } from './stepDraft.js'
 import { normalizeParameterNames } from './parameterNames.js'
-import { prepareBlueprint } from './runner.js'
+import { prepareBlueprint, remainingSteps } from './runner.js'
 import { allConnections, connectionKey, connectionSummary } from './connections.js'
 import { waitOptions } from './waiting.js'
 import ScenarioBodyEditor from './ScenarioBodyEditor.vue'
@@ -62,8 +62,10 @@ const selectedId = ref(''),
   runDialog = ref(null),
   fileInput = ref(null)
 const oneTimeValues = ref(new Map())
-const missingValue = ref('')
-const missingValueError = ref('')
+const runIssues = ref([])
+const resumeDialog = ref(null)
+const resumable = computed(() => !execution.stale && execution.status === 'incomplete'
+  ? remainingSteps(execution.steps) : [])
 const runConcurrency = ref(4)
 const runIssue = ref(null)
 const review = ref([]),
@@ -471,15 +473,13 @@ function saveConnection() {
 }
 function removeConnection() {
   if (pending.value) return
-  const edge = edgeEdit.value,
-    count = edgeTarget.value.inputs.filter((input) =>
-      inputProducers(input, draft.value).includes(edge.from)
-    ).length
-  if (
-    count &&
-    !window.confirm(`Remove this connection and its ${count} response or expression input(s)?`)
-  )
-    return
+  const edge = edgeEdit.value
+  const affected = edgeTarget.value.inputs.filter(input => inputProducers(input, draft.value).includes(edge.from))
+  const fields = affected.map(input => {
+    const field = input.location === 'body' ? input.pointer || '(whole body)' : input.name
+    return `• ${edgeTarget.value.label} → ${input.location} ${field} · ${input.source}`
+  })
+  if (fields.length && !window.confirm(`Remove this connection and these input bindings?\n\n${fields.join('\n')}`)) return
   draft.value.connections = draft.value.connections.filter(
     (item) => connectionKey(item.from, item.to) !== connectionKey(edge.from, edge.to)
   )
@@ -495,56 +495,58 @@ function runContext(names = props.activePresetNames) {
 function refreshReview() {
   runProblem.value = ''
   runIssue.value = null
+  runIssues.value = []
   try {
-    review.value = prepareBlueprint({ ...draft.value, concurrency: runConcurrency.value }, runContext())
+    review.value = prepareBlueprint({ ...draft.value, concurrency: runConcurrency.value }, runContext(), { collectIssues: true })
   } catch (cause) {
-    review.value = []
-    runProblem.value = cause.message
-    runIssue.value = cause
+    review.value = cause.plan ?? []
+    if (cause instanceof AggregateError) runIssues.value = cause.errors
+    else {
+      runProblem.value = cause.message
+      runIssue.value = cause
+    }
   }
+}
+function issueKey(issue) {
+  return JSON.stringify([issue.stepId, issue.target?.location, issue.target?.name, issue.missingInput ? '' : issue.message])
 }
 const suggestedPresets = computed(() => {
-  const issue = runIssue.value
-  if (!issue?.missingInput || !props.presetContext) return []
-  return props.presetNames.filter(name => {
-    if (props.activePresetNames.includes(name)) return false
+  const missing = runIssues.value.filter(issue => issue.missingInput)
+  if (!missing.length || !props.presetContext) return []
+  return props.presetNames.flatMap(name => {
+    if (props.activePresetNames.includes(name)) return []
+    let effects, unresolved
     try {
-      prepareBlueprint({ ...draft.value, concurrency: runConcurrency.value }, runContext([...props.activePresetNames, name]))
-      return true
+      effects = prepareBlueprint({ ...draft.value, concurrency: runConcurrency.value },
+        runContext([...props.activePresetNames, name]), { collectIssues: true }).presetEffects
+      unresolved = []
     } catch (cause) {
-      // A later missing input can be resolved separately. Reject other failures on this step.
-      return cause.missingInput && (cause.stepId !== issue.stepId ||
-        cause.target?.location !== issue.target?.location || cause.target?.name !== issue.target?.name)
+      if (!(cause instanceof AggregateError)) return []
+      effects = cause.presetEffects
+      unresolved = cause.errors
     }
+    const remaining = new Set(unresolved.map(issueKey))
+    const resolved = missing.filter(issue => !remaining.has(issueKey(issue)))
+    if (!resolved.length) return []
+    const fields = effects.flatMap(step => step.fields.filter(field => field.preset === name)
+      .map(({ field }) => `${step.label} · ${field.replace(':', ' ')}`))
+    return [{ name, fields: [...new Set(fields)] }]
   })
 })
-function activateSuggestedPreset(name) {
-  missingValue.value = ''
-  missingValueError.value = ''
-  emit('activate-preset', name)
-}
-function useMissingValue() {
-  const issue = runIssue.value
-  if (!issue?.missingInput || !issue.target || !missingValue.value.trim()) return
-  let value = missingValue.value
-  if (issue.target.location === 'body') {
-    try { value = JSON.parse(value) }
-    catch { missingValueError.value = 'Enter a valid JSON value.'; return }
+function useMissingValues(entries) {
+  for (const { issue, value } of entries) {
+    const { stepId, target } = issue
+    const inputs = oneTimeValues.value.get(stepId) ?? []
+    oneTimeValues.value.set(stepId, [...inputs.filter(input =>
+      input.location !== target.location || input.name !== target.name),
+      { ...target, ...(target.location === 'body' ? { pointer: target.name } : {}), value }])
   }
-  const inputs = oneTimeValues.value.get(issue.stepId) ?? []
-  oneTimeValues.value.set(issue.stepId, [...inputs.filter(input =>
-    input.location !== issue.target.location || input.name !== issue.target.name),
-    { ...issue.target, ...(issue.target.location === 'body' ? { pointer: issue.target.name } : {}), value }])
-  missingValue.value = ''
-  missingValueError.value = ''
   refreshReview()
 }
 function reviewRun() {
   runConcurrency.value = draft.value.concurrency
   allowHuman.value = true
   oneTimeValues.value = new Map()
-  missingValue.value = ''
-  missingValueError.value = ''
   refreshReview()
   runDialog.value.showModal()
 }
@@ -554,6 +556,7 @@ watch([allowHuman, runConcurrency, () => props.activePresetNames, () => props.pr
 async function startRun() {
   runProblem.value = ''
   runIssue.value = null
+  if (runIssues.value.length) return
   try {
     const promise = store.run(runContext(), props.execute, allowHuman.value, runConcurrency.value)
     // run() is async; initial errors are reported by awaiting below.
@@ -669,6 +672,12 @@ async function retryStep(id) {
   if (!['GET', 'HEAD', 'OPTIONS'].includes(step.operation.method) &&
       !window.confirm(`Send ${step.operation.method} again for “${step.label}”? This can repeat changes on the server.`)) return
   try { await store.retry(id, props.execute) }
+  catch (cause) { error.value = cause.message }
+}
+async function runRemaining() {
+  if (!resumable.value.length || pending.value || props.busy) return
+  resumeDialog.value.close()
+  try { await store.continueRun(props.execute) }
   catch (cause) { error.value = cause.message }
 }
 function beforeUnload(event) {
@@ -825,7 +834,10 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         {{ execution.steps.length }} completed</span
       ><span v-if="questions.size">{{ questions.size }} awaiting your input</span
       ><span class="error">{{ execution.error }}</span>
-      <button v-if="failedStep && !execution.stale" type="button" class="secondary"
+      <span v-if="execution.stale">Retry and continuation are unavailable because the scenario changed.</span>
+      <button v-if="resumable.length" type="button" class="secondary" :disabled="busy"
+        @click="resumeDialog.showModal()">Run remaining steps</button>
+      <button v-if="failedStep && draft.steps.some(step => step.id === failedStep.id)" type="button" class="secondary"
         @click="goToIssue({ stepId: failedStep.id, target: failedStep.problemTarget }, !failedStep.problemTarget)">
         Go to failed step
       </button>
@@ -881,7 +893,8 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         :blueprint="draft"
         :selected="selectedId"
         :active-connection="edgeEdit ? connectionKey(edgeEdit.from, edgeEdit.to) : undefined"
-        :steps="execution.stale ? [] : execution.steps"
+        :steps="execution.steps"
+        :stale="execution.stale"
         :disabled="pending"
         @select="select"
         @inspect="id => select(id, true)"
@@ -1353,15 +1366,30 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       <p v-if="!filtered.length">No matching endpoints.</p>
       <small v-if="filtered.length === 100">First 100 matches. Narrow the search for more.</small>
     </dialog>
+    <dialog ref="resumeDialog" class="builder-dialog" aria-labelledby="resume-title">
+      <form @submit.prevent="runRemaining">
+        <header><h3 id="resume-title">Run remaining steps</h3></header>
+        <p>These requests have not been sent in this run. They use the original run settings and the responses already received.</p>
+        <ol>
+          <li v-for="step in resumable" :key="step.id">
+            {{ step.label }} · <code>{{ step.operation.method }} {{ step.operation.path }}</code>
+            <span v-if="step.entryPolicies.some(policy => policy.waitFor?.retryCount > 0)"> · May repeat while waiting</span>
+          </li>
+        </ol>
+        <footer>
+          <button type="button" class="secondary" @click="resumeDialog.close()">Cancel</button>
+          <button type="submit" class="primary" :disabled="pending || busy || !resumable.length">Send remaining requests</button>
+        </footer>
+      </form>
+    </dialog>
     <ScenarioRunReview
       ref="runDialog"
       :active-presets="activePresetNames"
       :suggested-presets="suggestedPresets"
-      :missing-target="runIssue?.missingInput ? runIssue.target : undefined"
-      v-model:missing-value="missingValue"
-      :missing-value-error="missingValueError"
-      @activate-preset="activateSuggestedPreset"
-      @use-missing-value="useMissingValue"
+      :issues="runIssues"
+      :steps="draft.steps"
+      @activate-preset="emit('activate-preset', $event)"
+      @use-missing-values="useMissingValues"
       v-model:concurrency.number="runConcurrency"
       v-model:allow-human="allowHuman"
       :name="draft.name"
@@ -1371,7 +1399,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       :validation="validation"
       :run-problem="runProblem"
       :problem-step="runIssue?.stepId"
-      @go-to-step="goToIssue(runIssue)"
+      @go-to-step="goToIssue($event ?? runIssue)"
       :review="review"
       @start="startRun"
     />

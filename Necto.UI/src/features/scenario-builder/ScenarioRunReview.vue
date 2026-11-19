@@ -1,31 +1,64 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { connectionKey } from './connections.js'
 import { inputSources } from './variables.js'
 
-defineProps({
+const props = defineProps({
   name: String,
   stepCount: Number,
   variables: Array,
   activePresets: Array,
   suggestedPresets: Array,
-  missingTarget: Object,
-  missingValueError: String,
+  issues: Array,
+  steps: Array,
   pending: Boolean,
   validation: String,
   runProblem: String,
   problemStep: String,
   review: Array,
 })
-defineEmits(['start', 'go-to-step', 'activate-preset', 'use-missing-value'])
+const emit = defineEmits(['start', 'go-to-step', 'activate-preset', 'use-missing-values'])
 
-const missingValue = defineModel('missingValue', { type: String, required: true })
+const values = ref({})
+const errors = ref({})
+function key(issue) {
+  return JSON.stringify([issue.stepId, issue.target?.location, issue.target?.name, issue.missingInput ? '' : issue.message])
+}
+const groups = computed(() => {
+  const byStep = new Map()
+  for (const issue of props.issues) {
+    if (!byStep.has(issue.stepId)) byStep.set(issue.stepId, [])
+    byStep.get(issue.stepId).push(issue)
+  }
+  return [...byStep].map(([id, issues]) => ({ id, label: props.steps.find(step => step.id === id)?.label, issues }))
+})
+const hasValues = computed(() => props.issues.some(issue =>
+  issue.missingInput && issue.target && values.value[key(issue)]?.trim()))
+
+function applyValues(issues = props.issues) {
+  const entries = []
+  for (const issue of issues) {
+    if (!issue.missingInput || !issue.target) continue
+    const id = key(issue)
+    const raw = values.value[id]
+    if (!raw?.trim()) continue
+    try {
+      const value = issue.target.location === 'body' ? JSON.parse(raw) : raw
+      entries.push({ issue, value })
+      delete errors.value[id]
+      delete values.value[id]
+    } catch {
+      errors.value[id] = 'Enter a valid JSON value.'
+    }
+  }
+  if (entries.length) emit('use-missing-values', entries)
+}
 const concurrency = defineModel('concurrency', { type: [Number, String], required: true })
 const allowHuman = defineModel('allowHuman', { type: Boolean, required: true })
 const runDialog = ref(null)
 
 defineExpose({
-  showModal: () => runDialog.value.showModal(),
+  showModal: () => { values.value = {}; errors.value = {}; runDialog.value.showModal() },
   close: () => runDialog.value.close(),
   isOpen: () => !!runDialog.value?.open,
 })
@@ -118,23 +151,38 @@ defineExpose({
         {{ runProblem }}
         <button v-if="problemStep" type="button" class="secondary" @click="$emit('go-to-step')">Go to step</button>
       </p>
-      <section v-if="missingTarget" class="missing-input" aria-label="Supply required input">
-        <button v-for="preset in suggestedPresets" :key="preset" type="button" class="secondary"
-          @click="$emit('activate-preset', preset)">Activate preset {{ preset }}</button>
-        <label>Value for {{ missingTarget.name || 'request body' }}
-          <input v-model="missingValue" :placeholder="missingTarget.location === 'body' ? 'JSON value' : undefined"
-            @keydown.enter.prevent="$emit('use-missing-value')">
-        </label>
-        <button type="button" class="secondary" :disabled="!missingValue.trim()"
-          @click="$emit('use-missing-value')">Use for this run</button>
-        <p v-if="missingValueError" role="alert">{{ missingValueError }}</p>
+      <section v-if="groups.length" class="missing-input" aria-label="Resolve run issues">
+        <fieldset v-for="group in groups" :key="group.id">
+          <legend>{{ group.label }}</legend>
+          <div v-for="issue in group.issues" :key="key(issue)" class="run-issue">
+            <p class="error" role="alert">{{ issue.message }}</p>
+            <div class="issue-actions">
+              <label v-if="issue.missingInput && issue.target">Value for {{ issue.target.name || 'request body' }}
+                <input v-model="values[key(issue)]" :placeholder="issue.target.location === 'body' ? 'JSON value' : undefined"
+                  @keydown.enter.prevent="applyValues([issue])">
+              </label>
+              <button type="button" class="secondary" @click="$emit('go-to-step', issue)">Go to step</button>
+            </div>
+            <p v-if="errors[key(issue)]" role="alert">{{ errors[key(issue)] }}</p>
+          </div>
+        </fieldset>
+        <button v-if="issues.some(issue => issue.missingInput && issue.target)" type="button" class="secondary"
+          :disabled="!hasValues" @click="applyValues()">Use for this run</button>
+        <details v-for="preset in suggestedPresets" :key="preset.name">
+          <summary>Preset {{ preset.name }} · affected fields</summary>
+          <ul><li v-for="field in preset.fields" :key="field">{{ field }}</li></ul>
+          <p>Activation updates the shared preset selection. It stays active after you close this review.</p>
+          <button type="button" class="secondary" @click="$emit('activate-preset', preset.name)">
+            Activate preset globally · {{ preset.name }}
+          </button>
+        </details>
       </section>
       <div class="run-actions">
         <button type="button" class="secondary" @click="runDialog.close()">Cancel</button
         ><button
           type="submit"
           class="primary"
-          :disabled="pending || !!validation || !!runProblem || !review.length"
+          :disabled="pending || !!validation || !!runProblem || !!issues.length || !review.length"
         >
           Run scenario
         </button>
@@ -177,6 +225,10 @@ defineExpose({
 }
 .missing-input { display: grid; gap: .45rem; }
 .missing-input button { justify-self: start; }
+.missing-input fieldset { min-inline-size: 0; border: 1px solid var(--line); }
+.run-issue { overflow-wrap: anywhere; }
+.issue-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; }
+.issue-actions label { display: grid; gap: .2rem; }
 .parallel-limit {
   display: flex;
   gap: 0.7rem;
