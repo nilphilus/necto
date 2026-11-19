@@ -4,7 +4,6 @@ import { parseBuilderImport } from './definitionImport.js'
 import { suggestInputs } from './inputSuggestions.js'
 import FolderSave from '../scenario-folder/FolderSave.vue'
 import FolderFeedback from '../scenario-folder/FolderFeedback.vue'
-import FolderLibrary from '../scenario-folder/FolderLibrary.vue'
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue'
 import SentRequest from './SentRequest.vue'
 import { removeStepDraft, restoreStepDraft } from './stepUndo.js'
@@ -778,7 +777,6 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       </details>
     </div>
     <FolderFeedback :folder="folder" />
-    <FolderLibrary :folder="folder" />
     <p v-if="error || validation" class="builder-message error" role="alert">
       {{ error || validation }}
       <button v-if="!error && validationIssue?.stepId" type="button" class="secondary"
