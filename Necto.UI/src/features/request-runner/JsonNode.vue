@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { hasExpandableArray } from './expansion.js'
+import { hasExpandableChildren } from './expansion.js'
 import { matchesPath } from '../related-endpoints/mappings.js'
 import { childEntries, pageRange, PREVIEW_PAGE_SIZE, STRING_PAGE_SIZE } from './preview.js'
 import { isPrefix } from '../payload-search/search.js'
@@ -31,12 +31,11 @@ function changePage(value){page.value=value;emit('page',{path:props.path,page:va
 const expansionKey=computed(()=>JSON.stringify(props.path))
 const activeExpansion=computed(()=>props.expansion?.commands.findLast(command=>isPrefix(command.path,props.path)))
 const childrenExpanded=computed(()=>Boolean(activeExpansion.value?.expanded&&activeExpansion.value.paths.has(expansionKey.value)))
-const canToggleChildren = computed(() => props.expansion && count.value > 0 &&
-  (array.value ||
-   (childrenExpanded.value && activeExpansion.value.path.length === props.path.length) ||
-   hasExpandableArray(props.value, props.path, props.expansion.pages)))
+const canToggleChildren = computed(() => props.expansion && container.value && count.value > 0 &&
+  ((childrenExpanded.value && activeExpansion.value.path.length === props.path.length) ||
+   hasExpandableChildren(props.value, range.value, keys.value)))
 const childrenToggleTitle = computed(() => (childrenExpanded.value ? 'Collapse' : 'Expand') +
-  (array.value ? ' children in this list.' : ' children under this object, including arrays.') +
+  (array.value ? ' children in this list.' : ' children under this object.') +
   ' Visible pages only; preview limits remain active.')
 const forcedExpansion=computed(()=>{
  const command=activeExpansion.value
