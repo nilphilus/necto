@@ -24,7 +24,7 @@ Static transport fields are string values under `path:name`, `query:name`, `head
 
 ## Inputs
 
-Each input targets `location: "path"|"query"|"header"` plus `name`, or `location: "body"` plus `pointer`. JSON Pointer uses `/field`, `/items/0/id`; escape `~` as `~0` and `/` as `~1`. Empty pointer means the whole body/response. Array target elements must already exist. Input targets must not overlap.
+Each input targets `location: "path"|"query"|"header"` plus `name`, or `location: "body"` plus `pointer`. JSON Pointer uses `/field`, `/items/0/id`; escape `~` as `~0` and `/` as `~1`. Empty pointer means the whole body/response. Array target elements must already exist. Input targets must not overlap. Copy JSON property names exactly from the selected OpenAPI media type and schema. If the schema declares `Type`, write `"Type"` in the saved body and `/Type` in target pointers, including through nested array items. Use the source response schema for source pointers. JSON keys such as `abc` and `ABC` are distinct.
 
 Add one source:
 

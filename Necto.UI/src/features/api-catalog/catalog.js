@@ -1,5 +1,6 @@
 import { importedWorkspaceId } from '../workbench/workspaceIdentity.js'
 import { computed, onMounted, onScopeDispose, ref } from 'vue'
+import { resolveReference } from '../workbench/openapiReference.js'
 import { parseDocument, bundleReferences } from '../workbench/document.js'
 import { useExternalApis } from '../external-apis/connections.js'
 
@@ -13,20 +14,6 @@ async function fetchJson(url, authentication, signal, apiDocument = false) {
   const data = apiDocument ? await bundleReferences(parseDocument(await response.text()), new URL(url, document.baseURI).href, (url, options) => fetch(url, { ...options, signal })) : await response.json()
   signal?.throwIfAborted()
   return data
-}
-
-function resolveReference(spec, value) {
-  const visited = new Set()
-  while (value?.$ref) {
-    const reference = value.$ref
-    if (!reference.startsWith('#/') || visited.has(reference)) return undefined
-    visited.add(reference)
-    value = decodeURIComponent(reference.slice(2)).split('/').reduce(
-      (node, key) => { const name = key.replaceAll('~1', '/').replaceAll('~0', '~'); return node && Object.hasOwn(node, name) ? node[name] : undefined },
-      spec,
-    )
-  }
-  return value
 }
 
 export function readOperations(spec, api = { id: 'local' }) {
