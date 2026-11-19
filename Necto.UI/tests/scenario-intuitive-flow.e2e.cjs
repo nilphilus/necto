@@ -18,8 +18,7 @@ run(async ({ p, assert, builder, save, closeEditor, review, calls }) => {
   await p.locator('.endpoint-options button').filter({ hasText: 'Create invoice' }).click()
   const editor = p.getByRole('dialog', { name: 'Edit step', exact: true })
   const request = editor.getByRole('region', { name: 'Request inputs', exact: true })
-  const connections = editor.locator('.incoming-links')
-  assert.equal(await connections.evaluate((element) => element.open), false)
+  const connections = editor.getByRole('button', { name: /^Edit connection/ })
   assert.ok((await request.boundingBox()).y < (await connections.boundingBox()).y)
 
   await request.getByLabel('Source for customerId').selectOption('expression')

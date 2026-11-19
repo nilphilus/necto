@@ -1,8 +1,6 @@
 <script setup>
-import RandomSourceEditor from './RandomSourceEditor.vue'
 import { sensitiveName } from '../workbench/privacy.js'
 import { contractValues } from '../request-runner/contractValues.js'
-import ExpressionEditor from './ExpressionEditor.vue'
 import DescriptionHelp from '../workbench/DescriptionHelp.vue'
 import { computed, ref, watch, inject } from 'vue'
 import {
@@ -19,13 +17,13 @@ import {
   prefix,
   inferVariant,
   BODY_VALUE,
+  BODY_FIELD_EDITOR,
+  BODY_SOURCE_LABELS,
   variantTemplate,
   editBodyNumber,
 } from './bodySchema.js'
 import { pointerParts, readPointer } from './pointers.js'
 import { schemaTemplate } from '../request-runner/schemaTemplate.js'
-import { generators } from './generation.js'
-import { pointerHints } from './pointerHints.js'
 const props = defineProps({
   step: Object,
   operation: Object,
@@ -33,16 +31,13 @@ const props = defineProps({
   path: { type: Array, default: () => [] },
   name: String,
   required: Boolean,
-  steps: Array,
-  operations: Array,
-  variables: Array,
-  results: Array,
   disabled: Boolean,
   depth: { type: Number, default: () => 0 },
   ancestors: { type: Array, default: () => [] },
   last: { type: Boolean, default: true },
 })
 const emit = defineEmits(['raw'])
+const editField = inject(BODY_FIELD_EDITOR)
 const body = inject(BODY_VALUE, null)
 function current() {
   if (!body) return bodyAt(props.step, props.path)
@@ -165,6 +160,7 @@ function choose(source, element) {
     })
   })
   element.value = binding.value?.source ?? 'static'
+  if (binding.value) editField(pointer(props.path), element)
 }
 function include(enabled, element) {
   attempt(() => {
@@ -200,13 +196,6 @@ function removeItem(index) {
     if (!window.confirm('Remove this item and any configured input sources inside it?')) return
     removeArrayItem(props.step, props.operation, props.path, index)
   })
-}
-function hints() {
-  const from = props.steps.find((step) => step.id === binding.value?.stepId)
-  return pointerHints(
-    props.operations.find((operation) => operation.key === from?.operationKey),
-    props.results?.find((result) => result.id === from?.id)?.response?.json
-  )
 }
 function changeVariant(index, element) {
   attempt(() => {
@@ -277,7 +266,7 @@ function changeVariant(index, element) {
         ><span v-if="schema.readOnly" class="field-badge">read only</span>
       </div>
       <fieldset :disabled="disabled" class="field-editor">
-        <label class="source-picker"
+        <label v-if="source === 'static'" class="source-picker"
           ><span class="sr-only">Value source</span
           ><select
             :value="source"
@@ -294,6 +283,11 @@ function changeVariant(index, element) {
             <option value="human">Ask at run time</option>
           </select></label
         >
+        <button v-else type="button" class="secondary source-badge"
+          :aria-label="'Edit source for ' + name + ': ' + BODY_SOURCE_LABELS[source]"
+          @click="editField(pointer(path), $event.currentTarget)">
+          {{ BODY_SOURCE_LABELS[source] }}
+        </button>
         <template v-if="source === 'static'"
           ><small v-if="value === null">JSON null</small>
           <select
@@ -368,60 +362,6 @@ function changeVariant(index, element) {
             Set null
           </button>
         </template>
-        <template v-else-if="source === 'response'"
-          ><label
-            >Source step<select v-model="binding.stepId" :aria-label="'Response step for ' + name">
-              <option value="" disabled>Choose request</option>
-              <option
-                v-for="other in steps.filter((other) => other.id !== step.id)"
-                :key="other.id"
-                :value="other.id"
-              >
-                {{ other.label }}
-              </option>
-            </select></label
-          ><label
-            >Response field<input
-              v-model="binding.responsePointer"
-              :list="'schema-path-' + binding.stepId + '-' + pointer(path)"
-              :aria-label="'Response field for ' + name"
-              placeholder="/id" /></label
-          ><datalist :id="'schema-path-' + binding.stepId + '-' + pointer(path)">
-            <option v-for="hint in hints()" :key="hint" :value="hint" /></datalist
-        ></template>
-        <label v-else-if="source === 'variable'"
-          >Variable<select v-model="binding.variableId" :aria-label="'Variable for ' + name">
-            <option value="" disabled>Choose variable</option>
-            <option v-for="variable in variables" :key="variable.id" :value="variable.id">
-              {{ variable.name }}
-            </option>
-          </select></label
-        >
-        <p v-else-if="source === 'preset'" class="field-note">
-          Select a matching preset in Review & run. This field must be filled by that preset.
-        </p>
-        <template v-else-if="source === 'generate'"
-          ><label
-            >Generator<select v-model="binding.generator" :aria-label="'Generator for ' + name">
-              <option v-for="[id, label] in generators" :key="id" :value="id">{{ label }}</option>
-            </select></label
-          ><input
-            v-if="binding.generator === 'regex'"
-            v-model="binding.pattern"
-            :aria-label="'Pattern for ' + name"
-        /></template>
-        <template v-else-if="source === 'human'"
-          ><label
-            >Question<input v-model="binding.prompt" :aria-label="'Question for ' + name" /></label
-          ><label
-            >Type<select v-model="binding.valueType">
-              <option value="text">Text</option>
-              <option value="number">Number</option>
-              <option value="boolean">Boolean</option>
-              <option value="json">JSON</option>
-            </select></label
-          ></template
-        >
       </fieldset>
       <span
         v-if="source !== 'static' || !['object', 'array'].includes(type) || value === null"
@@ -445,21 +385,6 @@ function changeVariant(index, element) {
         /><span class="sr-only">Include {{ name }}</span></label
       >
     </div>
-    <details v-if="source === 'random'" class="expression-details" open>
-      <summary>Configure random selection</summary>
-      <RandomSourceEditor :source="binding" :step="step" :steps="steps" :disabled="disabled" />
-    </details>
-    <details v-if="source === 'expression'" class="expression-details" open>
-      <summary>Expression <code>{{ pointer(path) || '(whole body)' }}</code></summary>
-      <p class="field-note">This value is calculated before sending the request.</p>
-      <ExpressionEditor
-        :input="binding"
-        :step="step"
-        :steps="steps"
-        :variables="variables"
-        :disabled="disabled"
-      />
-    </details>
     <div v-if="source === 'static' && open && (value !== null || descendantFields.size)" class="schema-children">
       <label v-if="variants.length"
         >Schema variant<select
@@ -498,10 +423,6 @@ function changeVariant(index, element) {
           :path="[...path, key]"
           :name="key"
           :required="schema.required.includes(key)"
-          :steps="steps"
-          :operations="operations"
-          :variables="variables"
-          :results="results"
           :disabled="disabled"
           :depth="depth + 1"
           :ancestors="[...ancestors, raw.$ref ?? raw]"
@@ -538,10 +459,6 @@ function changeVariant(index, element) {
             :name="'Item ' + (index + 1)"
             :last="index === value.length - 1"
             :required="true"
-            :steps="steps"
-            :operations="operations"
-            :variables="variables"
-            :results="results"
             :disabled="disabled"
             :depth="depth + 1"
             :ancestors="[...ancestors, raw.$ref ?? raw]"
@@ -602,12 +519,7 @@ function changeVariant(index, element) {
 </template>
 <style scoped>
 .runtime-field > .json-line { border-inline-start: 2px solid var(--accent); padding-inline-start: .45rem; }
-.expression-details summary code { margin-inline-start: .25rem; overflow-wrap: anywhere; }
-
-.expression-details {
-  margin: 0.3rem 0 0.5rem 1rem;
-  font: 0.72rem system-ui;
-}
+.source-badge { background: var(--accent-soft); color: var(--accent); font-size: .72rem; }
 
 .omitted-field > .json-line > .field-heading,
 .omitted-field > .json-line > .field-editor,
