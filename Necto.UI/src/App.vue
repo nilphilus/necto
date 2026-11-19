@@ -22,6 +22,7 @@ import RequestSamples from './features/request-runner/RequestSamples.vue'
 import { createSampleDrafts } from './features/request-runner/samples.js'
 import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
 import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
+import { createRelatedDrafts } from './features/related-endpoints/drafts.js'
 import RelatedTargets from './features/related-endpoints/RelatedTargets.vue'
 import ExternalApiSettings from './features/external-apis/ExternalApiSettings.vue'
 import EndpointGraph from './features/endpoint-graph/EndpointGraph.vue'
@@ -379,6 +380,7 @@ const relatedResults = computed(() => {
   return results
 })
 
+const relatedDraftFor = createRelatedDrafts()
 const relatedTargets = computed(() => {
   if (!current.value) return []
   const { operation, session } = current.value
@@ -389,6 +391,7 @@ const relatedTargets = computed(() => {
     const values = valuesFor(target.operation)
     return {
       ...target,
+      drafts: relatedDraftFor(session.result, target.operation.key),
       presetInputs: presetInputs(target.operation, createDraft(target.operation).body, values),
       sourceParameters: target.operation.parameters.filter(parameter =>
         ['path', 'query', 'header'].includes(parameter.in) &&
