@@ -1,6 +1,6 @@
 import { parse } from 'yaml'
 import { applyInput, newBlueprint, newStep, validateBlueprint } from './model.js'
-import { pointer } from './bodySchema.js'
+import { pointer, prefix } from './bodySchema.js'
 import { pointerParts } from './pointers.js'
 import { isJson } from '../workbench/body.js'
 
@@ -204,9 +204,16 @@ export function importArazzoWorkflow(document, workflowId, operations, localUrl)
         if (isJson(type)) {
           step.request.body = JSON.stringify(payload(body.payload ?? null), null, 2)
           for (const replacement of body.replacements ?? []) {
-            pointerParts(replacement.target)
+            const path = pointerParts(replacement.target)
             const target = { location: 'body', pointer: replacement.target }
             if (!Object.hasOwn(replacement, 'value')) throw new Error('A body replacement needs a value.')
+            step.inputs = step.inputs.filter(input => {
+              if (input.location !== 'body') return true
+              const existing = pointerParts(input.pointer)
+              if (existing.length < path.length && prefix(existing, path))
+                throw new Error('A body replacement cannot target a child of a dynamic value.')
+              return !prefix(path, existing)
+            })
             if (!binding(replacement.value, target, step)) applyInput(step.request, operation, target, replacement.value)
           }
         } else {
@@ -224,7 +231,9 @@ export function importArazzoWorkflow(document, workflowId, operations, localUrl)
       throw new Error(`Arazzo step ${index + 1}${typeof source?.stepId === 'string' ? ' (' + source.stepId.slice(0, 120) + ')' : ''}: ${cause.message}`)
     }
   }
-  blueprint.variables = [...variables.values()]
+  const usedVariables = new Set(blueprint.steps.flatMap(step =>
+    step.inputs.filter(input => input.source === 'variable').map(input => input.variableId)))
+  blueprint.variables = [...variables.values()].filter(variable => usedVariables.has(variable.id))
   validateBlueprint(blueprint)
   return blueprint
 }

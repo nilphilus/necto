@@ -91,3 +91,18 @@ test('rejects an unmatched relative OpenAPI source even with a unique operation 
   assert.throws(() => importArazzoWorkflow(document, 'create-and-read', operations, localUrl),
     /Connect the OpenAPI document referenced by this step/)
 })
+
+test('body replacements override earlier bindings at the same path or below it', () => {
+  const document = readArazzo(definition)
+  const body = document.workflows[0].steps[0].requestBody
+  body.payload.lines[0].currency = '$inputs.currency'
+  body.replacements = [
+    { target: '/currency', value: 'EUR' },
+    { target: '/lines/0', value: { amount: 20, currency: 'USD' } },
+  ]
+  const scenario = importArazzoWorkflow(document, 'create-and-read', operations, localUrl)
+  assert.deepEqual(scenario.steps[0].inputs, [])
+  assert.deepEqual(scenario.variables, [])
+  assert.deepEqual(JSON.parse(scenario.steps[0].request.body),
+    { currency: 'EUR', lines: [{ amount: 20, currency: 'USD' }] })
+})
