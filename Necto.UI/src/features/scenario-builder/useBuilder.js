@@ -6,7 +6,7 @@ import { sharedOrigin } from '../scenario-definitions/origin.js'
 import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { newBlueprint, parseHuman } from './model.js'
-import { canRetryStep, prepareBlueprint, executeBlueprint } from './runner.js'
+import { canRetryStep, prepareBlueprint, executeBlueprint, remainingSteps } from './runner.js'
 import { upgradeBlueprint } from './connections.js'
 
 const clone = value => JSON.parse(JSON.stringify(value))
@@ -16,13 +16,14 @@ export function useBuilder(configuration) {
   const key = computed(() => workspaceIdentity(configuration.value) && builderCollectionKey(workspaceIdentity(configuration.value)))
   const dirty = computed(() => JSON.stringify(savedBlueprintSafe(draft.value)) !== JSON.stringify(savedBlueprintSafe(saved.value.find(item => item.id === draft.value.id))))
   let controller, revision = 0
+  let resolvedVariables = new Map(), runOptions
   function savedBlueprintSafe(value) { try { return savedBlueprint(value) } catch { return value } }
   function stop() { controller?.abort() }
   function invalidate(ids) {
     if (ids && !execution.steps.some(step => ids.includes(step.operation.apiId ?? 'local'))) return
     revision++; clearRun()
   }
-  function clearRun() { stop(); questions.clear(); Object.assign(execution, { status: 'idle', steps: [], error: '', stale: false, presetNames: [] }) }
+  function clearRun() { stop(); resolvedVariables = new Map(); runOptions = undefined; questions.clear(); Object.assign(execution, { status: 'idle', steps: [], error: '', stale: false, presetNames: [] }) }
   function load() {
     saved.value = []; error.value = ''
     if (!key.value) return
@@ -80,11 +81,13 @@ export function useBuilder(configuration) {
     error.value = ''; notice.value = ''
     const plan = prepareBlueprint({ ...draft.value, concurrency }, context)
     if (!allowHuman && plan.some(step => step.inputs.flatMap(inputSources).some(input => input.source === 'human' || input.source === 'variable' && plan.variables.find(variable => variable.id === input.variableId)?.source === 'human'))) throw new Error('Enable human-in-the-loop for steps that ask for input.')
+    resolvedVariables = new Map()
+    runOptions = { concurrency, ask: allowHuman ? ask : undefined, resolvedVariables }
     const runRevision = revision
     Object.assign(execution, { status: 'running', steps: plan, error: '', stale: false, presetNames: [...(context.presetNames ?? [])] })
     const current = controller = new AbortController(); pending.value = true
     try {
-      const outcome = await executeBlueprint(execution.steps, { concurrency, execute, signal: current.signal, ask: allowHuman ? ask : undefined })
+      const outcome = await executeBlueprint(execution.steps, { ...runOptions, execute, signal: current.signal })
       if (revision === runRevision) Object.assign(execution, outcome)
     } finally {
       // A canceled run must not retain human answers in its prompt queue.
@@ -93,8 +96,14 @@ export function useBuilder(configuration) {
     }
   }
   async function retry(stepId, execute) {
+    return continueRun(execute, stepId)
+  }
+  async function continueRun(execute, stepId) {
+    const resume = stepId === undefined
     const step = execution.steps.find(item => item.id === stepId)
-    if (pending.value || execution.stale || !canRetryStep(step)) return
+    if (pending.value || execution.stale || (resume
+      ? execution.status !== 'incomplete' || !remainingSteps(execution.steps).length
+      : !canRetryStep(step))) return
     const runRevision = revision
     const current = controller = new AbortController()
     pending.value = true
@@ -102,13 +111,13 @@ export function useBuilder(configuration) {
     execution.error = ''
     try {
       const outcome = await executeBlueprint(execution.steps, {
-        execute, signal: current.signal, retryStepId: stepId,
+        ...runOptions, execute, signal: current.signal, retryStepId: stepId, resume,
       })
       if (revision === runRevision) Object.assign(execution, outcome)
     } finally {
-      pending.value = false
+      questions.clear(); pending.value = false
       if (controller === current) controller = undefined
     }
   }
-  return { draft, saved, dirty, error, notice, execution, pending, questions, save, saveCaptured, open, fresh, remove, stop, run, retry, invalidate }
+  return { draft, saved, dirty, error, notice, execution, pending, questions, save, saveCaptured, open, fresh, remove, stop, run, retry, continueRun, invalidate }
 }

@@ -91,7 +91,12 @@ const document = {
   const p = (page = await browser.newPage({ viewport: { width: 1540, height: 1000 } }))
   p.setDefaultTimeout(12000)
   p.on('pageerror', (error) => errors.push(error.message))
-  p.on('dialog', (dialog) => dialog.accept())
+  let confirmRemoval
+  p.on('dialog', (dialog) => {
+    if (!confirmRemoval || dialog.type() !== 'confirm') return dialog.accept()
+    confirmRemoval(dialog.message())
+    return dialog.dismiss()
+  })
   if (output) await fs.mkdir(output, { recursive: true })
   const shot = async (name) => {
     if (output) await p.screenshot({ path: path.join(output, name + '.png') })
@@ -295,6 +300,11 @@ const document = {
   assert.ok(mobile.x >= 0 && mobile.x + mobile.width <= 390)
   assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
   await shot('connection-popup-mobile')
+  const confirmation = new Promise(resolve => { confirmRemoval = resolve })
+  await popup.getByRole('button', { name: 'Remove connection', exact: true }).click()
+  assert.match(await confirmation, /Poll status → path id · response/)
+  await popup.waitFor()
+
   await popup.getByRole('button', { name: 'Cancel', exact: true }).click()
   assert.deepEqual(errors, [])
   const touch = await browser.newContext({

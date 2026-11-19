@@ -6,6 +6,7 @@ run(async ({ p, assert, builder, save, closeEditor, review, calls }) => {
     const document = await response.json()
     document.paths['/invoices'].post.parameters = [
       { in: 'query', name: 'region', required: true, schema: { type: 'string' } },
+      { in: 'query', name: 'department', required: true, schema: { type: 'string' } },
     ]
     await route.fulfill({ response, json: document })
   })
@@ -40,10 +41,14 @@ run(async ({ p, assert, builder, save, closeEditor, review, calls }) => {
   await save()
 
   let dialog = await review()
-  await dialog.getByRole('button', { name: 'Go to step', exact: true }).click()
+  await dialog.getByRole('alert').filter({ hasText: 'region is required' }).waitFor()
+  await dialog.getByRole('alert').filter({ hasText: 'department is required' }).waitFor()
+  await dialog.locator('.run-issue').filter({ hasText: 'region is required' })
+    .getByRole('button', { name: 'Go to step', exact: true }).click()
   const region = editor.locator('[data-parameter="query:region"] input')
   assert.equal(await region.evaluate((element) => element === document.activeElement), true)
   await region.fill('EU')
+  await editor.locator('[data-parameter="query:department"] input').fill('QA')
   await save()
 
   dialog = await review()

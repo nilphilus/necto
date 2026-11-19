@@ -5,7 +5,7 @@ import { inputProducers } from './variables.js'
 import { canRetryStep } from './runner.js'
 import { layers } from './model.js'
 import { allConnections, connectionKey, hasTiming } from './connections.js'
-const props = defineProps({ blueprint: Object, selected: String, steps: Array, disabled: Boolean, activeConnection: String })
+const props = defineProps({ blueprint: Object, selected: String, steps: Array, disabled: Boolean, stale: Boolean, activeConnection: String })
 const emit = defineEmits(['select', 'inspect', 'add-first', 'connect', 'configure', 'create-next', 'retry'])
 const zoom = ref(1),
   canvas = ref(null),
@@ -377,7 +377,8 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
               {{ states.get(node.step.id).httpStatus ?? states.get(node.step.id).status }}
             </button>
             <button v-if="!drag && canRetryStep(states.get(node.step.id))" type="button" class="node-retry"
-              :disabled="disabled" :aria-label="'Retry step ' + node.step.label" title="Retry this step"
+              :disabled="disabled || stale" :aria-label="'Retry step ' + node.step.label"
+              :title="stale ? 'Retry unavailable because the scenario changed' : 'Retry this step'"
               @click="emit('retry', node.step.id)">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
                 stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
