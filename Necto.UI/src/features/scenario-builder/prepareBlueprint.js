@@ -5,7 +5,7 @@ import { applyBodyPresets, buildRequest, contextKey, fieldKey, presetSource, pro
 import { bodyContent, isJson } from '../workbench/body.js'
 import { pointer, prefix, schemaView } from './bodySchema.js'
 import { effectiveTarget } from '../workbench/target.js'
-import { applyInput, dependencies, pointerParts, validateBlueprint } from './model.js'
+import { applyInput, dependencies, pointerParts, readPointer, validateBlueprint } from './model.js'
 import { allConnections, connectionSummary, upgradeBlueprint } from './connections.js'
 
 function missingRequiredBody(operation, draft, inputs) {
