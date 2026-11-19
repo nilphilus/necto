@@ -4,6 +4,8 @@ import { stepIssue } from './stepIssue.js'
 import { pickRandom } from './random.js'
 import { evaluateExpression, expressionContext } from './expression.js'
 import { applyBodyPresets, buildRequest, contextKey, fieldKey, protectedBodyPaths } from '../request-runner/request.js'
+import { bodyContent, isJson } from '../workbench/body.js'
+import { pointer, prefix, schemaView } from './bodySchema.js'
 import { effectiveTarget } from '../workbench/target.js'
 import { sentRequest } from './sentRequest.js'
 import { applyInput, dependencies, pointerParts, readPointer, validateBlueprint } from './model.js'
@@ -12,7 +14,49 @@ import { generateValue } from './generation.js'
 import { abortableDelay, waitMatches } from './waiting.js'
 import { allConnections, connectionSummary, upgradeBlueprint } from './connections.js'
 
-export function prepareBlueprint(blueprint, { operations, configuration, createSession, valuesFor, protectBodyExpressions = false }) {
+function missingRequiredBody(operation, draft, inputs) {
+  const media = bodyContent(operation, draft)
+  if (!isJson(media?.[0] ?? '') || !media[1].schema) return undefined
+  // A scenario can explicitly exercise the API's validation error.
+  if (draft.assertions?.some(check => check.kind === 'status' && Number(check.expected) >= 400)) return undefined
+  let body
+  try { body = JSON.parse(draft.body || '{}') } catch { return undefined }
+  const dynamic = inputs.filter(input => input.location === 'body').map(input => pointerParts(input.pointer))
+  let remaining = 5000
+
+  function visit(raw, value, path) {
+    if (!raw || remaining-- <= 0 || path.length > 24 ||
+        dynamic.some(target => prefix(target, path)) || !value || typeof value !== 'object') return undefined
+    const resolved = operation.resolve(raw)
+    const variant = draft.bodyVariants?.[pointer(path)]
+    // Without an explicit variant, only require properties common to the base schema.
+    const base = variant === undefined && (resolved?.oneOf || resolved?.anyOf)
+      ? { ...resolved, oneOf: undefined, anyOf: undefined } : raw
+    const schema = schemaView(operation, base, variant)
+    if (Array.isArray(value)) {
+      for (let index = 0; index < value.length && remaining > 0 && schema.items; index++) {
+        const missing = visit(schema.items, value[index], [...path, index])
+        if (missing !== undefined) return missing
+      }
+      return undefined
+    }
+    for (const name of schema.required) {
+      if (!Object.hasOwn(value, name) && !operation.resolve(schema.properties[name])?.readOnly) return pointer([...path, name])
+    }
+    for (const [name, child] of Object.entries(schema.properties)) {
+      if (!Object.hasOwn(value, name)) continue
+      const missing = visit(child, value[name], [...path, name])
+      if (missing !== undefined) return missing
+    }
+  }
+  return visit(media[1].schema, body, [])
+}
+
+function missingInput(message) {
+  return Object.assign(new Error(message), { missingInput: true })
+}
+
+export function prepareBlueprint(blueprint, { operations, configuration, createSession, valuesFor, protectBodyExpressions = false, requestOverrides }) {
   validateBlueprint(blueprint)
   blueprint = upgradeBlueprint(blueprint)
   const edges = allConnections(blueprint)
@@ -30,17 +74,28 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
       if (parameters.conflict) throw new Error(`${definition.label}: ${parameters.conflict}`)
       const normalized = normalizeBodyFieldNames(operation, request, parameters.inputs)
       if (normalized.conflict) throw new Error(`${definition.label}: ${normalized.conflict}`)
-      const inputs = normalized.inputs
+      const overrides = requestOverrides?.get(definition.id) ?? []
+      const inputs = normalized.inputs.filter(input => !overrides.some(override =>
+        input.location === override.location && (input.location === 'body'
+          ? input.pointer === override.pointer : input.name === override.name) && input.source === 'preset'))
       Object.assign(session, request, { body: normalized.body, fields: parameters.fields })
+      for (const override of overrides) applyInput(session, operation, override, override.value)
       const expressions = inputs.filter(input => input.location === 'body' && input.source === 'expression')
-      const reserved = protectBodyExpressions ? expressions.map(input => pointerParts(input.pointer)) : []
+      const reserved = [
+        ...(protectBodyExpressions ? expressions.map(input => pointerParts(input.pointer)) : []),
+        ...overrides.filter(input => input.location === 'body').map(input => pointerParts(input.pointer)),
+      ]
       if (reserved.length) session[protectedBodyPaths] = reserved
-      const context = valuesFor(operation)
+      const context = definition.ignorePresets ? new Map() : valuesFor(operation)
+      // Keep the original map so body preset metadata is available during preparation.
+      const values = new Map(context)
+      for (const override of overrides) {
+        if (override.location !== 'body') values.delete(contextKey({ in: override.location, name: override.name }))
+      }
       const presetBody = applyBodyPresets(operation, session.body, context, session.mediaType, reserved)
       if (presetBody.notice) throw new Error(`${definition.label}: ${presetBody.notice}`)
       session.body = presetBody.body
       // Presets are run overrides, including bindings, generated and human inputs.
-      const values = new Map(context)
       const probe = { ...session, fields: { ...session.fields } }
       for (const input of inputs) if (input.location === 'body' && input.pointer) {
         try { applyInput(probe, operation, input, null) } catch { /* Uncovered invalid targets are checked below. */ }
@@ -61,7 +116,7 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
       if (missingPreset) {
         issueInput = missingPreset
         const input = missingPreset
-        throw new Error(`${definition.label}: select a matching run preset for ${input.location === 'body' ? input.pointer || '(whole body)' : input.name}, or choose another value source.`)
+        throw missingInput(`${definition.label}: supply a value or activate a matching preset for ${input.location === 'body' ? input.pointer || '(whole body)' : input.name}.`)
       }
       for (const input of inputs) {
         issueInput = input
@@ -84,10 +139,24 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
         }
         issueInput = (operation.parameters ?? []).find(parameter =>
           (parameter.required || parameter.in === 'path') &&
-          !values.has(contextKey(parameter)) && !draft.fields[fieldKey(parameter)])
-        if (issueInput) issueInput = { location: issueInput.in, name: issueInput.name }
+          (values.has(contextKey(parameter))
+            ? values.get(contextKey(parameter)) === '' || values.get(contextKey(parameter)) === undefined
+            : !draft.fields[fieldKey(parameter)]))
+        if (issueInput) {
+          issueInput = { location: issueInput.in, name: issueInput.name }
+          throw missingInput(`${issueInput.name} is required.`)
+        }
+        const bodyTarget = missingRequiredBody(operation, draft, step.inputs)
+        if (bodyTarget !== undefined) {
+          issueInput = { location: 'body', pointer: bodyTarget }
+          throw missingInput(`Required body field ${bodyTarget} is missing.`)
+        }
         buildRequest(operation, configuration, draft, values)
-      } catch (cause) { throw new Error(`${definition.label}: ${cause.message}`) }
+      } catch (cause) {
+        const problem = new Error(`${definition.label}: ${cause.message}`)
+        if (cause.missingInput) problem.missingInput = true
+        throw problem
+      }
       step.target = effectiveTarget(operation, configuration, draft, values)
       return step
     } catch (cause) {

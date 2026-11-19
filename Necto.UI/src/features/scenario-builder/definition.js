@@ -26,6 +26,7 @@ export function savedBlueprint(draft) {
       .filter((edge) => edge.from !== null || hasTiming(edge))
       .map((edge) => ({ from: edge.from, to: edge.to, ...waitOptions(edge) })),
     steps: draft.steps.map((step) => ({
+      ...(step.ignorePresets ? { ignorePresets: true } : {}),
       ...(step.position ? { position: { ...step.position } } : {}),
       id: step.id,
       label: step.label.trim(),

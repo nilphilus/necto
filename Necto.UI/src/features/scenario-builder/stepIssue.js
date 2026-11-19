@@ -2,6 +2,7 @@ export function stepIssue(cause, step, input) {
   if (!step?.id) return cause
   const issue = new Error(cause.message, { cause })
   issue.stepId = step.id
+  if (cause.missingInput) issue.missingInput = true
   if (input && ['path', 'query', 'header', 'body'].includes(input.location)) {
     issue.target = {
       location: input.location,

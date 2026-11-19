@@ -3,6 +3,7 @@ function stepIssue(cause, step, input) {
 	if (!step?.id) return cause;
 	const issue = new Error(cause.message, { cause });
 	issue.stepId = step.id;
+	if (cause.missingInput) issue.missingInput = true;
 	if (input && [
 		"path",
 		"query",
@@ -5904,6 +5905,7 @@ function validateBlueprint(blueprint) {
 		let issueInput;
 		try {
 			if (typeof step.id !== "string" || !step.id || ids.has(step.id) || typeof step.label !== "string" || !step.label.trim() || step.label.length > 200 || typeof step.operationKey !== "string" || typeof step.apiId !== "string" || typeof step.method !== "string" || typeof step.path !== "string" || !Array.isArray(step.dependsOn) || step.dependsOn.length > 100 || !Array.isArray(step.inputs) || step.inputs.length > 100 || !step.request || typeof step.request.body !== "string" || !step.request.fields || Array.isArray(step.request.fields) || typeof step.request.fields !== "object" || Object.values(step.request.fields).some((value) => typeof value !== "string")) throw new Error("Invalid scenario step or request.");
+			if (step.ignorePresets !== void 0 && typeof step.ignorePresets !== "boolean") throw new Error("Invalid preset setting.");
 			if (step.position !== void 0 && (!step.position || !Number.isFinite(step.position.x) || !Number.isFinite(step.position.y) || step.position.x < 20 || step.position.y < 20 || step.position.x > 2e4 || step.position.y > 2e4)) throw new Error("Invalid request position.");
 			ids.add(step.id);
 			if (blueprint.version === 1 && (step.delayMs !== void 0 || step.waitFor !== void 0)) throw new Error("Delay and response waiting require Scenario Builder version 2.");

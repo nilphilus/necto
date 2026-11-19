@@ -276,7 +276,6 @@ function changeVariant(index, element) {
             <option value="static">Static value</option>
             <option value="response">Previous response</option>
             <option value="variable">Shared variable</option>
-            <option v-if="path.length" value="preset">Run preset</option>
             <option value="generate">Generate data</option>
             <option value="expression">Expression</option>
             <option value="random">Pick random</option>

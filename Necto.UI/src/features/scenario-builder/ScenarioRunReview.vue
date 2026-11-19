@@ -7,19 +7,20 @@ defineProps({
   name: String,
   stepCount: Number,
   variables: Array,
-  presetNames: Array,
+  activePresets: Array,
+  suggestedPresets: Array,
+  missingTarget: Object,
+  missingValueError: String,
   pending: Boolean,
   validation: String,
   runProblem: String,
   problemStep: String,
   review: Array,
-  hasBodyExpressions: Boolean,
 })
-defineEmits(['start', 'go-to-step'])
+defineEmits(['start', 'go-to-step', 'activate-preset', 'use-missing-value'])
 
-const selectedPresets = defineModel('selectedPresets', { type: Array, required: true })
+const missingValue = defineModel('missingValue', { type: String, required: true })
 const concurrency = defineModel('concurrency', { type: [Number, String], required: true })
-const allowExpressionOverrides = defineModel('allowExpressionOverrides', { type: Boolean, required: true })
 const allowHuman = defineModel('allowHuman', { type: Boolean, required: true })
 const runDialog = ref(null)
 
@@ -49,21 +50,7 @@ defineExpose({
         Sends real requests, including writes. A failure stops new steps and cancels in-flight
         requests where possible; completed server changes cannot be rolled back.
       </p>
-      <fieldset v-if="presetNames.length" class="run-presets">
-        <legend>Presets for this run</legend>
-        <label v-for="name in presetNames" :key="name"
-          ><input v-model="selectedPresets" type="checkbox" :value="name" />{{ name }}</label
-        >
-        <p>Presets override matching values. Last selected wins.</p>
-        <label v-if="hasBodyExpressions && selectedPresets.length" class="expression-override">
-          <input v-model="allowExpressionOverrides" type="checkbox">
-          Allow presets to override payload expressions
-        </label>
-        <small v-if="selectedPresets.length"
-          >Applied in order: {{ selectedPresets.join(' → ') }}</small
-        ><small v-else>No presets. Use the scenario's own inputs.</small>
-      </fieldset>
-      <p v-else class="muted">No saved presets. Configure them in Settings → Presets.</p>
+      <p v-if="activePresets.length" class="muted">Active presets · {{ activePresets.join(' → ') }}</p>
       <label class="parallel-limit"
         >Parallel requests for this run<input
           v-model.number="concurrency"
@@ -92,7 +79,7 @@ defineExpose({
           <strong>{{ step.label }}</strong
           ><code>{{ step.operation.method }} {{ step.operation.path }}</code
           ><span>{{ step.target.api }} · {{ step.target.label }}</span
-          ><small v-if="selectedPresets.length">{{
+          ><small v-if="activePresets.length">{{
             step.presetOverrides.length
               ? 'Preset fields: ' + step.presetOverrides.join(', ')
               : 'No matching preset fields (or shared presets disabled for this API).'
@@ -131,6 +118,17 @@ defineExpose({
         {{ runProblem }}
         <button v-if="problemStep" type="button" class="secondary" @click="$emit('go-to-step')">Go to step</button>
       </p>
+      <section v-if="missingTarget" class="missing-input" aria-label="Supply required input">
+        <button v-for="preset in suggestedPresets" :key="preset" type="button" class="secondary"
+          @click="$emit('activate-preset', preset)">Activate preset {{ preset }}</button>
+        <label>Value for {{ missingTarget.name || 'request body' }}
+          <input v-model="missingValue" :placeholder="missingTarget.location === 'body' ? 'JSON value' : undefined"
+            @keydown.enter.prevent="$emit('use-missing-value')">
+        </label>
+        <button type="button" class="secondary" :disabled="!missingValue.trim()"
+          @click="$emit('use-missing-value')">Use for this run</button>
+        <p v-if="missingValueError" role="alert">{{ missingValueError }}</p>
+      </section>
       <div class="run-actions">
         <button type="button" class="secondary" @click="runDialog.close()">Cancel</button
         ><button
@@ -146,7 +144,6 @@ defineExpose({
 </template>
 
 <style scoped>
-.expression-override { margin-block: .35rem; }
 .review-expression { color: var(--accent); }
 
 .repeat-warning { padding: .5rem; border-inline-start: 3px solid #b79b55; background: var(--subtle); }
@@ -178,25 +175,8 @@ defineExpose({
   font-size: 0.8rem;
   line-height: 1.5;
 }
-.run-presets {
-  margin: 0.8rem 0;
-  padding: 0.6rem;
-  border: 1px solid var(--line);
-  border-radius: 0.45rem;
-  font-size: 0.78rem;
-}
-.run-presets label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  margin: 0.2rem 0.7rem 0.2rem 0;
-}
-.run-presets p {
-  margin: 0.35rem 0;
-}
-.run-presets small {
-  color: var(--muted);
-}
+.missing-input { display: grid; gap: .45rem; }
+.missing-input button { justify-self: start; }
 .parallel-limit {
   display: flex;
   gap: 0.7rem;
