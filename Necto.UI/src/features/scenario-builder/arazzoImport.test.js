@@ -84,3 +84,10 @@ test('reports unsupported actions and unresolved operations without producing a 
   assert.throws(() => importArazzoWorkflow(document, 'create-and-read', operations, localUrl),
     /Arazzo step 1 \(create\): The operation is missing/)
 })
+
+test('rejects an unmatched relative OpenAPI source even with a unique operation ID', () => {
+  const document = readArazzo(definition)
+  document.sourceDescriptions[0].url = './another-api.json'
+  assert.throws(() => importArazzoWorkflow(document, 'create-and-read', operations, localUrl),
+    /Connect the OpenAPI document referenced by this step/)
+})

@@ -61,12 +61,15 @@ function resolveOperation(step, sources, operations, localUrl) {
   if (source || referenceUrl) {
     const url = referenceUrl ?? source.url
     const selected = documentUrl(url, localUrl)
-    const scoped = selected ? matches.filter(operation =>
-      documentUrl(operation.configuration?.openApiUrl ?? localUrl, localUrl) === selected) : []
-    if (scoped.length) matches = scoped
-    else if (referenceUrl || sources.size > 1 || !url || /^[a-z][a-z\d+.-]*:|^\//i.test(url))
+    const scoped = selected ? operations.filter(operation => {
+      const operationUrl = (operation.apiId ?? 'local') === 'local'
+        ? localUrl : operation.configuration?.openApiUrl
+      return Boolean(operationUrl) && documentUrl(operationUrl, localUrl) === selected
+    }) : []
+    if (!scoped.length)
       throw new Error('Connect the OpenAPI document referenced by this step before importing.')
-    // A relative file with no import base can match a single loaded operation.
+    const allowed = new Set(scoped)
+    matches = matches.filter(operation => allowed.has(operation))
   }
   if (matches.length !== 1) throw new Error(matches.length
     ? 'The operation is ambiguous across connected APIs.' : 'The operation is missing from the loaded OpenAPI documents.')
