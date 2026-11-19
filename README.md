@@ -91,6 +91,8 @@ presets and external API connections apply when replaying. See the
 
 For parallel workflows, use **Scenarios → Scenario Builder**: name steps, connect any endpoints, combine response values, generate data with Faker, and pause selected requests for human input. [Scenario Builder guide](docs/scenario-builder/README.md).
 
+To reuse an existing workflow, choose **Scenarios → Import scenario** and select an [Arazzo 1.0](https://spec.openapis.org/arazzo/v1.0.1.html) YAML or JSON file. Pick a workflow and open it in Scenario Builder. The importer uses loaded OpenAPI documents, maps sequential requests, workflow inputs, response-body bindings and simple success checks, and reports unsupported actions or expressions before saving the workflow. Importing does not send requests.
+
 ## Authentication
 
 Use **Authorize** to access protected APIs and protected OpenAPI documents. The
