@@ -20,7 +20,7 @@ Each step requires:
 }
 ```
 
-Static transport fields are string values under `path:name`, `query:name`, `header:name`. A JSON request body is a **JSON string**, not an object. Set `mediaType: "application/json"` when needed. `serverIndex` and `serverValues` are optional; use only verified server choices. Never store auth headers or browser execution state. File attachments must be supplied in the browser.
+Static transport fields are string values under `path:name`, `query:name`, `header:name`. Copy `name` exactly from the resolved OpenAPI parameter, also in dynamic `inputs[].name`. For example, an OpenAPI query parameter `Type` is stored under `query:Type`. A JSON request body is a **JSON string**, not an object. Set `mediaType: "application/json"` when needed. `serverIndex` and `serverValues` are optional; use only verified server choices. Never store auth headers or browser execution state. File attachments must be supplied in the browser.
 
 ## Inputs
 

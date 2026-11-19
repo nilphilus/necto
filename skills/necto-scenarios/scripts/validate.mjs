@@ -2,7 +2,7 @@
 // Read-only, offline validation. Never evaluates payloads or sends requests.
 import { readFile, stat } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
-import { normalizeBodyFieldNames, resolveReference, validateBlueprint } from './lib/blueprint.mjs'
+import { normalizeBodyFieldNames, normalizeParameterNames, resolveReference, validateBlueprint } from './lib/blueprint.mjs'
 
 function bounded(value) {
  const stack=[{value,depth:0}];let count=0
@@ -19,7 +19,7 @@ function bounded(value) {
 const embedded=text=>{if(typeof text!=='string')return;let value;try{value=JSON.parse(text)}catch{return}bounded(value)}
 class OpenApiNamingError extends Error {}
 
-function validatePayloadNames(blueprint, spec) {
+function validateRequestNames(blueprint, spec) {
  if (typeof spec?.openapi !== 'string' || !spec.paths || typeof spec.paths !== 'object')
   throw new OpenApiNamingError('Expected a local OpenAPI 3 JSON document.')
  for (const [index, step] of blueprint.steps.entries()) {
@@ -33,6 +33,11 @@ function validatePayloadNames(blueprint, spec) {
   const pathItem = Object.hasOwn(spec.paths, step.path) ? resolve(spec.paths[step.path]) : undefined
   const operation = resolve(pathItem?.[step.method.toLowerCase()])
   if (!operation) throw new OpenApiNamingError(`Step ${index + 1}: operation does not appear in this OpenAPI document.`)
+  const parameters = [...(pathItem.parameters ?? []), ...(operation.parameters ?? [])].map(resolve).filter(Boolean)
+  const named = normalizeParameterNames({ parameters }, step.request.fields, step.inputs)
+  if (named.conflict || Object.keys(step.request.fields).some(key => !Object.hasOwn(named.fields, key)) ||
+      named.inputs.some((input, inputIndex) => input.name !== step.inputs[inputIndex].name))
+   throw new OpenApiNamingError(`Step ${index + 1}: saved parameter name differs from the OpenAPI spelling. Check parameter names in fields and inputs.`)
   const requestBody = resolve(operation.requestBody)
   const normalized = normalizeBodyFieldNames({ resolve, requestBody }, step.request, step.inputs)
   if (normalized.conflict || normalized.body !== step.request.body ||
@@ -58,7 +63,7 @@ export function validateText(text, spec) {
  for(const v of b.variables??[])if(v.source==='static'&&v.valueType==='json')embedded(v.value)
  for(const edge of b.connections??[])if(edge.waitFor?.valueType==='json')embedded(edge.waitFor.value)
  validateBlueprint(b)
- if (spec !== undefined) validatePayloadNames(b, spec)
+ if (spec !== undefined) validateRequestNames(b, spec)
  return b
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
@@ -75,7 +80,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
    catch { throw new OpenApiNamingError('OpenAPI document must be readable local JSON.') }
   }
   const b = validateText(await readFile(scenarioPath, 'utf8'), spec)
-  const scope = specPath ? ' Checked JSON body key casing for local API steps.' : ''
+  const scope = specPath ? ' Checked parameter and JSON body key spelling for local API steps.' : ''
   console.log(`Valid shared Builder scenario (${b.steps.length} steps).${scope} Contract and secret review still required.`)
  }catch(error){
   // Validation messages may contain repository-controlled labels/values.

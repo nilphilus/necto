@@ -91,6 +91,26 @@ test('optional OpenAPI review checks saved JSON keys and target pointers indepen
  assert.doesNotThrow(() => validateText(scenario('type', 'Type'), spec))
 })
 
+test('optional OpenAPI review rejects parameter case differences in fields and bindings', () => {
+ const spec = {
+  openapi: '3.1.0',
+  paths: {
+   '/invoices/by-reference': { parameters: [{ $ref: '#/components/parameters/Type' }], get: {} },
+   '/weatherforecast': { get: {} },
+   '/invoices/{invoiceId}/lines': { get: {} },
+  },
+  components: { parameters: { Type: { in: 'query', name: 'Type', required: true } } },
+ }
+ const withField = name => mutate(b => { b.steps[0].request.fields = { ['query:' + name]: 'integer' } })
+ const withInput = name => mutate(b => {
+  b.steps[0].inputs = [{ location: 'query', name, source: 'expression', expression: 'return "integer";', bindings: [] }]
+ })
+ assert.doesNotThrow(() => validateText(withField('Type'), spec))
+ assert.doesNotThrow(() => validateText(withInput('Type'), spec))
+ assert.throws(() => validateText(withField('type'), spec), /Step 1: saved parameter name/)
+ assert.throws(() => validateText(withInput('type'), spec), /Step 1: saved parameter name/)
+})
+
 test('rejects excessive embedded JSON and outer structures without recursive crashes',()=>{
  const deep='['.repeat(66)+'0'+']'.repeat(66)
  assert.throws(()=>validateText(mutate(b=>b.steps[0].request.body=deep)),/structural/)

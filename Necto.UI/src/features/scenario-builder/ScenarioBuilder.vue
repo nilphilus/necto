@@ -23,6 +23,7 @@ import {
   validateBlueprint,
 } from './model.js'
 import { configureEndpoint } from './stepDraft.js'
+import { normalizeParameterNames } from './parameterNames.js'
 import { prepareBlueprint } from './runner.js'
 import { allConnections, connectionKey, connectionSummary } from './connections.js'
 import { waitOptions } from './waiting.js'
@@ -163,6 +164,18 @@ const failedStep = computed(() => execution.steps.find(step => step.status === '
 const requestParameters = computed(() => (operation.value?.parameters ?? []).filter(
   parameter => ['path', 'query', 'header'].includes(parameter.in)
 ))
+const parameterNameConflict = ref('')
+watch([selected, operation, pending], ([step, endpoint, running]) => {
+  parameterNameConflict.value = ''
+  if (!step || !endpoint || running) return
+  const { fields, inputs, conflict } = normalizeParameterNames(endpoint, step.request.fields, step.inputs)
+  parameterNameConflict.value = conflict ?? ''
+  if (conflict) return
+  const current = step.request.fields
+  if (Object.keys(fields).length !== Object.keys(current).length ||
+      Object.keys(fields).some(key => !Object.hasOwn(current, key))) step.request.fields = fields
+  if (inputs.some((input, index) => input !== step.inputs[index])) step.inputs = inputs
+}, { immediate: true })
 const dynamicTargets = computed(
   () =>
     new Set(
@@ -371,11 +384,13 @@ async function openConnection(edge, event) {
   edgeEdit.value = { from: edge.from, to: edge.to, ...waitOptions(edge) }
   const target = draft.value.steps.find((step) => step.id === edge.to)
   if (!target) return
+  const endpoint = edgeOperation.value
+  const inputs = endpoint ? normalizeParameterNames(endpoint, target.request.fields, target.inputs).inputs : target.inputs
   mappingEdit.value = {
     id: target.id,
     inputs: JSON.parse(
       JSON.stringify(
-        target.inputs.filter((input) => input.source === 'response' && input.stepId === edge.from)
+        inputs.filter((input) => input.source === 'response' && input.stepId === edge.from)
       )
     ),
   }
@@ -1043,6 +1058,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
                   <p v-if="suggestionProblem" class="error" role="alert">{{ suggestionProblem }}</p>
                 </div>
               </section>
+              <p v-if="parameterNameConflict" class="error" role="alert">{{ parameterNameConflict }}</p>
               <div v-if="requestParameters.length" class="request-parameters">
                 <div v-for="parameter in requestParameters"
                   :key="parameter.in + ':' + parameter.name" class="request-parameter" :data-parameter="parameter.in + ':' + parameter.name">
