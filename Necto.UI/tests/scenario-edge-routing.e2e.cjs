@@ -18,7 +18,19 @@ run(async({p,assert,builder,shot,calls})=>{
   for(const n of g.cards)assert.equal(g.button.x>n.x-14&&g.button.x<n.x+n.width+14&&g.button.y>n.y-14&&g.button.y<n.y+n.height+14,false,'button clears '+n.id)
  }
  check(await geometry());await shot()
- const configure=p.getByRole('button',{name:'Configure connection A → C',exact:true});await configure.click();const popup=p.getByRole('dialog');await popup.getByRole('heading',{name:'A → C',exact:true}).waitFor();await popup.getByRole('button',{name:'Cancel',exact:true}).click()
+ const configure=p.getByRole('button',{name:'Configure connection A → C',exact:true})
+ const highlight=p.locator('[data-highlighted-route]')
+ await configure.hover()
+ assert.equal(await highlight.getAttribute('data-highlighted-route'),'["a","c"]')
+ await p.mouse.move(0,0)
+ await configure.focus()
+ assert.equal(await highlight.getAttribute('data-highlighted-route'),'["a","c"]')
+ await p.getByRole('button',{name:'Configure connection A → B',exact:true}).hover()
+ assert.equal(await highlight.getAttribute('data-highlighted-route'),'["a","b"]')
+ await configure.click()
+ const popup=p.getByRole('dialog');
+ assert.equal(await highlight.getAttribute('data-highlighted-route'),'["a","c"]')
+await popup.getByRole('heading',{name:'A → C',exact:true}).waitFor();await popup.getByRole('button',{name:'Cancel',exact:true}).click()
  await p.getByRole('combobox',{name:'Zoom',exact:true}).selectOption('0.65');check(await geometry());await configure.click();await popup.getByRole('heading',{name:'A → C',exact:true}).waitFor();await popup.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(calls.length,0)
  // Persisted manually positioned obstacles must be respected too.
  b.steps.forEach((step,i)=>step.position={x:170+i*280,y:100});await p.evaluate(b=>localStorage.setItem('necto:scenario-builder:'+location.origin+'/openapi.json',JSON.stringify({version:1,blueprints:[b]})),b);await p.reload();await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:b.name});check(await geometry())
