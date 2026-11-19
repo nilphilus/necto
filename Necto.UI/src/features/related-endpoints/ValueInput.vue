@@ -76,7 +76,10 @@ async function navigate(event) {
 
 <template>
   <div v-if="dropdown" class="dropdown">
-    <label :for="id"><slot name="label" /></label>
+    <div class="value-label">
+      <label :for="id"><slot name="label" /></label>
+      <slot name="label-actions" />
+    </div>
     <div class="control">
       <div class="picker">
         <span class="search-icon" aria-hidden="true"></span>
@@ -112,6 +115,7 @@ async function navigate(event) {
 </template>
 
 <style scoped>
+.value-label { display: flex; align-items: center; gap: .3rem; }
 .dropdown { position: relative; display: grid; gap: .25rem; min-width: 0; }
 .control { display: flex; min-width: 0; border: 1px solid #a2b2a9; border-radius: .5rem; background: var(--surface); }
 .control:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }

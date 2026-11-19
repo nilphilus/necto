@@ -108,7 +108,10 @@ const document = {
     },
     '/detail/{id}': {
       get: operation('Detail', 'Invoice details', {
-        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'integer' } }],
+        parameters: [
+          { in: 'path', name: 'id', required: true, schema: { type: 'integer' } },
+          { in: 'query', name: 'assetId', required: true, schema: { type: 'integer' } },
+        ],
       }),
     },
   },
@@ -129,10 +132,16 @@ const document = {
     if (url.pathname === '/openapi.json') return json(document)
     if (url.pathname === '/mappings')
       return json(
-        ['Fallback', 'Detail'].map((operationId) => ({
-          source: { operationId: 'List', eachItem: true, property: 'id' },
-          target: { operationId, location: 'path', name: 'id' },
-        }))
+        [
+          ...['Fallback', 'Detail'].map((operationId) => ({
+            source: { operationId: 'List', eachItem: true, property: 'id' },
+            target: { operationId, location: 'path', name: 'id' },
+          })),
+          {
+            source: { operationId: 'Fallback', property: 'id' },
+            target: { operationId: 'Detail', location: 'query', name: 'assetId' },
+          },
+        ]
       )
     if (url.pathname === '/invoices') {
       let body = ''
@@ -329,7 +338,7 @@ const document = {
   assert.match(await targets.first().innerText(), /Invoice details/)
   assert.equal(await targets.first().getByText('OpenAPI Link', { exact: true }).count(), 1)
   assert.match(await targets.nth(1).innerText(), /Related payment/)
-  assert.equal(await targets.first().locator('input').inputValue(), '42')
+  assert.equal(await targets.first().getByRole('combobox', { name: 'id path' }).inputValue(), '42')
   await shot('preferred-links')
   await next.getByRole('button', { name: 'About link to Invoice details', exact: true }).click()
   await p.locator('.description-dialog[open] strong').filter({ hasText: 'details' }).waitFor()
@@ -357,6 +366,18 @@ const document = {
     await p.locator('.hero').evaluate((el) => el.getBoundingClientRect().height <= 80),
     'mobile header should stay compact'
   )
+  const help = p.getByRole('dialog', { name: 'Where to get assetId' })
+  await targets.first().getByRole('button', { name: 'Where to get assetId' }).click()
+  await help.getByText('GET /fallback/{id}', { exact: true }).waitFor()
+  await help.getByText('$.id', { exact: true }).waitFor()
+  await help.getByRole('button', { name: 'Close', exact: true }).click()
+  await targets.first().getByRole('button', { name: 'Open request Invoice details' }).click()
+  await p.getByRole('button', { name: 'Where to get id', exact: true }).click()
+  const idHelp = p.getByRole('dialog', { name: 'Where to get id', exact: true })
+  await idHelp.getByText('$[0].id', { exact: true }).waitFor()
+  await idHelp.getByRole('button', { name: 'Open source List invoices' }).first().click()
+  await p.getByRole('heading', { name: 'List invoices', exact: false }).waitFor()
+  assert.equal(calls.filter((x) => x.method === 'GET').length, 1)
   assert.deepEqual(errors, [])
   console.log(
     'PASS: on-demand sanitized descriptions; saved and OpenAPI payload navigation, draft restoration, references and external examples; Links priority; response examples; mobile layout. No unintended API calls.'
