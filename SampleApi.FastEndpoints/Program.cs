@@ -2,7 +2,6 @@ using FastEndpoints;
 using FastEndpoints.OpenApi;
 using Necto;
 using SampleApi.FastEndpoints;
-using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<TenantDirectory>();
@@ -28,7 +27,6 @@ app.UseFastEndpoints(options =>
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.MapScalarApiReference();
     app.MapNectoEntityCatalog();
     app.UseNectoUI();
 }

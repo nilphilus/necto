@@ -31,13 +31,13 @@ Call `app.UseNectoUI()` alongside `app.MapOpenApi()` to serve the Vue UI at
 `/necto/`. See the [Necto UI guide](Necto.UI/README.md) for configuration and
 frontend development.
 
-Both samples expose Necto UI and Scalar in Development. Each UI reads the same
-OpenAPI document at `/openapi/v1.json` on its sample API.
+Both samples expose Necto UI in Development, using the OpenAPI document at
+`/openapi/v1.json` on each sample API.
 
-| Run from the repository root | Necto UI | Scalar UI |
-| --- | --- | --- |
-| `dotnet run --project SampleApi` | [Necto](http://localhost:5000/necto/) | [Scalar](http://localhost:5000/scalar/) |
-| `dotnet run --project SampleApi.FastEndpoints` | [Necto](http://localhost:5001/necto/) | [Scalar](http://localhost:5001/scalar/) |
+| Run from the repository root | Necto UI |
+| --- | --- |
+| `dotnet run --project SampleApi` | [Necto](http://localhost:5000/necto/) |
+| `dotnet run --project SampleApi.FastEndpoints` | [Necto](http://localhost:5001/necto/) |
 
 ## FastEndpoints sample
 
