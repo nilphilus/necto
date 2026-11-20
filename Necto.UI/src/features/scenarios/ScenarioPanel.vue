@@ -144,6 +144,8 @@ function runScenario(scenario) {
           <button type="button" class="primary" :disabled="busy || !scenario.steps.length"
             :aria-label="'Review and run ' + scenario.name"
             @click="emit('open-builder-scenario', scenario.id, true)">Review &amp; run</button>
+          <FolderSave :folder="folder" kind="builder" :scenario="scenario"
+            :disabled="busy || !scenario.steps.length" @configure="emit('folder-settings')" />
         </div>
       </li>
       <li v-for="scenario in scenarios" :key="'chain:' + scenario.id" :data-scenario-id="scenario.id" class="scenario-card">
