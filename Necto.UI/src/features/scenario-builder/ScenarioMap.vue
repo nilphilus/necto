@@ -397,21 +397,28 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
                 ></span
               >
             </button>
-            <button v-if="!drag && selected === node.step.id" type="button" class="secondary node-edit"
-              :aria-label="'Edit step ' + node.step.label" title="Edit step" @click="emit('edit', node.step.id)">✎</button>
-            <button v-if="!drag && states.has(node.step.id)" type="button" class="node-response"
-              :aria-label="'View response for ' + node.step.label" @click="emit('inspect', node.step.id)">
-              {{ states.get(node.step.id).httpStatus ?? states.get(node.step.id).status }}
-            </button>
-            <button v-if="!drag && canRetryStep(states.get(node.step.id))" type="button" class="node-retry"
-              :disabled="disabled || stale" :aria-label="'Retry step ' + node.step.label"
-              :title="stale ? 'Retry unavailable because the scenario changed' : 'Retry this step'"
-              @click="emit('retry', node.step.id)">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M13.5 5.5A5.5 5.5 0 1 0 13 11M13.5 2.5v3.5H10" />
-              </svg>
-            </button>
+            <div v-if="!drag" class="node-tools">
+              <button v-if="states.has(node.step.id)" type="button" class="node-response"
+                :aria-label="'View response for ' + node.step.label" @click="emit('inspect', node.step.id)">
+                {{ states.get(node.step.id).httpStatus ?? states.get(node.step.id).status }}
+              </button>
+              <button v-if="canRetryStep(states.get(node.step.id))" type="button" class="node-retry"
+                :disabled="disabled || stale" :aria-label="'Retry step ' + node.step.label"
+                :title="stale ? 'Retry unavailable because the scenario changed' : 'Retry this step'"
+                @click="emit('retry', node.step.id)">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                  stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M13.5 5.5A5.5 5.5 0 1 0 13 11M13.5 2.5v3.5H10" />
+                </svg>
+              </button>
+              <button type="button" class="node-edit" :aria-label="'Edit step ' + node.step.label"
+                title="Edit step" @click="emit('edit', node.step.id)">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                  stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="m9.8 3.4 2.8 2.8M2.5 13.5l.7-3.5 7.5-7.5a1.1 1.1 0 0 1 1.6 0l1.2 1.2a1.1 1.1 0 0 1 0 1.6L6 12.8z" />
+                </svg>
+              </button>
+            </div>
             <button
               type="button"
               class="port output"
@@ -551,7 +558,7 @@ header select {
   position: relative;
   transform-origin: top left;
 }
-.map-canvas svg {
+.map-canvas > svg {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -609,8 +616,31 @@ marker path {
   text-align: left;
   box-shadow: 0 2px 6px #203b2810;
 }
-.node-edit { position: absolute; top: 6px; right: 7px; padding: .1rem .3rem; }
-.node-wrap:has(.node-edit) .node-top { padding-inline-end: 1.7rem; }
+.node-tools {
+  position: absolute;
+  inset-block-start: .45rem;
+  inset-inline-end: .5rem;
+  display: flex;
+  align-items: center;
+  gap: .2rem;
+}
+.node-wrap:has(.node-edit) .node-top { padding-inline-end: 1.5rem; }
+.node-edit, .node-retry {
+  display: grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: .3rem;
+  background: transparent;
+  color: var(--muted);
+}
+.node-edit:hover, .node-edit:focus-visible, .node-retry:hover, .node-retry:focus-visible {
+  background: var(--accent-soft);
+  border-color: var(--line);
+  color: var(--accent);
+}
 .map-node[aria-pressed='true'] {
   outline: 2px solid var(--accent);
   background: var(--accent-soft);
@@ -643,22 +673,10 @@ marker path {
   justify-content: space-between;
   gap: 0.3rem;
 }
-.node-retry {
-  position: absolute;
-  z-index: 2;
-  inset-block-start: .45rem;
-  inset-inline-end: 3.4rem;
-  display: grid;
-  place-items: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  padding: 0;
-  color: var(--accent);
-}
 .node-response {
-  position: absolute;
-  right: .45rem;
-  top: .35rem;
+  max-width: 6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border: 1px solid var(--line);
   border-radius: .3rem;
   background: var(--surface);
