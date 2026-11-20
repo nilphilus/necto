@@ -69,3 +69,13 @@ Accept: application/json
 
 GET {{SampleApi_HostAddress}}/invoices/large-lines/199999
 Accept: application/json
+
+### OpenAPI document for v2
+
+GET {{SampleApi_HostAddress}}/openapi/v2.json
+Accept: application/json
+
+### Invoice list using the v2 response envelope
+
+GET {{SampleApi_HostAddress}}/v2/invoices?reference=INV-42
+Accept: application/json
