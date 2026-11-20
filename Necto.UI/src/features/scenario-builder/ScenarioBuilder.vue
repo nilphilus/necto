@@ -73,7 +73,6 @@ const runIssue = ref(null)
 const review = ref([]),
   allowHuman = ref(true),
   runProblem = ref(''),
-  picker = ref(''),
   quick = ref('')
 const edgeFromList = ref(false)
 let openedEdgeSettings
@@ -207,7 +206,6 @@ watch(
     stepDialog.value?.close()
     edgeDialog.value?.close()
     edgeEdit.value = null
-    picker.value = saved.value.some((item) => item.id === draft.value.id) ? draft.value.id : ''
     selectedId.value = draft.value.steps[0]?.id ?? ''
     tab.value = 'configure'
   }
@@ -239,29 +237,22 @@ const hasUnsavedDraft = computed(() =>
 function mayDiscard() {
   return !hasUnsavedDraft.value || window.confirm('Discard unsaved Scenario Builder changes?')
 }
-function fresh() {
-  if (mayDiscard()) store.fresh()
-}
-function openSaved() {
-  const item = saved.value.find((item) => item.id === picker.value)
-  if (item && mayDiscard()) store.open(item)
-  picker.value = saved.value.some((item) => item.id === draft.value.id) ? draft.value.id : ''
+function newFromLibrary() {
+  if (pending.value || !mayDiscard()) return false
+  store.fresh()
+  return true
 }
 function openFromLibrary(id) {
   const item = saved.value.find((scenario) => scenario.id === id)
   if (!item || pending.value || !mayDiscard()) return false
   store.open(item)
-  picker.value = id
   return true
 }
 
-defineExpose({ openFromLibrary, reviewRun })
+defineExpose({ openFromLibrary, newFromLibrary, reviewRun, runDirectly })
 
 function save() {
-  attempt(() => {
-    store.save()
-    picker.value = draft.value.id
-  })
+  attempt(store.save)
 }
 function removeSaved() {
   if (window.confirm(`Delete “${draft.value.name}” from this browser?`)) attempt(store.remove)
@@ -525,12 +516,24 @@ function useMissingValues(entries) {
   }
   refreshReview()
 }
-function reviewRun() {
+function prepareRun() {
   runConcurrency.value = draft.value.concurrency
   allowHuman.value = true
   oneTimeValues.value = new Map()
   refreshReview()
+}
+function reviewRun() {
+  prepareRun()
   runDialog.value.showModal()
+}
+function runDirectly() {
+  if (pending.value || props.busy || !draft.value.steps.length || validation.value) return
+  prepareRun()
+  if (runProblem.value || runIssues.value.length) {
+    runDialog.value.showModal()
+    return
+  }
+  void startRun()
 }
 watch([allowHuman, runConcurrency, () => props.activePresetNames, () => props.presetNames], () => {
   if (runDialog.value?.isOpen()) refreshReview()
@@ -688,22 +691,14 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         <div class="builder-actions" role="group" aria-label="Current scenario actions">
           <button type="button" class="secondary" :disabled="pending || !!validation" @click="save">Save</button>
           <button type="button" class="primary"
+            :disabled="pending || busy || !draft.steps.length || !!validation" @click="runDirectly">Run</button>
+          <button type="button" class="secondary"
             :disabled="pending || busy || !draft.steps.length || !!validation" @click="reviewRun">
             Review &amp; run
           </button>
           <button v-if="pending" type="button" class="secondary" @click="store.stop">Stop run</button>
           <span class="save-state">{{ dirty ? 'Unsaved changes' : 'Saved' }}</span>
         </div>
-      </div>
-      <div class="scenario-library-controls">
-        <label>
-          Saved
-          <select v-model="picker" :disabled="pending" aria-label="Saved builder scenarios" @change="openSaved">
-            <option value="">Current draft</option>
-            <option v-for="item in saved" :key="item.id" :value="item.id">{{ item.name }}</option>
-          </select>
-        </label>
-        <button type="button" class="secondary" :disabled="pending" @click="fresh">New</button>
       </div>
       <details class="scenario-description">
         <summary>Scenario details</summary>
@@ -1628,7 +1623,6 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 .builder-header,
 .builder-actions,
 .scenario-identity,
-.scenario-library-controls,
 .builder-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1642,15 +1636,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 .builder-header {
   font-size: 0.78rem;
 }
-.scenario-identity,
-.scenario-library-controls {
-  min-width: 0;
-}
-.scenario-library-controls {
-  border-inline-start: 1px solid var(--line);
-  padding-inline-start: .65rem;
-}
-.scenario-library-controls label {
+.scenario-identity {
   min-width: 0;
 }
 .save-state {
@@ -1970,10 +1956,6 @@ summary {
   .scenario-identity,
   .scenario-name {
     width: 100%;
-  }
-  .scenario-library-controls {
-    border-inline-start: 0;
-    padding-inline-start: 0;
   }
   .builder-toolbar select,
   .builder-toolbar input {

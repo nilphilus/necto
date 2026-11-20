@@ -91,7 +91,7 @@ function runScenario(scenario) {
       <div class="library-actions">
         <button type="button" class="primary" :disabled="busy || importing" @click="importInput.click()">Import scenario</button>
         <input ref="importInput" hidden type="file" accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml" @change="importFile">
-        <button type="button" class="secondary" :disabled="busy" @click="emit('builder')">Scenario Builder →</button>
+        <button type="button" class="secondary" :disabled="busy" @click="emit('builder')">New scenario</button>
       </div>
     </div>
     <p class="builder-intro muted">
@@ -142,8 +142,11 @@ function runScenario(scenario) {
             :aria-label="'Open Builder scenario ' + scenario.name"
             @click="emit('open-builder-scenario', scenario.id)">Open</button>
           <button type="button" class="primary" :disabled="busy || !scenario.steps.length"
+            :aria-label="'Run Builder scenario ' + scenario.name"
+            @click="emit('open-builder-scenario', scenario.id, 'run')">Run</button>
+          <button type="button" class="secondary" :disabled="busy || !scenario.steps.length"
             :aria-label="'Review and run ' + scenario.name"
-            @click="emit('open-builder-scenario', scenario.id, true)">Review &amp; run</button>
+            @click="emit('open-builder-scenario', scenario.id, 'review')">Review &amp; run</button>
         </div>
       </li>
       <li v-for="scenario in scenarios" :key="'chain:' + scenario.id" :data-scenario-id="scenario.id" class="scenario-card">

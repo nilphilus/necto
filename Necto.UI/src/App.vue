@@ -441,7 +441,7 @@ function navigateView(view) {
   } else writeRoute(view ? { view } : chainRoute())
 }
 
-async function openBuilderScenario(id, review = false) {
+async function openBuilderScenario(id, mode) {
   if (scenarioBusy.value) return
   builderVisited.value = true
   await nextTick()
@@ -449,7 +449,17 @@ async function openBuilderScenario(id, review = false) {
   if (!builderView.value?.openFromLibrary(id)) return
   navigateView('builder')
   await nextTick()
-  if (review && graphView.value === 'builder' && !scenarioBusy.value) builderView.value?.reviewRun()
+  if (graphView.value !== 'builder' || scenarioBusy.value) return
+  if (mode === 'review') builderView.value?.reviewRun()
+  if (mode === 'run') builderView.value?.runDirectly()
+}
+
+async function newBuilderScenario() {
+  if (scenarioBusy.value) return
+  builderVisited.value = true
+  await nextTick()
+  if (graphView.value === 'scenarios' && !scenarioBusy.value && builderView.value?.newFromLibrary())
+    navigateView('builder')
 }
 
 async function importLibraryScenario(file, choice) {
@@ -1105,7 +1115,7 @@ function removeScenario(id) {
         :busy="scenarioBusy"
         @back="navigateView('scenarios')"
       />
-      <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="navigateView('builder')" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios"
+      <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="newBuilderScenario" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios"
         :import-scenario="importLibraryScenario" :builder-scenarios="builderScenarios" :builder-error="builderError" @open-builder-scenario="openBuilderScenario" :state="scenarioState" :runs="scenarioRuns"
 
         :deleted="scenarioStore.deleted.value" @undo-remove="undoRemoveScenario" :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError"

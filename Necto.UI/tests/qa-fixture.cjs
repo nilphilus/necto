@@ -11,7 +11,7 @@ exports.run=async(test)=>{
  browser=await chromium.launch({headless:true,args:['--no-sandbox']});page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept())
  await page.addInitScript(base=>localStorage.setItem('necto:environments:'+base+'/openapi.json',JSON.stringify({version:2,active:[],presets:[['Demo',[['token',{value:'PRESET-TOKEN'}]]]]})),base)
  await page.goto(base)
- const builder=async()=>{await page.getByRole('button',{name:'Scenarios',exact:true}).click();await page.getByRole('button',{name:'Scenario Builder →',exact:true}).click()}
+ const builder=async()=>{await page.getByRole('button',{name:'Scenarios',exact:true}).click();await page.getByRole('button',{name:'New scenario',exact:true}).click()}
  const closeEditor=async()=>{const editor=page.locator('.step-dialog[open]');if(await editor.count())await editor.getByRole('button',{name:'Done',exact:true}).click()}
  const add=async name=>{await closeEditor();await page.getByRole('button',{name:'+ Add request',exact:true}).click();await page.getByRole('searchbox',{name:'Find endpoint',exact:true}).fill(name);await page.locator('.endpoint-options button').filter({hasText:name}).click()}
  const review=async()=>{await closeEditor();await page.getByRole('button',{name:'Review & run',exact:true}).click();return page.getByRole('dialog',{name:'Review scenario run',exact:true})}
