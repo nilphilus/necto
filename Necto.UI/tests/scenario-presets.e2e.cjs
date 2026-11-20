@@ -59,7 +59,7 @@ const saved={format:'necto-scenario-builder',version:4,id:'preset-demo',name:'Ru
  await shot('preset-run-completed')
 
  // Opting out for the lookup requires an explicit one-time value even when presets are active.
- await p.locator('.map-node').filter({hasText:'Lookup'}).click()
+ await p.locator('.map-node').filter({hasText:'Lookup'}).dblclick()
  const stepEditor=p.getByRole('dialog',{name:'Edit step',exact:true})
  await stepEditor.getByText('Request settings',{exact:true}).click()
  await stepEditor.getByRole('checkbox',{name:'Do not apply presets to this step'}).check()

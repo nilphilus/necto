@@ -12,7 +12,7 @@ run(async({p,assert,builder,add,execute,review,save,saved,shot,calls})=>{
  await p.getByRole('button',{name:'Variables (0)',exact:true}).click();const vars=p.getByRole('dialog',{name:'Shared variables',exact:true})
  await vars.getByRole('button',{name:'Add variable',exact:true}).click();await vars.getByLabel('Variable name',{exact:true}).fill('selectedRow');await vars.getByLabel('Variable source',{exact:true}).selectOption('random')
  await vars.getByLabel('Random source step',{exact:true}).selectOption({label:'Invoice rows'});await vars.getByRole('button',{name:'Apply variables',exact:true}).click()
- await p.locator('.map-node').filter({hasText:'Create invoice'}).click()
+ await p.locator('.map-node').filter({hasText:'Create invoice'}).dblclick()
  for(const [pointer,name,code] of [['/customerId','customerId','return selected.id;'],['/name','name','return selected.name;']]){
   if (pointer === '/customerId') {
    await body.getByRole('button',{name:'Edit source for customerId: Pick random'}).click()

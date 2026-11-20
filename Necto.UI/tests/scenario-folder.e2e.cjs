@@ -33,7 +33,7 @@ require('./qa-fixture.cjs').run(async({p,assert,builder,add,save,calls,closeEdit
  await p.reload();await p.getByRole('button',{name:'Scenarios',exact:true}).click();const builderCard=p.locator('.scenario-card').filter({has:p.getByRole('heading',{name:'Edited after import',exact:true})})
  await builderCard.getByRole('button',{name:'Save to folder',exact:true}).click()
  await p.getByRole('status').filter({hasText:'Saved “Edited after import”'}).waitFor()
- const [builderDownload]=await Promise.all([p.waitForEvent('download'),builderCard.getByRole('button',{name:'Download team file',exact:true}).click()])
+ const [builderDownload]=await Promise.all([p.waitForEvent('download'),builderCard.getByRole('button',{name:'Export',exact:true}).click()])
  const builderFile=JSON.parse(await fs.readFile(await builderDownload.path(),'utf8'))
  assert.equal(builderFile.kind,'builder')
  assert.equal(builderFile.scenario.name,'Edited after import')
@@ -42,6 +42,6 @@ require('./qa-fixture.cjs').run(async({p,assert,builder,add,save,calls,closeEdit
  if(process.env.NECTO_FOLDER_SCREENSHOTS){await fs.mkdir(process.env.NECTO_FOLDER_SCREENSHOTS,{recursive:true});await p.screenshot({path:path.join(process.env.NECTO_FOLDER_SCREENSHOTS,'scenario-folder.png')})}
  await region.getByRole('button',{name:'Disconnect folder',exact:true}).click();await waitIdle();assert.equal((await readFiles()).length,2);await close()
  await p.addInitScript(()=>{window.showDirectoryPicker=undefined});await p.reload();await settings();await folderRegion().getByText(/Local folder access is unavailable/).waitFor();const teamFile=files.find(file=>JSON.parse(file.text).kind==='builder');await folderRegion().getByLabel('Import team scenario file',{exact:true}).setInputFiles({name:teamFile.name,mimeType:'application/json',buffer:Buffer.from(teamFile.text)});await folderRegion().getByRole('status').filter({hasText:'Imported “Edited after import” into this browser'}).waitFor();await p.setViewportSize({width:390,height:844});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal(calls.length,0)
- await close();const fallback=p.locator('[data-scenario-id="quick-folder"]');const [download]=await Promise.all([p.waitForEvent('download'),fallback.getByRole('button',{name:'Download team file',exact:true}).click()]);const downloaded=await fs.readFile(await download.path(),'utf8');assert.equal(JSON.parse(downloaded).kind,'chain');assert.ok(!downloaded.includes('_sharedSource'))
+ await close();const fallback=p.locator('[data-scenario-id="quick-folder"]');const [download]=await Promise.all([p.waitForEvent('download'),fallback.getByRole('button',{name:'Export',exact:true}).click()]);const downloaded=await fs.readFile(await download.path(),'utf8');assert.equal(JSON.parse(downloaded).kind,'chain');assert.ok(!downloaded.includes('_sharedSource'))
  console.log('PASS: real browser directory reads/writes, IndexedDB handle restore, builder/quick files, redaction, disk conflicts before/after reload/import, preserved drafts, provenance across save/reload, disconnect, unsupported-browser file import/download and mobile layout. No API requests executed.')
 })

@@ -16,7 +16,6 @@ import StepInputs from './StepInputs.vue'
 import SharedVariables from './SharedVariables.vue'
 import { variableProducer, inputProducers } from './variables.js'
 import StepWaiting from './StepWaiting.vue'
-import { downloadBuilderDefinition } from './downloadDefinition.js'
 import {
   dependencies,
   newBlueprint,
@@ -625,9 +624,6 @@ async function goToIssue(issue, showResult = false) {
   focus?.scrollIntoView({ block: 'nearest' })
   focus?.focus({ preventScroll: true })
 }
-function exportDefinition() {
-  attempt(() => downloadBuilderDefinition(draft.value))
-}
 async function importDefinition(event) {
   const file = event.target.files?.[0]
   event.target.value = ''
@@ -721,15 +717,8 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         <summary class="secondary icon-button" aria-label="More scenario actions" title="More scenario actions">⋯</summary>
         <div>
           <button v-if="folder" type="button" class="secondary" :disabled="pending || !!validation || folder.pending"
-            @click="folder.download('builder', draft)">Download team file</button>
-          <button
-            type="button"
-            class="secondary"
-            :disabled="pending || !!validation"
-            @click="exportDefinition"
-          >
-            Export definition</button
-          ><button type="button" class="secondary" :disabled="pending" @click="fileInput.click()">
+            @click="folder.download('builder', draft)">Export</button>
+          <button type="button" class="secondary" :disabled="pending" @click="fileInput.click()">
             Import definition
           </button>
           <input
@@ -884,7 +873,8 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         :steps="execution.steps"
         :stale="execution.stale"
         :disabled="pending"
-        @select="select"
+        @select="selectedId = $event"
+        @edit="select"
         @inspect="id => select(id, true)"
         @add-first="openAdd"
         @connect="connect"

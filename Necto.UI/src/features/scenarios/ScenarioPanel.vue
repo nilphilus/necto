@@ -1,11 +1,8 @@
 <script setup>
-import { downloadBuilderDefinition } from '../scenario-builder/downloadDefinition.js'
-import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import FolderSave from '../scenario-folder/FolderSave.vue'
 import FolderLibrary from '../scenario-folder/FolderLibrary.vue'
 import FolderFeedback from '../scenario-folder/FolderFeedback.vue'
 import ScenarioCi from '../workbench/ScenarioCi.vue'
-import ScenarioExport from './ScenarioExport.vue'
 import ScenarioSkillLink from './ScenarioSkillLink.vue'
 
 import { nextTick, ref } from 'vue'
@@ -52,12 +49,6 @@ async function importWorkflow() {
     if (result) emit('open-builder-scenario', result.scenario.id)
   } catch (cause) { importError.value = cause.message }
   finally { importing.value = false }
-}
-const exportError = ref('')
-function exportBuilder(scenario) {
-  exportError.value = ''
-  try { downloadBuilderDefinition(scenario) }
-  catch (cause) { exportError.value = cause.message }
 }
 function removeBuilder(scenario) {
   if (window.confirm(`Delete “${scenario.name}” from this browser?`)) emit('remove-builder', scenario.id)
@@ -140,7 +131,7 @@ function runScenario(scenario) {
       <button ref="undoButton" type="button" class="secondary" :disabled="pending" @click="undoDeletion">Undo delete</button>
     </div>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
-    <p v-if="builderError || exportError" class="error" role="alert">{{ builderError || exportError }}</p>
+    <p v-if="builderError" class="error" role="alert">{{ builderError }}</p>
     <ul ref="list" class="saved-list">
       <li v-for="scenario in builderScenarios" :key="'builder:' + scenario.id" class="scenario-card">
         <div class="saved-title">
@@ -160,14 +151,12 @@ function runScenario(scenario) {
             @click="emit('open-builder-scenario', scenario.id, 'review')">Review &amp; run</button>
           <FolderSave :folder="folder" kind="builder" :scenario="scenario"
             :disabled="busy || !scenario.steps.length" @configure="emit('folder-settings')" />
-          <button type="button" class="secondary" :disabled="busy" title="Includes static request inputs"
-            @click="exportBuilder(scenario)">Export definition</button>
           <button type="button" class="secondary" :disabled="busy" :aria-label="'Delete Builder scenario ' + scenario.name"
             @click="removeBuilder(scenario)">Delete</button>
         </div>
       </li>
       <li v-for="scenario in scenarios" :key="'chain:' + scenario.id" :data-scenario-id="scenario.id" class="scenario-card">
-        <div class="saved-title"><h3>{{ scenario.name }}</h3><span class="muted">Quick chain · {{ scenario.steps.length }} steps</span><ScenarioExport :scenario="scenario" :workspace="workspaceIdentity(configuration)" /><ScenarioCi :scenario="scenario" :document="document" :mappings="mappings" :configuration="configuration" /></div>
+        <div class="saved-title"><h3>{{ scenario.name }}</h3><span class="muted">Quick chain · {{ scenario.steps.length }} steps</span><ScenarioCi :scenario="scenario" :document="document" :mappings="mappings" :configuration="configuration" /></div>
 
         <p class="card-description">{{ descriptionFor(scenario, ' → ') }}</p>
         <FolderSave :folder="folder" kind="chain" :scenario="scenario" :disabled="busy" @configure="emit('folder-settings')" />

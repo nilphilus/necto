@@ -53,7 +53,7 @@ run(async ({ p, assert, review, calls }) => {
   const second = await review()
   await second.getByRole('button', { name: 'Run scenario', exact: true }).click()
   await target.and(p.locator('[data-status="failed"]')).waitFor()
-  await target.click()
+  await target.dblclick()
   const editor = p.getByRole('dialog', { name: 'Edit step' })
   await editor.getByRole('textbox').first().fill('Write updated invoice')
   await editor.getByRole('button', { name: 'Done', exact: true }).click()

@@ -24,7 +24,7 @@ run(async ({ p, assert, builder, execute }) => {
     JSON.stringify({ version: 1, blueprints: [value] })), scenario)
   await p.reload()
   await p.getByRole('button', { name: '← Scenarios', exact: true }).click(); await p.getByRole('button', { name: 'Open Builder scenario ' + scenario.name, exact: true }).click()
-  await p.locator('.map-node').filter({ hasText: 'Find customer' }).click()
+  await p.locator('.map-node').filter({ hasText: 'Find customer' }).dblclick()
   const field = p.locator('[data-parameter="query:Type"] input')
   assert.equal(await field.inputValue(), 'integer')
   const dispatched = p.waitForRequest(request => new URL(request.url()).pathname === '/customer')

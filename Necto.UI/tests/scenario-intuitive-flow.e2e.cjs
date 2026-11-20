@@ -65,7 +65,7 @@ run(async ({ p, assert, builder, save, closeEditor, review, calls }) => {
   await p.locator('.builder-run-status').filter({ hasText: '1 / 1 completed' }).waitFor()
   assert.equal(calls.length, 1)
 
-  await p.locator('.map-node').filter({ hasText: 'Create invoice' }).click()
+  await p.locator('.map-node').filter({ hasText: 'Create invoice' }).dblclick()
   await editor.waitFor()
   await closeEditor()
   await p.getByRole('button', { name: 'Add next request', exact: true }).click()

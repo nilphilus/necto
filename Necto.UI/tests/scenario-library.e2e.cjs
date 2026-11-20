@@ -49,9 +49,9 @@ run(async ({ p, assert, builder, add, closeEditor, calls }) => {
   assert.deepEqual(calls.map((call) => call.path), ['/customer', '/customer'])
   const [definition] = await Promise.all([
     p.waitForEvent('download'),
-    card.getByRole('button', { name: 'Export definition', exact: true }).click(),
+    card.getByRole('button', { name: 'Export', exact: true }).click(),
   ])
-  assert.equal(definition.suggestedFilename(), 'necto-scenario-builder.json')
+  assert.match(definition.suggestedFilename(), /^builder-check-customer-.+\.json$/)
   await card.getByRole('button', { name: 'Delete Builder scenario Check customer' }).click()
   await card.waitFor({ state: 'detached' })
 

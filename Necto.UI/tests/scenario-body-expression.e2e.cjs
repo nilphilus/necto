@@ -46,7 +46,7 @@ run(async ({ p, assert, calls, review, shot }) => {
     buffer: Buffer.from(JSON.stringify({ format: 'necto-shared-scenario', version: 1, kind: 'builder', scenario })),
   })
   await p.getByRole('button', { name: 'Open Builder scenario Calculated limit' }).click()
-  await p.locator('.map-node').filter({ hasText: 'Send payload' }).click()
+  await p.locator('.map-node').filter({ hasText: 'Send payload' }).dblclick()
   const body = p.getByRole('region', { name: 'Request body schema' })
   const min = body.locator('[data-body-path="/limits/min"]')
   const fieldPanel = body.getByRole('region', { name: 'Configure body field' })
@@ -79,7 +79,7 @@ run(async ({ p, assert, calls, review, shot }) => {
   await p.locator('.builder-run-status').filter({ hasText: '1 / 1 completed' }).waitFor()
   assert.deepEqual(calls[0].body, { customerId: 7, name: 'Preset name', lines: [{ Quantity: 2 }], limits: { min: -1 } })
 
-  await p.locator('.map-node').filter({hasText:'Send payload'}).click()
+  await p.locator('.map-node').filter({hasText:'Send payload'}).dblclick()
   const stepEditor = p.getByRole('dialog', {name:'Edit step', exact:true})
   await stepEditor.getByText('Request settings', {exact:true}).click()
   await stepEditor.getByRole('checkbox', {name:'Do not apply presets to this step'}).check()

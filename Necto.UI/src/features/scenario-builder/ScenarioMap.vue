@@ -1,4 +1,5 @@
 <script setup>
+import { useGraphNavigation } from '../graph-navigation.js'
 import { CARD_HEIGHT, CARD_WIDTH, routeConnections, placeConnectionControls } from './edgeRouting.js'
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
 import { inputProducers } from './variables.js'
@@ -6,9 +7,10 @@ import { canRetryStep } from './runner.js'
 import { layers } from './model.js'
 import { allConnections, connectionKey, hasTiming } from './connections.js'
 const props = defineProps({ blueprint: Object, selected: String, steps: Array, disabled: Boolean, stale: Boolean, activeConnection: String })
-const emit = defineEmits(['select', 'inspect', 'add-first', 'connect', 'configure', 'create-next', 'retry'])
+const emit = defineEmits(['select', 'edit', 'inspect', 'add-first', 'connect', 'configure', 'create-next', 'retry'])
 const zoom = ref(1),
   canvas = ref(null),
+  viewport = ref(null),
   drag = ref(null),
   fromChoice = ref(''),
   toChoice = ref('')
@@ -16,7 +18,8 @@ const connectionsList = ref(null)
 const connectionFilter = ref('')
 const hoveredConnection = ref('')
 const focusedConnection = ref('')
-const highlightedKey = computed(() => props.activeConnection || hoveredConnection.value || focusedConnection.value)
+const selectedConnection = ref('')
+const highlightedKey = computed(() => props.activeConnection || hoveredConnection.value || focusedConnection.value || selectedConnection.value)
 const highlightedEdge = computed(() => layout.value.routed.find(edge => edge.key === highlightedKey.value))
 const visibleConnections = computed(() => {
   const query = connectionFilter.value.trim().toLowerCase()
@@ -113,6 +116,12 @@ const layout = computed(() => {
     }
   return { width: routeWidth, height: routeHeight, startY: height / 2, nodes, edges, routed }
 })
+const { sync, zoomAt, wheel, isPanning, startPan, movePan, stopPan } = useGraphNavigation(
+  viewport, computed(() => layout.value.width), computed(() => layout.value.height), zoom,
+)
+function belongsToStep(edge) {
+  return props.selected && (edge.from === props.selected || edge.to === props.selected)
+}
 const controls = computed(() => placeConnectionControls(layout.value.routed, [
   { x: 24, y: layout.value.startY - 24, width: 84, height: 48 },
   ...layout.value.nodes.map(({ x, y }) => ({ x, y, width: CARD_WIDTH, height: CARD_HEIGHT })),
@@ -203,6 +212,7 @@ function cancel() {
 }
 function configure(edge, event) {
   cancel()
+  selectedConnection.value = edge.key
   emit('configure', edge, event)
 }
 function escape(event) {
@@ -222,6 +232,7 @@ watch(
     fromChoice.value = ''
     toChoice.value = ''
     connectionFilter.value = ''
+    selectedConnection.value = ''
     hoveredConnection.value = ''
     focusedConnection.value = ''
     connectionsList.value?.close()
@@ -234,7 +245,7 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
   <section class="scenario-map" aria-label="Scenario map">
     <header>
       <strong>Scenario map</strong
-      ><span v-if="blueprint.steps.length">Drag ● to a request or empty space. ⚙ configures a connection.</span
+      ><span v-if="blueprint.steps.length">Click to select · Double-click to edit · Ctrl + scroll to zoom · Drag the background to pan.</span
       ><button v-if="selected && blueprint.steps.some(step => step.id === selected)" type="button" class="secondary"
         :disabled="disabled || blueprint.steps.length >= 100"
         @click="emit('create-next', { from: selected })">Add next request</button>
@@ -245,7 +256,8 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
         Connections ({{ layout.edges.length }})
       </button><label v-if="blueprint.steps.length"
         >Zoom
-        <select v-model.number="zoom">
+        <select :value="zoom" @change="zoomAt(Number($event.target.value))">
+          <option v-if="![0.65, 0.8, 1].includes(zoom)" :value="zoom">{{ Math.round(zoom * 100) }}%</option>
           <option :value="0.65">65%</option>
           <option :value="0.8">80%</option>
           <option :value="1">100%</option>
@@ -263,13 +275,18 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
       {{ blueprint.steps.find((step) => step.id === drag.from)?.label ?? 'Start' }}.
       <button type="button" @click="cancel">Cancel (Esc)</button>
     </p>
-    <div class="map-scroll" tabindex="0" aria-label="Scroll scenario map">
+    <div ref="viewport" class="map-scroll" :class="{ pannable: blueprint.steps.length, panning: isPanning }"
+      tabindex="0" aria-label="Scroll scenario map" @scroll="sync"
+      @wheel="blueprint.steps.length && $event.ctrlKey && wheel($event)"
+      @pointerdown="blueprint.steps.length && !drag && startPan($event)" @pointermove="movePan"
+      @pointerup="stopPan" @pointercancel="stopPan" @lostpointercapture="stopPan">
       <div v-if="!blueprint.steps.length" class="map-empty">
         <p>Choose the first endpoint in your scenario.</p>
         <button type="button" class="primary" :disabled="disabled" @click="emit('add-first')">+ Add request</button>
       </div>
       <div
         v-else
+        class="map-surface"
         :style="{ width: layout.width * zoom + 'px', height: layout.height * zoom + 'px' }"
       >
         <div
@@ -304,12 +321,16 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
               :d="edge.d"
               :data-route="edge.key"
               class="edge"
-              :class="{ data: edge.data, timed: hasTiming(edge), muted: highlightedEdge && edge.key !== highlightedKey,
+              :class="{ data: edge.data, timed: hasTiming(edge), incident: belongsToStep(edge),
+                        muted: (selected || highlightedEdge) && !belongsToStep(edge) && edge.key !== highlightedKey,
                         hidden: highlightedEdge && edge.key === highlightedKey }"
               marker-end="url(#builder-arrow)"
             />
             <path v-if="highlightedEdge" :d="highlightedEdge.d" class="edge highlighted"
               :data-highlighted-route="highlightedEdge.key" marker-end="url(#builder-arrow)" />
+            <path v-for="edge in layout.routed" :key="'hit:' + edge.key" :d="edge.d"
+              class="edge-hit" :data-route-hit="edge.key" vector-effect="non-scaling-stroke"
+              @pointerdown.stop @click.stop="selectedConnection = edge.key" />
             <path v-if="ghost" :d="ghost" class="edge ghost" />
           </svg>
           <div
@@ -356,6 +377,7 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
               :class="{ 'drop-target': drag?.target === node.step.id }"
               :aria-pressed="selected === node.step.id"
               @click="select(node.step.id)"
+              @dblclick="emit('edit', node.step.id)"
             >
               <span class="node-top"
                 ><span class="method" :data-method="node.step.method">{{
@@ -375,6 +397,8 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
                 ></span
               >
             </button>
+            <button v-if="!drag && selected === node.step.id" type="button" class="secondary node-edit"
+              :aria-label="'Edit step ' + node.step.label" title="Edit step" @click="emit('edit', node.step.id)">✎</button>
             <button v-if="!drag && states.has(node.step.id)" type="button" class="node-response"
               :aria-label="'View response for ' + node.step.label" @click="emit('inspect', node.step.id)">
               {{ states.get(node.step.id).httpStatus ?? states.get(node.step.id).status }}
@@ -520,6 +544,9 @@ header select {
   background: radial-gradient(var(--line) 1px, transparent 1px);
   background-size: 18px 18px;
 }
+.map-scroll.pannable { cursor: grab; }
+.map-scroll.panning { cursor: grabbing; user-select: none; }
+.map-surface { overflow: clip; }
 .map-canvas {
   position: relative;
   transform-origin: top left;
@@ -541,11 +568,12 @@ header select {
   stroke-width: 2;
   stroke-dasharray: 5 4;
 }
+.edge-hit { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: pointer; }
 .edge.muted { opacity: .3; }
 .edge.hidden { visibility: hidden; }
 .edge.highlighted {
-  stroke: var(--accent);
-  stroke-width: 4;
+  stroke: #416ce0;
+  stroke-width: 5;
   stroke-dasharray: none;
   filter: drop-shadow(0 0 2px var(--surface));
 }
@@ -556,6 +584,7 @@ header select {
 .edge.timed {
   stroke: #96732e;
 }
+.edge.incident { stroke-width: 4; stroke-dasharray: none; }
 .ghost {
   stroke: #257f67;
   stroke-dasharray: 4 4;
@@ -580,6 +609,8 @@ marker path {
   text-align: left;
   box-shadow: 0 2px 6px #203b2810;
 }
+.node-edit { position: absolute; top: 6px; right: 7px; padding: .1rem .3rem; }
+.node-wrap:has(.node-edit) .node-top { padding-inline-end: 1.7rem; }
 .map-node[aria-pressed='true'] {
   outline: 2px solid var(--accent);
   background: var(--accent-soft);
