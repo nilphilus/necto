@@ -1,7 +1,7 @@
 <script setup>
 import { computed, useId } from 'vue'
 import { pointerHints } from './pointerHints.js'
-const props = defineProps({ step: Object, operation: Object, disabled: Boolean })
+const props = defineProps({ step: Object, operation: Object, disabled: Boolean, local: Boolean })
 const id = useId()
 const hints = computed(() => pointerHints(props.operation))
 function delay(enabled) { if (enabled) props.step.delayMs = 1000; else delete props.step.delayMs }
@@ -15,8 +15,8 @@ function changeType() { props.step.waitFor.value = ({ text: '', number: '0', boo
   <fieldset class="step-waiting" :disabled="disabled">
     <legend>Timing & response waiting</legend>
     <label class="toggle"><input type="checkbox" :checked="step.delayMs !== undefined" @change="delay($event.target.checked)">Delay</label>
-    <label v-if="step.delayMs !== undefined" class="timing-value">Delay before first request (ms)<input v-model.number="step.delayMs" type="number" min="0" max="600000" step="1" aria-label="Delay milliseconds"></label>
-    <label class="toggle"><input type="checkbox" :checked="!!step.waitFor" @change="polling($event.target.checked)">Wait for response value</label>
+    <label v-if="step.delayMs !== undefined" class="timing-value">Delay before {{ local ? 'step' : 'first request' }} (ms)<input v-model.number="step.delayMs" type="number" min="0" max="600000" step="1" aria-label="Delay milliseconds"></label>
+    <label v-if="!local" class="toggle"><input type="checkbox" :checked="!!step.waitFor" @change="polling($event.target.checked)">Wait for response value</label>
     <template v-if="step.waitFor">
       <label>Response field · JSON Pointer<input v-model="step.waitFor.pointer" :list="id + '-wait-paths'" placeholder="/status" aria-label="Wait for response field"><small>Empty = the whole JSON response. A missing field keeps waiting.</small></label>
       <datalist :id="id + '-wait-paths'"><option v-for="path in hints" :key="path" :value="path" /></datalist>

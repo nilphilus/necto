@@ -1,3 +1,7 @@
+// Necto.UI/src/features/scenario-builder/localStep.js
+function isLocalStep(step) {
+	return step?.method === "LOCAL" && step.operationKey === "";
+}
 // Necto.UI/src/features/scenario-builder/stepIssue.js
 function stepIssue(cause, step, input) {
 	if (!step?.id) return cause;
@@ -5901,7 +5905,7 @@ function validateBlueprint(blueprint) {
 	].includes(blueprint.version) || typeof blueprint.id !== "string" || !blueprint.id || typeof blueprint.name !== "string" || !blueprint.name.trim() || blueprint.name.length > 200 || !Array.isArray(blueprint.steps) || blueprint.steps.length > 100 || !Number.isInteger(blueprint.concurrency) || blueprint.concurrency < 1 || blueprint.concurrency > 8) throw new Error("Invalid Scenario Builder definition (maximum 100 steps; parallelism 1–8).");
 	if (blueprint.description !== void 0 && (typeof blueprint.description !== "string" || blueprint.description.length > 500)) throw new Error("Scenario descriptions are limited to 500 characters.");
 	if (blueprint.version < 3 && blueprint.connections !== void 0 && (!Array.isArray(blueprint.connections) || blueprint.connections.length)) throw new Error("Connections require Scenario Builder version 3.");
-	const ids = /* @__PURE__ */ new Set();
+	const ids = /* @__PURE__ */ new Set(), localIds = /* @__PURE__ */ new Set();
 	let expressionCount = 0, expressionChars = 0, expressionBindings = 0;
 	for (const step of blueprint.steps) {
 		let issueInput;
@@ -5910,6 +5914,11 @@ function validateBlueprint(blueprint) {
 			if (step.ignorePresets !== void 0 && typeof step.ignorePresets !== "boolean") throw new Error("Invalid preset setting.");
 			if (step.position !== void 0 && (!step.position || !Number.isFinite(step.position.x) || !Number.isFinite(step.position.y) || step.position.x < 20 || step.position.y < 20 || step.position.x > 2e4 || step.position.y > 2e4)) throw new Error("Invalid request position.");
 			ids.add(step.id);
+			if (isLocalStep(step)) {
+				localIds.add(step.id);
+				const [input] = step.inputs;
+				if (step.path || step.apiId !== "local" || step.request.body || Object.keys(step.request.fields).length || step.request.assertions?.length || step.inputs.length !== 1 || input.location !== "body" || input.pointer !== "" || !["random", "expression"].includes(input.source)) throw new Error("A local step needs one Pick random or Expression result.");
+			}
 			if (blueprint.version === 1 && (step.delayMs !== void 0 || step.waitFor !== void 0)) throw new Error("Delay and response waiting require Scenario Builder version 2.");
 			if (blueprint.version >= 3 && (step.dependsOn.length || step.delayMs !== void 0 || step.waitFor !== void 0)) throw new Error("In version 3+, dependencies and timing belong to connections.");
 			if (Object.keys(step.request.bodyFieldEdits ?? {}).length) {
@@ -5986,6 +5995,7 @@ function validateBlueprint(blueprint) {
 		const pairs = /* @__PURE__ */ new Set();
 		for (const edge of blueprint.connections) {
 			if (!edge || !(edge.from === null || ids.has(edge.from)) || !ids.has(edge.to) || edge.from === edge.to || pairs.has(connectionKey(edge.from, edge.to))) throw new Error("Invalid, duplicate or self connection.");
+			if (edge.waitFor && localIds.has(edge.to)) throw new Error("Local steps cannot poll for a response value.");
 			pairs.add(connectionKey(edge.from, edge.to));
 			validateWaiting(edge);
 		}

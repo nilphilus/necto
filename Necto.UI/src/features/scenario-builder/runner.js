@@ -148,6 +148,16 @@ export async function executeBlueprint(plan, { concurrency = 4, execute, signal,
         questions.forEach((input, index) => applyInput(step.session, step.operation, input, answers[index]))
       }
       combined.throwIfAborted()
+      if (step.local) {
+        step.response = {
+          ok: true,
+          json: JSON.parse(step.session.body),
+          text: step.session.body,
+          contentType: 'application/json',
+        }
+        step.status = 'completed'
+        return
+      }
       if (!retryOnly) step.attempts = []
       step.attempts ??= []
       const previousAttempts = step.attempts.length

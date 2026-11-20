@@ -84,3 +84,18 @@ Maximum 50 checks per request. Do not retain sensitive expected values. Non-JSON
 ## Validation scope
 
 The packaged validator uses Necto's actual version-7 model validator, with outer file checks (2 MiB, 25,000 values, 64 levels, including embedded JSON). It rejects invalid graphs, inputs, generators, waits and variables. It is intentionally Builder-only. Necto remains the final import/runtime authority; future formats may require an updated skill. API identity, schema/business compatibility, authorization and secret review require the discovery steps in SKILL.md.
+
+## Local computation steps
+
+A local step evaluates one `random` or `expression` input once per run and
+publishes the JSON result without issuing an HTTP request. Give the step
+`"method": "LOCAL"`, `"operationKey": ""`, `"apiId": "local"`, and `"path": ""`.
+Use `"request": {"fields": {}, "body": ""}` and one input with
+`"location": "body"` and `"pointer": ""`. The input’s source and binding keys are
+the same as for a random pick or expression in a request.
+
+Use the local step’s ID as a downstream response binding’s `stepId`. An empty
+`responsePointer` gives the whole result. When the result is a record, use a
+pointer such as `/id` to extract one field. Independent consumers can run in
+parallel. A local step can be delayed, and HTTP polling applies only to
+request steps.

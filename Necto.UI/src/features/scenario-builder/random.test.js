@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { pickRandom,randomIndex } from './random.js'
+import { localOperation } from './localStep.js'
 import { newBlueprint,newStep,layers,validateBlueprint } from './model.js'
 import { executeBlueprint } from './runner.js'
 import { prepareBlueprint } from './prepareBlueprint.js'
@@ -73,4 +74,34 @@ test('empty array stops consumer dispatch and cancellation prevents sampling',as
  assert.equal(run.status,'failed');assert.ok(!calls.includes('/one'))
  const controller=new AbortController();controller.abort();let sampled=false
  const canceled=await executeBlueprint(prepareBlueprint(b,context),{signal:controller.signal,pick:()=>{sampled=true},execute:async()=>success({})});assert.equal(canceled.status,'cancelled');assert.equal(sampled,false)
+})
+
+test('local random and expression steps expose JSON to parallel requests without sending HTTP', async () => {
+ const scenario = make()
+ const random = { ...newStep(localOperation, {}), id: 'random', inputs: [{ ...source, itemPointer: '', location: 'body', pointer: '' }] }
+ const expression = { ...newStep(localOperation, {}), id: 'expression', inputs: [{
+  source: 'expression', location: 'body', pointer: '', expression: 'return selected.id;',
+  bindings: [{ source: 'response', name: 'selected', stepId: 'random', responsePointer: '' }],
+ }] }
+ scenario.steps.push(random, expression)
+ for (const step of scenario.steps.slice(1, 3)) {
+  step.inputs = [{ source: 'response', location: 'query', name: 'id', stepId: 'expression', responsePointer: '' }]
+ }
+ const shared = parseShared(serializeShared('builder', scenario, context.operations), context.operations)
+ const plan = prepareBlueprint(savedBlueprint(shared.scenario), context)
+ let picks = 0
+ const calls = []
+ const result = await executeBlueprint(plan, {
+  signal: new AbortController().signal,
+  pick: (json, input) => { picks++; return pickRandom(json, input, () => 1) },
+  execute: async (operation, session) => {
+   calls.push([operation.path, session.fields['query:id']])
+   return success({ items: [{ id: 7 }, { id: 42 }] })
+  },
+ })
+ assert.equal(result.status, 'completed')
+ assert.equal(picks, 1)
+ assert.deepEqual(calls, [['/list', undefined], ['/one', '42'], ['/two', '42']])
+ assert.deepEqual(plan.find(step => step.id === 'random').response.json, { id: 42 })
+ assert.equal(plan.find(step => step.id === 'expression').response.json, 42)
 })
