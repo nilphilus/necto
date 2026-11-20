@@ -7,6 +7,7 @@ import { inputSources } from './variables.js'
 const props = defineProps({
   name: String,
   stepCount: Number,
+  inputsOnly: Boolean,
   variables: Array,
   activePresets: Array,
   suggestedPresets: Array,
@@ -66,85 +67,87 @@ defineExpose({
   <dialog ref="runDialog" class="builder-dialog" aria-labelledby="run-builder-title">
     <form @submit.prevent="$emit('start')">
       <header>
-        <h3 id="run-builder-title">Review scenario run</h3>
+        <h3 id="run-builder-title">{{ inputsOnly ? 'Resolve run issues' : 'Review scenario run' }}</h3>
         <button
           type="button"
           class="secondary"
-          aria-label="Close run review"
+          :aria-label="inputsOnly ? 'Close run issues' : 'Close run review'"
           @click="runDialog.close()"
         >
           ×
         </button>
       </header>
       <p>{{ name }} · {{ stepCount }} steps</p>
-      <p class="muted">
-        Sends real requests, including writes. A failure stops new steps and cancels in-flight
-        requests where possible; completed server changes cannot be rolled back.
-      </p>
       <p v-if="activePresets.length" class="muted">Active presets · {{ activePresets.join(' → ') }}</p>
-      <label class="parallel-limit"
-        >Parallel requests for this run<input
-          v-model.number="concurrency"
-          type="number"
-          min="1"
-          max="8"
-          required /></label
-      ><label class="human-toggle"
-        ><input v-model="allowHuman" type="checkbox" />Human in the loop · pause for missing
-        run-time inputs</label
-      >
-      <details v-if="variables.length">
-        <summary>Shared variables ({{ variables.length }})</summary>
-        <ul>
-          <li v-for="variable in variables" :key="variable.id">
-            {{ variable.name }} · {{ variable.source }} · resolved once if used
+      <template v-if="!inputsOnly">
+        <p class="muted">
+          Sends real requests, including writes. A failure stops new steps and cancels in-flight
+          requests where possible; completed server changes cannot be rolled back.
+        </p>
+        <label class="parallel-limit"
+          >Parallel requests for this run<input
+            v-model.number="concurrency"
+            type="number"
+            min="1"
+            max="8"
+            required /></label
+        ><label class="human-toggle"
+          ><input v-model="allowHuman" type="checkbox" />Human in the loop · pause for missing
+          run-time inputs</label
+        >
+        <details v-if="variables.length">
+          <summary>Shared variables ({{ variables.length }})</summary>
+          <ul>
+            <li v-for="variable in variables" :key="variable.id">
+              {{ variable.name }} · {{ variable.source }} · resolved once if used
+            </li>
+          </ul>
+        </details>
+        <p v-if="review.some(step => !['GET', 'HEAD', 'OPTIONS'].includes(step.operation.method) &&
+          step.entryPolicies.some(policy => policy.waitFor?.retryCount > 0))" class="repeat-warning" role="alert">
+          A wait condition can repeat requests that change server data. Check the call limits below.
+        </p>
+        <ol class="review-targets">
+          <li v-for="step in review" :key="step.id">
+            <strong>{{ step.label }}</strong
+            ><code v-if="step.local">Local computation</code><code v-else>{{ step.operation.method }} {{ step.operation.path }}</code
+            ><span v-if="step.target">{{ step.target.api }} · {{ step.target.label }}</span
+            ><small v-if="!step.local && activePresets.length">{{
+              step.presetOverrides.length
+                ? 'Preset fields: ' + step.presetOverrides.join(', ')
+                : 'No matching preset fields (or shared presets disabled for this API).'
+            }}</small
+            ><small v-for="expression in step.bodyExpressions" :key="expression.pointer" class="review-expression">
+              <code>{{ expression.pointer || '(whole body)' }}</code> · {{ expression.overridden ? 'Expression overridden by preset' : 'Expression evaluated before send' }}
+            </small><small
+              >{{
+                step.inputs
+                  .flatMap(inputSources)
+                  .filter(
+                    (input) =>
+                      input.source === 'human' ||
+                      (input.source === 'variable' &&
+                        variables.find((variable) => variable.id === input.variableId)?.source ===
+                          'human')
+                  ).length
+              }}
+              human inputs · {{ step.dependencies.length }} dependencies</small
+            ><small
+              v-for="policy in step.entryPolicies.filter(
+                (policy) => policy.delayMs !== undefined || policy.waitFor
+              )"
+              :key="connectionKey(policy.from, policy.to)"
+              >{{ policy.label
+              }}<span v-if="policy.delayMs !== undefined"> · Delay {{ policy.delayMs }} ms</span
+              ><span v-if="policy.waitFor">
+                · Wait for {{ policy.waitFor.pointer || '(root)' }} = {{ policy.waitFor.value }} · Up
+                to {{ policy.waitFor.retryCount + 1 }} {{ step.operation.method }} calls ·
+                {{ policy.waitFor.intervalMs }} ms between retries</span
+              ></small
+            >
           </li>
-        </ul>
-      </details>
-      <p v-if="review.some(step => !['GET', 'HEAD', 'OPTIONS'].includes(step.operation.method) &&
-        step.entryPolicies.some(policy => policy.waitFor?.retryCount > 0))" class="repeat-warning" role="alert">
-        A wait condition can repeat requests that change server data. Check the call limits below.
-      </p>
-      <ol class="review-targets">
-        <li v-for="step in review" :key="step.id">
-          <strong>{{ step.label }}</strong
-          ><code v-if="step.local">Local computation</code><code v-else>{{ step.operation.method }} {{ step.operation.path }}</code
-          ><span v-if="step.target">{{ step.target.api }} · {{ step.target.label }}</span
-          ><small v-if="!step.local && activePresets.length">{{
-            step.presetOverrides.length
-              ? 'Preset fields: ' + step.presetOverrides.join(', ')
-              : 'No matching preset fields (or shared presets disabled for this API).'
-          }}</small
-          ><small v-for="expression in step.bodyExpressions" :key="expression.pointer" class="review-expression">
-            <code>{{ expression.pointer || '(whole body)' }}</code> · {{ expression.overridden ? 'Expression overridden by preset' : 'Expression evaluated before send' }}
-          </small><small
-            >{{
-              step.inputs
-                .flatMap(inputSources)
-                .filter(
-                  (input) =>
-                    input.source === 'human' ||
-                    (input.source === 'variable' &&
-                      variables.find((variable) => variable.id === input.variableId)?.source ===
-                        'human')
-                ).length
-            }}
-            human inputs · {{ step.dependencies.length }} dependencies</small
-          ><small
-            v-for="policy in step.entryPolicies.filter(
-              (policy) => policy.delayMs !== undefined || policy.waitFor
-            )"
-            :key="connectionKey(policy.from, policy.to)"
-            >{{ policy.label
-            }}<span v-if="policy.delayMs !== undefined"> · Delay {{ policy.delayMs }} ms</span
-            ><span v-if="policy.waitFor">
-              · Wait for {{ policy.waitFor.pointer || '(root)' }} = {{ policy.waitFor.value }} · Up
-              to {{ policy.waitFor.retryCount + 1 }} {{ step.operation.method }} calls ·
-              {{ policy.waitFor.intervalMs }} ms between retries</span
-            ></small
-          >
-        </li>
-      </ol>
+        </ol>
+      </template>
       <p v-if="runProblem" class="error" role="alert">
         {{ runProblem }}
         <button v-if="problemStep" type="button" class="secondary" @click="$emit('go-to-step')">Go to step</button>
