@@ -1,3 +1,4 @@
+import { isLocalStep } from './localStep.js'
 import { stepIssue } from './stepIssue.js'
 import { validateRandom } from './random.js'
 import { expressionContext, validateExpression } from './expression.js'
@@ -72,7 +73,7 @@ export function validateBlueprint(blueprint) {
       (typeof blueprint.description !== 'string' || blueprint.description.length > 500))
     throw new Error('Scenario descriptions are limited to 500 characters.')
   if (blueprint.version < 3 && blueprint.connections !== undefined && (!Array.isArray(blueprint.connections) || blueprint.connections.length)) throw new Error('Connections require Scenario Builder version 3.')
-  const ids = new Set()
+  const ids = new Set(), localIds = new Set()
   let expressionCount=0, expressionChars=0, expressionBindings=0
   for (const step of blueprint.steps) {
     let issueInput
@@ -85,6 +86,14 @@ export function validateBlueprint(blueprint) {
       if (step.ignorePresets !== undefined && typeof step.ignorePresets !== 'boolean') throw new Error('Invalid preset setting.')
       if (step.position !== undefined && (!step.position || !Number.isFinite(step.position.x) || !Number.isFinite(step.position.y) || step.position.x < 20 || step.position.y < 20 || step.position.x > 20000 || step.position.y > 20000)) throw new Error('Invalid request position.')
       ids.add(step.id)
+      if (isLocalStep(step)) {
+        localIds.add(step.id)
+        const [input] = step.inputs
+        if (step.path || step.apiId !== 'local' || step.request.body || Object.keys(step.request.fields).length ||
+            step.request.assertions?.length || step.inputs.length !== 1 ||
+            input.location !== 'body' || input.pointer !== '' || !['random', 'expression'].includes(input.source))
+          throw new Error('A local step needs one Pick random or Expression result.')
+      }
       if (blueprint.version === 1 && (step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('Delay and response waiting require Scenario Builder version 2.')
       if (blueprint.version >= 3 && (step.dependsOn.length || step.delayMs !== undefined || step.waitFor !== undefined)) throw new Error('In version 3+, dependencies and timing belong to connections.')
       if (Object.keys(step.request.bodyFieldEdits ?? {}).length) {
@@ -126,6 +135,8 @@ export function validateBlueprint(blueprint) {
     const pairs = new Set()
     for (const edge of blueprint.connections) {
       if (!edge || !(edge.from === null || ids.has(edge.from)) || !ids.has(edge.to) || edge.from === edge.to || pairs.has(connectionKey(edge.from, edge.to))) throw new Error('Invalid, duplicate or self connection.')
+      if (edge.waitFor && localIds.has(edge.to))
+        throw new Error('Local steps cannot poll for a response value.')
       pairs.add(connectionKey(edge.from, edge.to)); validateWaiting(edge)
     }
   }

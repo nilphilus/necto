@@ -1,3 +1,4 @@
+import { isLocalStep } from '../scenario-builder/localStep.js'
 import { inputSources } from '../scenario-builder/variables.js'
 import { sharedBlueprint } from '../scenario-builder/definition.js'
 import { sharedChain } from '../scenarios/definition.js'
@@ -89,6 +90,10 @@ export function sharedDefinition(kind,source,operations) {
  for(const variable of source?.variables??[])if(typeof variable.value==='string'){staticText+=variable.value.length;if(staticText>FILE_LIMIT)throw new Error('A shared scenario file is limited to 2 MiB.')}
  const scenario=canonicalScenario(kind,source),secretVariables=new Set()
  for(const step of scenario.steps){
+  if(kind==='builder'&&isLocalStep(step)){
+   step.request={fields:{},body:'',assertions:[]}
+   continue
+  }
   const operation=operations.find(operation=>operation.key===step.operationKey&&(operation.apiId??'local')===step.apiId)
   if(!operation||operation.method!==step.method||operation.path!==step.path)throw new Error(`${step.label??step.name}: load the endpoint's API before saving to the folder.`)
   const request=kind==='builder'?step.request:step

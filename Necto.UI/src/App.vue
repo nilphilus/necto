@@ -30,6 +30,7 @@ import EntityGraph from './features/entity-graph/EntityGraph.vue'
 import ScenarioPanel from './features/scenarios/ScenarioPanel.vue'
 import CaptureRequestsDialog from './features/scenario-builder/CaptureRequestsDialog.vue'
 import { appendHistoryRequests } from './features/scenario-builder/captureHistory.js'
+import { isLocalStep } from './features/scenario-builder/localStep.js'
 import { importArazzoWorkflow, readArazzo } from './features/scenario-builder/arazzoImport.js'
 import { parseBuilderImport } from './features/scenario-builder/definitionImport.js'
 import { FILE_LIMIT } from './features/scenario-folder/format.js'
@@ -497,7 +498,7 @@ async function importLibraryScenario(file, choice) {
       throw new Error('The API workspace changed. Import the scenario again.')
     builderStore.saveCaptured(scenario)
   }
-  const missing = [...new Set(scenario.steps.filter((step) => !operations.value.some((operation) =>
+  const missing = [...new Set(scenario.steps.filter((step) => !isLocalStep(step) && !operations.value.some((operation) =>
     operation.key === step.operationKey && (operation.apiId ?? 'local') === step.apiId
   )).map((step) => step.operationKey))]
   return { scenario, missing }
