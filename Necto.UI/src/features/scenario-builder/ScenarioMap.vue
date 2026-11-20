@@ -620,10 +620,19 @@ marker path {
   position: absolute;
   inset-block-start: .45rem;
   inset-inline-end: .5rem;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 1.4rem;
   align-items: center;
-  gap: .2rem;
+  justify-items: end;
+  column-gap: .2rem;
+  max-inline-size: calc(100% - 4.5rem);
+  z-index: 1;
+  pointer-events: none;
 }
+.node-tools > button { pointer-events: auto; }
+.node-response { grid-column: 1; }
+.node-retry { grid-column: 2; }
+.node-edit { grid-column: 3; }
 .node-wrap:has(.node-edit) .node-top { padding-inline-end: 1.5rem; }
 .node-edit, .node-retry {
   display: grid;
@@ -674,7 +683,9 @@ marker path {
   gap: 0.3rem;
 }
 .node-response {
-  max-width: 6rem;
+  min-inline-size: 0;
+  max-inline-size: min(100%, 6rem);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   border: 1px solid var(--line);
