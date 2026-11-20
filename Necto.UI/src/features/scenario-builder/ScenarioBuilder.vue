@@ -709,48 +709,6 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       <button type="button" class="secondary" :disabled="pending" @click="emit('back')">
         ← Scenarios
       </button>
-      <h2 id="builder-title">Scenario Builder</h2>
-      <span class="scenario-title">{{ draft.name }}</span>
-      <button type="button" class="secondary icon-button" aria-label="Scenario details" title="Scenario details"
-        aria-haspopup="dialog" @click="detailsDialog.showModal()">ⓘ</button>
-      <details class="builder-more">
-        <summary class="secondary icon-button" aria-label="More scenario actions" title="More scenario actions">⋯</summary>
-        <div>
-          <button v-if="folder" type="button" class="secondary" :disabled="pending || !!validation || folder.pending"
-            @click="folder.download('builder', draft)">Export</button>
-          <button type="button" class="secondary" :disabled="pending" @click="fileInput.click()">
-            Import definition
-          </button>
-          <input
-            ref="fileInput"
-            type="file"
-            accept="application/json,.json"
-            hidden
-            @change="importDefinition"
-          />
-          <label v-if="scenarios?.length"
-            >Copy quick scenario<select v-model="quick" :disabled="pending" @change="importQuick">
-              <option value="">Choose saved chain</option>
-              <option v-for="item in scenarios" :key="item.id" :value="item.id">
-                {{ item.name }}
-              </option>
-            </select></label
-          >
-          <button
-            v-if="saved.some((item) => item.id === draft.id)"
-            type="button"
-            class="secondary error"
-            :disabled="pending"
-            @click="removeSaved"
-          >
-            Delete saved scenario
-          </button>
-          <p>
-            Definitions include static inputs. Answers and results are kept only in the current run.
-            Configure credentials with Authorize or presets.
-          </p>
-        </div>
-      </details>
       <div class="builder-actions" role="group" aria-label="Current scenario actions">
         <button type="button" :class="dirty ? 'primary' : 'secondary'"
           :title="dirty ? 'Save latest changes' : 'All changes saved'"
@@ -768,6 +726,50 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         <button type="button" class="secondary"
           :disabled="pending || busy || !draft.steps.length || !!validation" @click="reviewRun">Review &amp; run</button>
         <button v-if="pending" type="button" class="secondary" @click="store.stop">Stop run</button>
+      </div>
+      <div class="builder-identity">
+        <h2 id="builder-title">Scenario Builder</h2>
+        <span class="scenario-title">{{ draft.name }}</span>
+        <button type="button" class="secondary icon-button" aria-label="Scenario details" title="Scenario details"
+          aria-haspopup="dialog" @click="detailsDialog.showModal()">ⓘ</button>
+        <details class="builder-more">
+          <summary class="secondary icon-button" aria-label="More scenario actions" title="More scenario actions">⋯</summary>
+          <div>
+            <button v-if="folder" type="button" class="secondary" :disabled="pending || !!validation || folder.pending"
+              @click="folder.download('builder', draft)">Export</button>
+            <button type="button" class="secondary" :disabled="pending" @click="fileInput.click()">
+              Import definition
+            </button>
+            <input
+              ref="fileInput"
+              type="file"
+              accept="application/json,.json"
+              hidden
+              @change="importDefinition"
+            />
+            <label v-if="scenarios?.length"
+              >Copy quick scenario<select v-model="quick" :disabled="pending" @change="importQuick">
+                <option value="">Choose saved chain</option>
+                <option v-for="item in scenarios" :key="item.id" :value="item.id">
+                  {{ item.name }}
+                </option>
+              </select></label
+            >
+            <button
+              v-if="saved.some((item) => item.id === draft.id)"
+              type="button"
+              class="secondary error"
+              :disabled="pending"
+              @click="removeSaved"
+            >
+              Delete saved scenario
+            </button>
+            <p>
+              Definitions include static inputs. Answers and results are kept only in the current run.
+              Configure credentials with Authorize or presets.
+            </p>
+          </div>
+        </details>
       </div>
     </header>
     <dialog ref="detailsDialog" class="builder-dialog scenario-details" aria-labelledby="scenario-details-title">
@@ -1623,7 +1625,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
   padding: 0.8rem;
   gap: 0.65rem;
 }
-.builder-header, .builder-actions {
+.builder-header, .builder-actions, .builder-identity {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1632,7 +1634,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 }
 .builder-header h2 { font-size: 1rem; margin: 0; }
 .scenario-title { color: var(--muted); font-weight: 400; overflow-wrap: anywhere; }
-.builder-actions { margin-inline-start: auto; }
+.builder-identity { margin-inline-start: auto; min-width: 0; }
 .icon-button { display: inline-grid; place-items: center; min-width: 1.8rem; min-height: 1.8rem; }
 .scenario-details form, .scenario-details label { display: grid; gap: .45rem; }
 .scenario-details footer { display: flex; justify-content: flex-end; }
@@ -1927,7 +1929,7 @@ summary {
   .inspector-content {
     max-height: none;
   }
-  .builder-actions { margin-inline-start: 0; }
+  .builder-identity { margin-inline-start: 0; }
   .human-queue {
     max-height: none;
   }
