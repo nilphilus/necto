@@ -103,6 +103,7 @@ const document = {
     },
     '/fallback/{id}': {
       get: operation('Fallback', 'Related payment', {
+        deprecated: true,
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'integer' } }],
       }),
     },
@@ -224,6 +225,13 @@ const document = {
       .filter({ has: p.locator('strong', { hasText: new RegExp('^' + name + '$') }) })
       .click()
   }
+  await endpoint('Related payment')
+  const deprecated = p.locator('.catalog-operation.deprecated')
+  await deprecated.getByText('Deprecated', { exact: true }).waitFor()
+  await p.getByRole('switch', { name: 'Hide deprecated' }).check()
+  assert.equal(await deprecated.count(), 0)
+  await p.getByRole('switch', { name: 'Hide deprecated' }).uncheck()
+  await deprecated.waitFor()
   const closeDescription = async () => {
     await p.keyboard.press('Escape')
     await p.locator('.description-dialog[open]').waitFor({ state: 'detached' })

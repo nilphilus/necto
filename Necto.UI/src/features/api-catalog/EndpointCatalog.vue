@@ -14,6 +14,8 @@ const emit = defineEmits(['select-operation', 'toggle-external'])
 
 const filter = ref('')
 const showPaths = ref(false)
+const hideDeprecated = ref(false)
+const hasDeprecated = computed(() => props.groups.some(group => group.operations.some(operation => operation.deprecated)))
 const expanded = ref(new Set())
 const collapsedMatches = ref(new Set())
 const query = computed(() => filter.value.trim().toLowerCase())
@@ -21,6 +23,7 @@ const visibleGroups = computed(() => props.groups.map((group, index) => ({
   ...group,
   id: `catalog-group-${index}`,
   operations: group.operations.filter(operation =>
+    (!hideDeprecated.value || !operation.deprecated) &&
     `${group.name} ${operation.method} ${operation.path} ${operation.name} ${operation.id ?? ''}`
       .toLowerCase().includes(query.value),
   ),
@@ -61,6 +64,11 @@ function toggleGroup(name) {
       Show paths instead of names
     </label>
 
+    <label v-if="hasDeprecated" class="mode">
+      <input v-model="hideDeprecated" type="checkbox" role="switch">
+      Hide deprecated
+    </label>
+
     <p v-if="!visibleGroups.length" role="status">
       {{ groups.length ? 'No matching endpoints.' : 'No endpoints in this document.' }}
     </p>
@@ -88,12 +96,14 @@ function toggleGroup(name) {
           <button
             type="button"
             class="catalog-operation"
+            :class="{ deprecated: operation.deprecated }"
             :aria-current="activeGroup === group.name && activeOperation === operation.key ? 'page' : undefined"
             @click="$emit('select-operation', operation, group.name)"
           >
             <span class="method" :data-method="operation.method">{{ operation.method }}</span>
             <code v-if="showPaths">{{ operation.path }}</code>
             <strong v-else>{{ operation.name }}</strong>
+            <small v-if="operation.deprecated" class="deprecated-label">Deprecated</small>
           </button>
         </li>
       </ul>
@@ -137,6 +147,9 @@ function toggleGroup(name) {
   overflow-wrap: anywhere;
 }
 .catalog-operation .method { justify-self: start; font-size: .625rem; }
+.catalog-operation.deprecated { color: var(--muted); }
+.catalog-operation.deprecated .method { filter: grayscale(1); }
+.deprecated-label { grid-column: 2; color: var(--muted); font-size: .68rem; margin-block-start: -.35rem; }
 .catalog-operation strong { font-weight: 550; }
 .catalog-operation[aria-current] { background: var(--accent-soft); box-shadow: inset 2px 0 var(--accent); }
 @media (max-width: 760px) {
