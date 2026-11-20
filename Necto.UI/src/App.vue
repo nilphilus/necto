@@ -1205,6 +1205,7 @@ function removeScenario(id) {
             <header class="endpoint-header">
               <p v-if="current.operation.apiId !== 'local'" class="external-api-label">{{ current.operation.apiName }} · {{ current.operation.apiId }}</p>
               <h2 id="endpoint-title" ref="endpointHeading" tabindex="-1">{{ current.operation.name }}</h2>
+              <small v-if="current.operation.deprecated" class="muted">Deprecated</small>
               <div class="endpoint-route">
                 <span class="method" :data-method="current.operation.method">{{ current.operation.method }}</span>
                 <code>{{ current.operation.path }}</code>

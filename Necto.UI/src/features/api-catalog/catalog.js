@@ -39,6 +39,7 @@ export function readOperations(spec, api = { id: 'local' }) {
         method: verb,
         id: operation.operationId,
         summary: operation.summary,
+        deprecated: operation.deprecated === true,
         name: operation.summary || operation.operationId || path,
         description: operation.description,
         accessHint: operation['x-necto-access'],
