@@ -48,7 +48,7 @@ run(async ({ p, assert, calls }) => {
   await p.keyboard.press('Escape')
   await picker.waitFor({ state: 'hidden' })
   assert.equal(await p.locator('.map-node').count(), 26)
-  await p.locator('.map-node').filter({ hasText: 'Request 1' }).first().click()
+  await p.locator('.map-node').filter({ hasText: 'Request 1' }).first().dblclick()
   const parameter = p.locator('.step-dialog [data-parameter="query:region"]')
   const staticInput = parameter.getByRole('textbox')
   await staticInput.fill('EU')

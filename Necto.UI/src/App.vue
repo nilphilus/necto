@@ -455,6 +455,15 @@ async function openBuilderScenario(id, mode) {
   if (mode === 'run') builderView.value?.runDirectly()
 }
 
+function removeBuilderScenario(id) {
+  try {
+    builderStore.remove(id)
+    builderError.value = ''
+  } catch (cause) {
+    builderError.value = cause.message
+  }
+}
+
 async function newBuilderScenario() {
   if (scenarioBusy.value) return
   builderVisited.value = true
@@ -1117,7 +1126,7 @@ function removeScenario(id) {
         @back="navigateView('scenarios')"
       />
       <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="newBuilderScenario" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios"
-        :import-scenario="importLibraryScenario" :builder-scenarios="builderScenarios" :builder-error="builderError" @open-builder-scenario="openBuilderScenario" :state="scenarioState" :runs="scenarioRuns"
+        :import-scenario="importLibraryScenario" :builder-scenarios="builderScenarios" :builder-error="builderError" @remove-builder="removeBuilderScenario" @open-builder-scenario="openBuilderScenario" :state="scenarioState" :runs="scenarioRuns"
 
         :deleted="scenarioStore.deleted.value" @undo-remove="undoRemoveScenario" :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError"
         :active-preset-names="activePresetNames" @open="openScenario" @run="replayScenario"

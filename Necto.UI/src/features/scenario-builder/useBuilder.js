@@ -47,7 +47,7 @@ export function useBuilder(configuration) {
     const blueprint = savedBlueprint(draft.value)
     const origin=sharedOrigin(draft.value._sharedSource);if(origin)blueprint._sharedSource=origin
     persist([...saved.value.filter(item => item.id !== blueprint.id), blueprint])
-    notice.value = 'Saved in this browser. Run inputs and responses are not included.'
+    notice.value = ''
   }
   function saveCaptured(blueprint) {
     const isOpen = draft.value.id === blueprint.id
@@ -63,7 +63,11 @@ export function useBuilder(configuration) {
   }
   function open(blueprint) { if (pending.value) return; clearRun(); draft.value = upgradeBlueprint(clone(blueprint)); notice.value = ''; error.value = '' }
   function fresh() { open(newBlueprint()) }
-  function remove() { if (pending.value) return; persist(saved.value.filter(item => item.id !== draft.value.id)); fresh() }
+  function remove(id = draft.value.id) {
+    if (pending.value) return
+    persist(saved.value.filter(item => item.id !== id))
+    if (draft.value.id === id) fresh()
+  }
   function ask(step, inputs, signal) {
     return new Promise((resolve, reject) => {
       const aborted = () => { questions.delete(step.id); reject(signal.reason ?? new Error('Canceled.')) }

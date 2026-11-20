@@ -14,12 +14,13 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
  const supported=typeof platform.showDirectoryPicker==='function'&&platform.isSecureContext!==false
  const state=reactive({supported,connected:false,ready:false,restoring:false,pending:false,name:'',path:'',entries:[],error:'',notice:'',remembered:false})
  const key=computed(()=>workspaceIdentity(toValue(configuration)))
- let directory,epoch=0,baselines=new Map()
- onScopeDispose(()=>{epoch++;directory=undefined;baselines.clear()})
+ let directory,epoch=0,baselines=new Map(), downloadNoticeTimer
+ onScopeDispose(()=>{clearTimeout(downloadNoticeTimer);epoch++;directory=undefined;baselines.clear()})
  const assertCurrent=(token,current)=>{if(token!==epoch||current!==key.value)throw new Error('The API workspace changed. Reopen the folder for the current API.')}
  async function permission(handle,prompt=false){if(!handle.queryPermission)return;let value=await handle.queryPermission({mode:'readwrite'});if(value!=='granted'&&prompt)value=await handle.requestPermission({mode:'readwrite'});if(value!=='granted')throw new Error('Folder access needs permission. Use Reconnect to allow access again.')}
  async function perform(action){
   if(state.pending||state.restoring)return null
+  clearTimeout(downloadNoticeTimer)
   state.error='';state.notice=''
   if(toValue(locked)){state.error='Wait for active requests or scenario runs before changing folder data.';return null}
   if(!key.value){state.error='Load an API before using a scenario folder.';return null}
@@ -113,7 +114,9 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
  async function download(kind,source){return perform(async guard=>{
   const scenario=sharedDefinition(kind,source,toValue(operations)),text=serializeShared(kind,scenario),name=await sharedFileName(kind,scenario);guard()
   const url=URL.createObjectURL(new Blob([text],{type:'application/json'})),link=platform.document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
-  state.notice='Downloaded a team scenario file. Static values are included; review before sharing.';return true
+  state.notice='Team scenario file downloaded.'
+  downloadNoticeTimer=setTimeout(()=>{if(state.notice==='Team scenario file downloaded.')state.notice=''},3500)
+  return true
  })}
  return Object.assign(state,{choose,reload,disconnect,importEntry,importFile,save,download})
 }

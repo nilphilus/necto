@@ -1,6 +1,6 @@
 const {run}=require('./qa-fixture.cjs')
 run(async({p,assert,builder,add,execute,review,save,saved,shot,calls})=>{
- await builder();await p.getByRole('textbox',{name:'Scenario name',exact:true}).fill('Pick an invoice row');await add('Invoice rows');await add('Create invoice')
+ await builder();await p.getByRole('button', { name: 'Scenario details', exact: true }).click(); await p.getByRole('textbox', { name: 'Scenario name', exact: true }).fill('Pick an invoice row'); await p.getByRole('dialog', { name: 'Scenario details' }).getByRole('button', { name: 'Done' }).click();await add('Invoice rows');await add('Create invoice')
  const body=p.getByRole('region',{name:'Request body schema',exact:true}),panel=body.getByRole('region',{name:'Configure body field'})
  await body.getByRole('combobox',{name:'Source for customerId',exact:true}).selectOption('random')
  const random=panel.locator('.random-source')
@@ -12,7 +12,7 @@ run(async({p,assert,builder,add,execute,review,save,saved,shot,calls})=>{
  await p.getByRole('button',{name:'Variables (0)',exact:true}).click();const vars=p.getByRole('dialog',{name:'Shared variables',exact:true})
  await vars.getByRole('button',{name:'Add variable',exact:true}).click();await vars.getByLabel('Variable name',{exact:true}).fill('selectedRow');await vars.getByLabel('Variable source',{exact:true}).selectOption('random')
  await vars.getByLabel('Random source step',{exact:true}).selectOption({label:'Invoice rows'});await vars.getByRole('button',{name:'Apply variables',exact:true}).click()
- await p.locator('.map-node').filter({hasText:'Create invoice'}).click()
+ await p.locator('.map-node').filter({hasText:'Create invoice'}).dblclick()
  for(const [pointer,name,code] of [['/customerId','customerId','return selected.id;'],['/name','name','return selected.name;']]){
   if (pointer === '/customerId') {
    await body.getByRole('button',{name:'Edit source for customerId: Pick random'}).click()

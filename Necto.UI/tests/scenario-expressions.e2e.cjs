@@ -35,7 +35,7 @@ run(async({p,assert,builder,add,save,saved,execute,review,calls,shot})=>{
  assert.equal(calls.length,0)
  await save();const definition=await saved();assert.equal(definition.version,7);assert.equal(definition.steps[1].inputs[0].source,'expression');assert.equal(calls.length,0)
  await shot();await execute(2);assert.equal(calls[0].path,'/customer');assert.equal(calls[1].body.customerId,42)
- await p.locator('.map-node').filter({hasText:'Create invoice'}).click()
+ await p.locator('.map-node').filter({hasText:'Create invoice'}).dblclick()
  if (!await editor.isVisible()) {
   await body.getByRole('button',{name:'Edit source for customerId: Expression'}).click()
  }
@@ -49,7 +49,7 @@ run(async({p,assert,builder,add,save,saved,execute,review,calls,shot})=>{
  assert.equal(calls.length,2)
  // Reopen the saved definition after reload: expression source and code survive.
  await p.reload();await p.getByRole('button', { name: '← Scenarios', exact: true }).click(); await p.getByRole('button', { name: 'Open Builder scenario ' + definition.name, exact: true }).click()
- await p.locator('.map-node').filter({hasText:'Create invoice'}).click()
+ await p.locator('.map-node').filter({hasText:'Create invoice'}).dblclick()
  await body.getByRole('button',{name:'Edit source for customerId: Expression'}).click()
  const code=p.getByRole('textbox',{name:'Expression code',exact:true});await code.waitFor()
  assert.match(await code.inputValue(),/switch/)

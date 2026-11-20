@@ -20,7 +20,8 @@ export function useGraphNavigation(canvas, width, height, zoom, autoFit) {
     if (!el) return
     x ??= el.clientWidth / 2; y ??= el.clientHeight / 2
     const before = zoom.value, left = zoomScroll(el.scrollLeft,x,before,scale), top = zoomScroll(el.scrollTop,y,before,scale), token = ++revision
-    autoFit.value = false; zoom.value = scale
+    if (autoFit) autoFit.value = false
+    zoom.value = scale
     await nextTick()
     if (token !== revision) return
     el.scrollTo(Math.max(0,left),Math.max(0,top)); sync()
@@ -33,7 +34,7 @@ export function useGraphNavigation(canvas, width, height, zoom, autoFit) {
   }
   function navigate(point) {
     const el = canvas.value
-    autoFit.value = false
+    if (autoFit) autoFit.value = false
     el.scrollTo(Math.max(0,point.x*zoom.value-el.clientWidth/2),Math.max(0,point.y*zoom.value-el.clientHeight/2)); sync()
   }
   function startPan(event) {
