@@ -25,7 +25,7 @@ const saved={format:'necto-scenario-builder',version:4,id:'preset-demo',name:'Ru
   const entries=values=>Object.entries(values).map(([name,value])=>[name,{value}])
   localStorage.setItem('necto:environments:'+base+'/openapi.json',JSON.stringify({version:2,active:[],presets:[['Base',entries({email:'base@test.invalid',code:'PRESET-CODE',customerId:'77',name:'Preset name'})],['Override',entries({email:'override@test.invalid',customerId:'88'})]]}))
  },{base,saved})
- await p.goto(base+'/builder');await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:saved.name});const before=await p.evaluate(base=>localStorage.getItem('necto:scenario-builder:'+base+'/openapi.json'),base)
+ await p.goto(base+'/builder');await p.getByRole('button', { name: '← Scenarios', exact: true }).click(); await p.getByRole('button', { name: 'Open Builder scenario ' + saved.name, exact: true }).click();const before=await p.evaluate(base=>localStorage.getItem('necto:scenario-builder:'+base+'/openapi.json'),base)
  const bar=p.getByRole('region',{name:'Presets',exact:true})
  const basePreset=bar.getByRole('button',{name:'Base',exact:true})
  const overridePreset=bar.getByRole('button',{name:'Override',exact:true})

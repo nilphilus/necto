@@ -23,7 +23,7 @@ run(async({p,assert,builder,add,execute,review,save,saved,shot,calls})=>{
  await save();const shared=await saved();assert.equal(shared.variables[0].source,'random');assert.equal(shared.variables[0].itemPointer,'')
  await execute(2);const sent=calls.at(-1).body;assert.equal(sent.name,'Invoice '+sent.customerId)
  // Reload retains the random variable definition, not the selected response data.
- await p.reload();await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:definition.name});await p.getByRole('button',{name:'Variables (1)',exact:true}).click();await vars.getByLabel('Random array pointer',{exact:true}).fill('/0');await vars.getByRole('button',{name:'Apply variables',exact:true}).click()
+ await p.reload();await p.getByRole('button', { name: '← Scenarios', exact: true }).click(); await p.getByRole('button', { name: 'Open Builder scenario ' + definition.name, exact: true }).click();await p.getByRole('button',{name:'Variables (1)',exact:true}).click();await vars.getByLabel('Random array pointer',{exact:true}).fill('/0');await vars.getByRole('button',{name:'Apply variables',exact:true}).click()
  const before=calls.length,dialog=await review();await dialog.getByRole('button',{name:'Run scenario',exact:true}).click();await p.locator('.builder-run-status').filter({hasText:'non-empty JSON array'}).waitFor();assert.equal(calls.length,before+1);assert.equal(calls.at(-1).path,'/rows')
  console.log('PASS: direct random field, shared record coherence, v7 persistence and invalid-array POST blocking')
 })

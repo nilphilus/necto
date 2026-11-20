@@ -103,7 +103,7 @@ const document = {
   }
   await p.goto(base)
   await p.getByRole('button', { name: 'Scenarios', exact: true }).click()
-  await p.getByRole('button', { name: 'Scenario Builder →' }).click()
+  await p.getByRole('button', { name: 'New scenario' }).click()
   await p
     .getByRole('textbox', { name: 'Scenario name', exact: true })
     .fill('Drag, connect and wait for a report')
@@ -241,9 +241,7 @@ const document = {
   assert.ok(calls[1].at - calls[0].at >= 100)
   await shot('connection-run')
   await p.reload()
-  await p
-    .getByLabel('Saved builder scenarios', { exact: true })
-    .selectOption({ label: 'Drag, connect and wait for a report' })
+  await p.getByRole('button', { name: '← Scenarios', exact: true }).click(); await p.getByRole('button', { name: 'Open Builder scenario ' + 'Drag, connect and wait for a report', exact: true }).click()
   await configure('Create job', 'Poll status')
   assert.equal(
     await popup.getByRole('spinbutton', { name: 'Delay milliseconds', exact: true }).inputValue(),
@@ -270,9 +268,7 @@ const document = {
     { key: 'necto:scenario-builder:' + base + '/openapi.json', legacy }
   )
   await p.reload()
-  await p
-    .getByLabel('Saved builder scenarios', { exact: true })
-    .selectOption({ label: legacy.name })
+  await p.getByRole('button', { name: '← Scenarios', exact: true }).click(); await p.getByRole('button', { name: 'Open Builder scenario ' + legacy.name, exact: true }).click()
   await configure('Create job', 'Poll status')
   assert.equal(
     await popup.getByRole('spinbutton', { name: 'Delay milliseconds', exact: true }).inputValue(),
@@ -321,9 +317,7 @@ const document = {
   phone.on('pageerror', (error) => errors.push(error.message))
   phone.setDefaultTimeout(12000)
   await phone.goto(base + '/builder')
-  await phone
-    .getByLabel('Saved builder scenarios', { exact: true })
-    .selectOption({ label: saved.name })
+  await phone.getByRole('button', { name: '← Scenarios', exact: true }).click(); await phone.getByRole('button', { name: 'Open Builder scenario ' + saved.name, exact: true }).click()
   await phone.getByRole('button', { name: 'Connect from Create job', exact: true }).tap()
   await phone.getByRole('button', { name: 'Connect to Read report', exact: true }).tap()
   await phone.getByRole('dialog', { name: 'Create job → Read report', exact: true }).waitFor()

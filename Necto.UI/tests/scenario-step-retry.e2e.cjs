@@ -22,7 +22,7 @@ run(async ({ p, assert, review, calls }) => {
   await p.evaluate(value => localStorage.setItem('necto:scenario-builder:' + location.origin + '/openapi.json',
     JSON.stringify({ version: 1, blueprints: [value] })), scenario)
   await p.goto(new URL('/builder', p.url()).href)
-  await p.getByLabel('Saved builder scenarios', { exact: true }).selectOption({ label: scenario.name })
+  await p.getByRole('button', { name: '← Scenarios', exact: true }).click(); await p.getByRole('button', { name: 'Open Builder scenario ' + scenario.name, exact: true }).click()
   const writes = []
   await p.route('**/invoices', route => {
     writes.push(route.request().postDataJSON())

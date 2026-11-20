@@ -48,7 +48,7 @@ run(async({p,assert,builder,add,save,saved,execute,review,calls,shot})=>{
  await editor.locator('pre').filter({hasText:'"status": "ready"'}).waitFor()
  assert.equal(calls.length,2)
  // Reopen the saved definition after reload: expression source and code survive.
- await p.reload();await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:definition.name})
+ await p.reload();await p.getByRole('button', { name: '← Scenarios', exact: true }).click(); await p.getByRole('button', { name: 'Open Builder scenario ' + definition.name, exact: true }).click()
  await p.locator('.map-node').filter({hasText:'Create invoice'}).click()
  await body.getByRole('button',{name:'Edit source for customerId: Expression'}).click()
  const code=p.getByRole('textbox',{name:'Expression code',exact:true});await code.waitFor()

@@ -14,7 +14,7 @@ require('./qa-fixture.cjs').run(async({p,assert,builder,add,save,calls,closeEdit
  await changeFile(filename,'Teammate edit');await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('alert').filter({hasText:'changed on disk'}).waitFor()
  assert.equal(await p.locator('.builder .folder-library').count(),0)
  const scenarioList=()=>p.getByRole('button',{name:'Scenarios',exact:true}).click()
- const reopenBuilder=async()=>{await p.getByRole('button',{name:'Scenario Builder →',exact:true}).click();if(await p.locator('.builder-more').getAttribute('open')===null)await p.locator('.builder-more > summary').click()}
+ const reopenBuilder=async()=>{await p.goBack();if(await p.locator('.builder-more').getAttribute('open')===null)await p.locator('.builder-more > summary').click()}
  await scenarioList()
  const library=p.locator('.folder-library:visible')
  await library.locator('summary').click()
@@ -27,8 +27,8 @@ require('./qa-fixture.cjs').run(async({p,assert,builder,add,save,calls,closeEdit
  await reopenBuilder()
  assert.equal(await p.getByRole('textbox',{name:'Scenario name',exact:true}).inputValue(),'Team invoice')
  await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('alert').filter({hasText:'changed on disk'}).waitFor()
- await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:'Teammate edit'});await p.getByRole('textbox',{name:'Scenario name',exact:true}).fill('Edited after import');await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('status').filter({hasText:'Saved “Edited after import”'}).waitFor();await save();assert.equal(await p.locator('.builder-actions .save-state').innerText(),'Saved');assert.equal(JSON.parse((await readFiles())[0].text).scenario.name,'Edited after import')
- await p.reload();await p.getByLabel('Saved builder scenarios',{exact:true}).selectOption({label:'Edited after import'});await p.locator('.builder-more > summary').click();await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('status').filter({hasText:'Saved “Edited after import”'}).waitFor();assert.equal(calls.length,0)
+ await p.getByRole('button', { name: '← Scenarios', exact: true }).click(); await p.getByRole('button', { name: 'Open Builder scenario ' + 'Teammate edit', exact: true }).click();await p.getByRole('textbox',{name:'Scenario name',exact:true}).fill('Edited after import');await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('status').filter({hasText:'Saved “Edited after import”'}).waitFor();await save();assert.equal(await p.locator('.builder-actions .save-state').innerText(),'Saved');assert.equal(JSON.parse((await readFiles())[0].text).scenario.name,'Edited after import')
+ await p.reload();await p.getByRole('button', { name: '← Scenarios', exact: true }).click(); await p.getByRole('button', { name: 'Open Builder scenario ' + 'Edited after import', exact: true }).click();await p.locator('.builder-more > summary').click();await p.getByRole('button',{name:'Save to folder',exact:true}).click();await p.getByRole('status').filter({hasText:'Saved “Edited after import”'}).waitFor();assert.equal(calls.length,0)
  await p.evaluate(()=>localStorage.setItem('necto:scenarios:'+location.origin+'/openapi.json',JSON.stringify({version:1,scenarios:[{version:1,id:'quick-folder',name:'Quick customer',steps:[{operationKey:'GET /customer',apiId:'local',method:'GET',path:'/customer',name:'Find customer',fields:{},body:'',bindings:[]}]}]})))
  await p.reload();await p.getByRole('button',{name:'Scenarios',exact:true}).click();const builderCard=p.locator('.scenario-card').filter({has:p.getByRole('heading',{name:'Edited after import',exact:true})})
  await builderCard.getByRole('button',{name:'Save to folder',exact:true}).click()

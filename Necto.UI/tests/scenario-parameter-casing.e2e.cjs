@@ -23,7 +23,7 @@ run(async ({ p, assert, builder, execute }) => {
   await p.evaluate(value => localStorage.setItem('necto:scenario-builder:' + location.origin + '/openapi.json',
     JSON.stringify({ version: 1, blueprints: [value] })), scenario)
   await p.reload()
-  await p.getByLabel('Saved builder scenarios', { exact: true }).selectOption({ label: scenario.name })
+  await p.getByRole('button', { name: '← Scenarios', exact: true }).click(); await p.getByRole('button', { name: 'Open Builder scenario ' + scenario.name, exact: true }).click()
   await p.locator('.map-node').filter({ hasText: 'Find customer' }).click()
   const field = p.locator('[data-parameter="query:Type"] input')
   assert.equal(await field.inputValue(), 'integer')
