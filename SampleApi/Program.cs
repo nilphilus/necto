@@ -8,13 +8,20 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi(options => options.AddNectoGeneratedDocumentation());
-
-builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedLinks());
-builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedWrappers());
-builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedConstraints());
-builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedAccessHints());
-builder.Services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options => options.AddNectoGeneratedSensitiveFields());
+foreach (var version in new[] { "v1", "v2" })
+{
+    builder.Services.AddOpenApi(version, options =>
+    {
+        // The existing, unversioned sample routes are the v1 contract.
+        options.ShouldInclude = description => (description.GroupName ?? "v1") == version;
+        options.AddNectoGeneratedDocumentation();
+        options.AddNectoGeneratedLinks();
+        options.AddNectoGeneratedWrappers();
+        options.AddNectoGeneratedConstraints();
+        options.AddNectoGeneratedAccessHints();
+        options.AddNectoGeneratedSensitiveFields();
+    });
+}
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -25,7 +32,13 @@ if (app.Environment.IsDevelopment())
     app.MapNectoEntityCatalog();
     app.MapNectoAgent();
     app.MapNectoOperationRoles();
-    app.UseNectoUI(agentPath: "/necto/agent");
+    app.UseNectoUI(
+        new Dictionary<string, string>
+        {
+            ["v1"] = "/openapi/v1.json",
+            ["v2"] = "/openapi/v2.json",
+        },
+        agentPath: "/necto/agent");
 }
 
 app.UseHttpsRedirection();
@@ -146,6 +159,21 @@ app.MapGet("/invoices", [NectoOperation(typeof(Invoice), NectoOperationRole.Sear
     .WithSummary("Invoices")
     .WithDescription("List invoices with their totals and optionally filter by reference.");
 
+app.MapGet("/v2/invoices", ([FromQuery] string? reference) =>
+    {
+        var items = invoices
+            .Where(invoice => reference is null || invoice.Reference.Contains(reference, StringComparison.OrdinalIgnoreCase))
+            .Select(invoice => new InvoiceV2(invoice.Id, invoice.Reference, new InvoiceAmount(invoice.Total, "PLN")))
+            .ToArray();
+
+        return new InvoiceListV2(items, items.Length);
+    })
+    .WithName("ListInvoicesV2")
+    .WithGroupName("v2")
+    .WithTags("Invoices")
+    .WithSummary("List invoices (v2)")
+    .WithDescription("Returns an envelope with the invoice count and an explicit currency for each amount.");
+
 app.MapGet("/invoices/by-reference", Results<Ok<Invoice>, NotFound> ([FromQuery] string invoiceReference) =>
         invoices.FirstOrDefault(invoice => invoice.Reference == invoiceReference) is { } invoice
             ? TypedResults.Ok(invoice)
@@ -218,6 +246,9 @@ record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
     public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
 }
 
+record InvoiceV2(int Id, string Reference, InvoiceAmount Amount);
+record InvoiceAmount(decimal Value, string Currency);
+record InvoiceListV2(InvoiceV2[] Items, int TotalCount);
 record Invoice(int Id, decimal Total, [property: EndpointValue("LegacyInvoice")] int LegacyNumber, string Reference);
 record InvoiceLineSample(int LineId, int InvoiceId, string Description, int Quantity, int DetailId, decimal UnitPrice, string Currency);
 record InvoiceLineMetadata(string Currency, string[] Labels);
