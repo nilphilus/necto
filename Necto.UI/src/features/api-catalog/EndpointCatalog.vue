@@ -52,22 +52,27 @@ function toggleGroup(name) {
 
 <template>
   <nav class="catalog" aria-label="API endpoints">
-    <header class="catalog-title-row"><h2 class="catalog-title">Endpoints</h2><slot name="actions" /></header>
+    <header class="catalog-title-row">
+      <h2 class="catalog-title">Endpoints</h2>
+      <div class="catalog-options">
+        <label class="option-toggle" title="Show paths instead of names">
+          <input v-model="showPaths" type="checkbox" role="switch" aria-label="Show paths instead of names">
+          <span aria-hidden="true"><svg viewBox="0 0 20 20"><path d="m7 5-5 5 5 5m6-10 5 5-5 5m-2-12-2 14" /></svg></span>
+        </label>
+        <label v-if="hasDeprecated" class="option-toggle" title="Hide deprecated">
+          <input v-model="hideDeprecated" type="checkbox" role="switch" aria-label="Hide deprecated">
+          <span aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M10 2 1.5 17h17L10 2Zm0 5v4m0 2v1M3 3l14 14" /></svg></span>
+        </label>
+      </div>
+      <slot name="collapse" />
+    </header>
+    <div class="catalog-actions"><slot name="actions" /></div>
     <slot name="documents" />
     <div v-if="externalCount" class="api-visibility" aria-label="API visibility">
       <label><input type="checkbox" role="switch" :checked="showExternal" @change="$emit('toggle-external', $event.target.checked)"> External APIs ({{ externalCount }})</label>
       <small>{{ externalLoading ? 'Loading external services…' : showExternal ? 'Local + external services' : 'Local service only' }}</small>
     </div>
     <input v-model="filter" type="search" aria-label="Find an endpoint" placeholder="Find an endpoint">
-    <label class="mode">
-      <input v-model="showPaths" type="checkbox" role="switch">
-      Show paths instead of names
-    </label>
-
-    <label v-if="hasDeprecated" class="mode">
-      <input v-model="hideDeprecated" type="checkbox" role="switch">
-      Hide deprecated
-    </label>
 
     <p v-if="!visibleGroups.length" role="status">
       {{ groups.length ? 'No matching endpoints.' : 'No endpoints in this document.' }}
@@ -112,7 +117,17 @@ function toggleGroup(name) {
 </template>
 
 <style scoped>
-.catalog-title-row {display:flex;gap:.35rem;align-items:center;justify-content:space-between}
+.catalog-title-row { display: flex; gap: .35rem; align-items: center; margin-bottom: .25rem; }
+.catalog-options { display: flex; gap: .2rem; margin-left: auto; }
+.option-toggle { position: relative; display: inline-flex; cursor: pointer; }
+.option-toggle input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.option-toggle span { display: grid; place-items: center; width: 1.75rem; height: 1.75rem; border: 1px solid var(--line); border-radius: .35rem; color: var(--muted); }
+.option-toggle svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.option-toggle:hover span, .option-toggle input:checked + span { color: var(--accent); background: var(--accent-soft); }
+.option-toggle input:checked + span { border-color: var(--accent); }
+.option-toggle input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.catalog-actions { display: flex; align-items: center; justify-content: flex-end; gap: .35rem; }
+.catalog-actions:empty { display: none; }
 
 .catalog {
   min-width: 0;
@@ -123,9 +138,8 @@ function toggleGroup(name) {
 .api-visibility { padding: .6rem; margin-bottom: .75rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--accent-soft); font-size: .8rem; }
 .api-visibility label { display: flex; align-items: center; gap: .35rem; }
 .api-visibility small { display: block; color: var(--muted); margin-top: .25rem; }
-.catalog-title { margin: 0 0 .75rem; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
-.catalog input[type="search"] { width: 100%; }
-.mode { display: flex; align-items: center; gap: .45rem; margin: .65rem 0 1rem; font-size: .8rem; }
+.catalog-title { margin: 0; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
+.catalog input[type="search"] { width: 100%; margin-block: .4rem; }
 .catalog-group + .catalog-group { margin-top: .25rem; }
 .catalog-group h3 { display: flex; align-items: stretch; margin: 0; font-size: .875rem; }
 .group-toggle { display: grid; flex: 0 0 1.75rem; place-items: center; padding: 0; }

@@ -1146,6 +1146,7 @@ function removeScenario(id) {
       <div :inert="settingsOpen" v-show="!graphView" class="layout navigation-layout" :class="{ 'catalog-collapsed': !catalogOpen }" :style="{ '--catalog-width': catalogWidth + 'px' }">
         <div class="catalog-sidebar">
           <button
+            v-if="!catalogOpen"
             type="button"
             class="catalog-toggle"
             :aria-expanded="catalogOpen"
@@ -1165,6 +1166,12 @@ function removeScenario(id) {
               :active-operation="current?.operation.key ?? ''"
               @select-operation="selectCatalogOperation"
             >
+              <template #collapse>
+                <button type="button" class="catalog-toggle inline-catalog-toggle" aria-expanded="true" aria-controls="endpoint-catalog"
+                  aria-label="Collapse endpoint catalog" title="Collapse endpoint catalog" @click="catalogOpen = false">
+                  <span aria-hidden="true">‹</span>
+                </button>
+              </template>
               <template #documents>
                 <OpenApiDocumentPicker :documents="openApiDocuments" :selected="activeServerDocument"
                   :disabled="scenarioBusy" :error="documentError" @select="switchOpenApiDocument" />
@@ -1382,6 +1389,7 @@ body { margin: 0; background: #eef2ee; }
 .catalog-sidebar { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--line); }
 .catalog-toggle { display: grid; place-items: center; flex: none; align-self: flex-end; width: 2rem; height: 2rem; margin: .25rem; padding: 0; color: var(--accent); font-size: 1.5rem; line-height: 1; }
 .catalog-toggle:focus-visible { outline-offset: -3px; }
+.catalog-toggle.inline-catalog-toggle { width: 2rem; height: 2rem; margin: 0; padding: 0; }
 .catalog-collapsed .catalog-toggle { place-items: start center; width: 100%; height: 100%; margin: 0; padding-top: .5rem; border-radius: 0; background: var(--surface); }
 .catalog-collapsed .catalog-toggle:hover { background: var(--accent-soft); }
 .catalog-container { min-width: 0; min-height: 0; overflow: auto; }
