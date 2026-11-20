@@ -16,7 +16,13 @@ public sealed class GetInvoice : TenantEndpoint<GetInvoiceRequest, Invoice>
         Group<InvoicesGroup>();
         AllowAnonymous();
         Summary(summary => summary.Summary = "Get invoice details");
-        Description(builder => builder.Produces(StatusCodes.Status404NotFound));
+        Description(builder => builder
+            .Produces(StatusCodes.Status404NotFound)
+            .AddOpenApiOperationTransformer((operation, _, _) =>
+            {
+                operation.Deprecated = true;
+                return Task.CompletedTask;
+            }));
     }
 
     public override Task HandleAsync(GetInvoiceRequest request, CancellationToken ct)

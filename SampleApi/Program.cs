@@ -216,7 +216,12 @@ app.MapGet("/invoices/by-legacy-number", ([EndpointValue("LegacyInvoice")] int n
     .WithName("InvoiceByLegacyNumber")
     .WithTags("Invoices")
     .WithSummary("Invoice by legacy number")
-    .WithDescription("Find an invoice using its number in the legacy system.");
+    .WithDescription("Find an invoice using its number in the legacy system.")
+    .AddOpenApiOperationTransformer((operation, _, _) =>
+    {
+        operation.Deprecated = true;
+        return Task.CompletedTask;
+    });
 
 app.MapGet("/customers", () => TypedResults.Ok(new[] { new Customer(new CustomerId(7), "Contoso") }))
     .WithName("Customers")
