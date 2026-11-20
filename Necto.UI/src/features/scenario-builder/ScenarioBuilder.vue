@@ -561,7 +561,9 @@ function prepareRun() {
   oneTimeValues.value = new Map()
   refreshReview()
 }
+const runInputsOnly = ref(false)
 function reviewRun() {
+  runInputsOnly.value = false
   prepareRun()
   runDialog.value.showModal()
 }
@@ -569,6 +571,7 @@ function runDirectly() {
   if (pending.value || props.busy || !draft.value.steps.length || validation.value) return
   prepareRun()
   if (runProblem.value || runIssues.value.length) {
+    runInputsOnly.value = true
     runDialog.value.showModal()
     return
   }
@@ -1424,6 +1427,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       ref="runDialog"
       :active-presets="activePresetNames"
       :suggested-presets="suggestedPresets"
+      :inputs-only="runInputsOnly"
       :issues="runIssues"
       :steps="draft.steps"
       @activate-preset="emit('activate-preset', $event)"

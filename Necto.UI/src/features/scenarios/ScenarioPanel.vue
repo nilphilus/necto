@@ -166,8 +166,10 @@ function runScenario(scenario) {
         </details>
         <div class="actions">
           <button type="button" class="secondary" :disabled="busy" :aria-label="'Open scenario ' + scenario.name" @click="emit('open', scenario)">Open</button>
-          <button type="button" class="primary" :disabled="busy" :aria-expanded="runId === scenario.id"
-            :aria-label="'Configure run for ' + scenario.name" @click="configureRun(scenario)">Run…</button>
+          <button type="button" class="primary" :disabled="busy"
+            :aria-label="'Run quick scenario ' + scenario.name" @click="runScenario(scenario)">Run</button>
+          <button type="button" class="secondary" :disabled="busy" :aria-expanded="runId === scenario.id"
+            :aria-label="'Configure run for ' + scenario.name" @click="configureRun(scenario)">Review &amp; run</button>
           <button type="button" class="secondary" :disabled="pending" :aria-label="'Delete scenario ' + scenario.name" @click="deleteScenario(scenario.id)">Delete</button>
         </div>
         <form v-if="runId === scenario.id" class="run-form" @submit.prevent="runScenario(scenario)">

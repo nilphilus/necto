@@ -41,7 +41,7 @@ run(async ({ p, assert, builder, save, closeEditor, review, calls }) => {
 
   await closeEditor()
   await actions.getByRole('button', { name: 'Run', exact: true }).click()
-  let dialog = p.getByRole('dialog', { name: 'Review scenario run' })
+  let dialog = p.getByRole('dialog', { name: 'Resolve run issues' })
   assert.equal(calls.length, 0)
   await dialog.getByRole('alert').filter({ hasText: 'region is required' }).waitFor()
   await dialog.getByRole('alert').filter({ hasText: 'department is required' }).waitFor()
