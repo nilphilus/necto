@@ -1,5 +1,6 @@
 // Bounded Manhattan routing on a shared compressed grid. Nothing is persisted.
 export const CARD_WIDTH=214, CARD_HEIGHT=112, ROUTE_CLEARANCE=18
+const CROSSING_PENALTY = 100000
 const inside=(value,low,high)=>value>low&&value<high
 const unique=values=>[...new Set(values)].sort((a,b)=>a-b)
 export function routeGeometry(points) {
@@ -78,22 +79,47 @@ export function createEdgeRouter(nodes,height,{connections=[],budget=connections
  const byId=new Map(cards.map(card=>[card.id,card]))
  const outgoing = connectionPorts(byId, connections, 'from')
  const incoming = connectionPorts(byId, connections, 'to')
- const occupiedX = new Map(), occupiedY = new Map()
+ const occupiedX = { coordinates: [], ranges: new Map() }
+ const occupiedY = { coordinates: [], ranges: new Map() }
+
+ function firstAfter(coordinates, value) {
+  let low = 0, high = coordinates.length
+  while (low < high) {
+   const middle = (low + high) >>> 1
+   if (coordinates[middle] <= value) low = middle + 1
+   else high = middle
+  }
+  return low
+ }
+
  function segmentCost(a, b, record = false) {
   const vertical = a.x === b.x
   const lanes = vertical ? occupiedX : occupiedY
+  const perpendicular = vertical ? occupiedY : occupiedX
   const lane = vertical ? a.x : a.y
   const start = vertical ? Math.min(a.y, b.y) : Math.min(a.x, b.x)
   const end = vertical ? Math.max(a.y, b.y) : Math.max(a.x, b.x)
   if (start === end) return 0
-  const used = lanes.get(lane)
+  const used = lanes.ranges.get(lane)
   if (record) {
    if (used) used.push([start, end])
-   else lanes.set(lane, [[start, end]])
+   else {
+    lanes.ranges.set(lane, [[start, end]])
+    lanes.coordinates.splice(firstAfter(lanes.coordinates, lane), 0, lane)
+   }
    return 0
   }
-  return end - start + (used?.reduce((sum, [low, high]) =>
-   sum + 4 * Math.max(0, Math.min(end, high) - Math.max(start, low)), 0) ?? 0)
+
+  let penalty = used?.reduce((sum, [low, high]) =>
+   sum + 4 * Math.max(0, Math.min(end, high) - Math.max(start, low)), 0) ?? 0
+  const { coordinates, ranges } = perpendicular
+  // Count each crossing once when grid segments meet on the crossed lane.
+  for (let index = firstAfter(coordinates, start); coordinates[index] <= end; index++) {
+   for (const [low, high] of ranges.get(coordinates[index])) {
+    if (low <= lane && lane <= high) penalty += CROSSING_PENALTY
+   }
+  }
+  return end - start + penalty
  }
  function finish(geometry) {
   if (connections.length) for (let index = 1; index < geometry.points.length; index++) {
@@ -102,7 +128,17 @@ export function createEdgeRouter(nodes,height,{connections=[],budget=connections
   return geometry
  }
  const rects=cards.map(card=>({...card,left:card.x-ROUTE_CLEARANCE,right:card.x+card.width+ROUTE_CLEARANCE,top:card.y-ROUTE_CLEARANCE,bottom:card.y+card.height+ROUTE_CLEARANCE}))
- const xs=unique(rects.flatMap(r=>[r.left,r.right])),ys=unique([...rects.flatMap(r=>[r.top,r.bottom,r.portY]), ...[...outgoing.values(), ...incoming.values()].flatMap(ports => [...ports.values()])])
+ const boundsX = rects.flatMap(rect => [rect.left, rect.right])
+ const boundsY = rects.flatMap(rect => [rect.top, rect.bottom])
+ // Leave a lane beyond the obstacle boundaries so a route can go around
+ // existing detours that already occupy the top or bottom edge of the grid.
+ const outerLanes = bounds => [
+  Math.max(2, Math.min(...bounds) - ROUTE_CLEARANCE),
+  Math.max(...bounds) + ROUTE_CLEARANCE,
+ ]
+ const xs = unique([...boundsX, ...outerLanes(boundsX)])
+ const ys = unique([...boundsY, ...outerLanes(boundsY), ...rects.map(rect => rect.portY),
+  ...[...outgoing.values(), ...incoming.values()].flatMap(ports => [...ports.values()])])
  const nx=xs.length,ny=ys.length,xIndex=new Map(xs.map((x,i)=>[x,i])),yIndex=new Map(ys.map((y,i)=>[y,i]))
  const blocked=new Uint8Array(nx*ny),horizontal=new Uint8Array((nx-1)*ny),vertical=new Uint8Array(nx*(ny-1))
  for(const r of rects){
@@ -168,4 +204,37 @@ export function createEdgeRouter(nodes,height,{connections=[],budget=connections
   return basic ? finish(basic) : null
  }
 
+}
+
+function crossingCount(routes) {
+ const horizontal = [], vertical = []
+ for (const [index, route] of routes.entries()) {
+  if (!route) continue
+  for (let i = 1; i < route.points.length; i++) {
+   const a = route.points[i - 1], b = route.points[i]
+   if (a.y === b.y) horizontal.push({ index, lane: a.y, low: Math.min(a.x, b.x), high: Math.max(a.x, b.x) })
+   else vertical.push({ index, lane: a.x, low: Math.min(a.y, b.y), high: Math.max(a.y, b.y) })
+  }
+ }
+
+ let count = 0
+ for (const h of horizontal) for (const v of vertical) {
+  if (h.index !== v.index && inside(v.lane, h.low, h.high) && inside(h.lane, v.low, v.high)) count++
+ }
+ return count
+}
+
+export function routeConnections(nodes, height, connections) {
+ const route = createEdgeRouter(nodes, height, { connections })
+ const routes = connections.map(({ from, to }) => route(from, to))
+ // On small graphs, let a previously constrained edge reserve space first.
+ // Large maps retain the single bounded search.
+ if (connections.length > 24 || routes.reduce((total, route) => total + (route?.points.length ?? 0), 0) > 1024) return routes
+ const crossings = crossingCount(routes)
+ if (!crossings) return routes
+
+ const reverseRoute = createEdgeRouter(nodes, height, { connections })
+ const alternative = [...connections].reverse().map(({ from, to }) => reverseRoute(from, to)).reverse()
+ const preservesRoutes = routes.every((geometry, index) => !geometry || alternative[index])
+ return preservesRoutes && crossingCount(alternative) < crossings ? alternative : routes
 }
