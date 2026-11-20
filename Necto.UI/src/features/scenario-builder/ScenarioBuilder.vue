@@ -1,4 +1,7 @@
 <script setup>
+import { isLocalStep, localOperation, localStepInput } from './localStep.js'
+import RandomSourceEditor from './RandomSourceEditor.vue'
+import ExpressionEditor from './ExpressionEditor.vue'
 import ScenarioRunReview from './ScenarioRunReview.vue'
 import { suggestRunPresets } from './reviewPresets.js'
 import { parseBuilderImport } from './definitionImport.js'
@@ -220,7 +223,7 @@ if (props.authentication)
 watch(
   () => props.operations.map((operation) => operation.key),
   (available) => {
-    if (execution.steps.some((step) => !available.includes(step.operation.key))) store.invalidate()
+    if (execution.steps.some((step) => !step.local && !available.includes(step.operation.key))) store.invalidate()
   }
 )
 function attempt(action) {
@@ -280,6 +283,38 @@ function createNext({ from, position }) {
   stepDialog.value?.close()
   void openAdd('', { from, position })
 }
+function changeLocalSource(step, source) {
+  if (!source) return
+  const producer = draft.value.connections.find(edge => edge.to === step.id)?.from
+  step.inputs = [localStepInput(source, producer ?? '')]
+}
+
+function addLocal(source) {
+  if (pending.value) return
+  const connection = nextRequest.value
+  const index = draft.value.steps.findIndex(step => step.id === pickingStepId.value)
+  const placeholder = draft.value.steps[index]
+  if (placeholder?.operationKey || (!placeholder && draft.value.steps.length >= 100)) return
+
+  const producer = connection?.from ?? draft.value.connections.find(edge => edge.to === placeholder?.id)?.from
+  const step = newStep(localOperation, {})
+  step.label = source === 'random' ? 'Pick random' : 'Expression'
+  step.inputs = [localStepInput(source, producer ?? '')]
+  if (placeholder) {
+    step.id = placeholder.id
+    if (placeholder.position) step.position = placeholder.position
+    draft.value.steps[index] = step
+  } else {
+    if (connection?.position) step.position = connection.position
+    draft.value.steps.push(step)
+    if (connection?.from) draft.value.connections.push({ from: connection.from, to: step.id })
+  }
+  selectedId.value = step.id
+  tab.value = 'configure'
+  addDialog.value.close()
+  void showStep()
+}
+
 function add(operation) {
   if (pickingStepId.value) {
     const index = draft.value.steps.findIndex((step) => step.id === pickingStepId.value)
@@ -477,6 +512,10 @@ function removeConnection() {
   if (pending.value) return
   const edge = edgeEdit.value
   const affected = edgeTarget.value.inputs.filter(input => inputProducers(input, draft.value).includes(edge.from))
+  if (isLocalStep(edgeTarget.value) && affected.length) {
+    edgeProblem.value = 'Change the source in the local step before removing this connection.'
+    return
+  }
   const fields = affected.map(input => {
     const field = input.location === 'body' ? input.pointer || '(whole body)' : input.name
     return `• ${edgeTarget.value.label} → ${input.location} ${field} · ${input.source}`
@@ -919,6 +958,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
                 type="button"
                 class="secondary"
                 :disabled="pending"
+                v-if="!isLocalStep(selected)"
                 @click="openAdd(selected.id)"
               >
                 {{ selected.operationKey ? 'Change endpoint' : 'Choose endpoint…' }}</button
@@ -955,7 +995,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
               :aria-pressed="tab === 'response'"
               @click="chooseStepTab('response')"
             >
-              Response<span v-if="runStep?.httpStatus"> · {{ runStep.httpStatus }}</span>
+              {{ isLocalStep(selected) ? 'Result' : 'Response' }}<span v-if="runStep?.httpStatus"> · {{ runStep.httpStatus }}</span>
             </button>
           </div>
           <div v-if="tab === 'response'" class="inspector-content response-content">
@@ -1000,7 +1040,23 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
             </p>
           </div>
           <div v-else class="inspector-content">
-            <p v-if="!selected.operationKey" class="empty-request-note">
+            <section v-if="isLocalStep(selected)" class="request-inputs" aria-label="Local step result">
+              <label>Computation
+                <select :value="selected.inputs[0]?.source ?? ''" :disabled="pending"
+                  @change="changeLocalSource(selected, $event.target.value)">
+                  <option value="" disabled>Choose a computation</option>
+                  <option value="random">Pick random</option>
+                  <option value="expression">Expression</option>
+                </select>
+              </label>
+              <p class="muted">Runs once per scenario. Later steps can use this result as a response source.</p>
+              <RandomSourceEditor v-if="selected.inputs[0]?.source === 'random'" :source="selected.inputs[0]"
+                :steps="draft.steps" :step="selected" :operations="operations" :results="execution.steps" shared :disabled="pending" />
+              <ExpressionEditor v-else-if="selected.inputs[0]" :input="selected.inputs[0]" :step="selected"
+                :steps="draft.steps" :variables="draft.variables" :results="execution.steps" :operations="operations"
+                :disabled="pending" />
+            </section>
+            <p v-else-if="!selected.operationKey" class="empty-request-note">
               Choose an endpoint for this request. Its connection is already in place.
             </p>
             <p v-else-if="!operation" class="error">
@@ -1228,7 +1284,8 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
           </button>
         </header>
         <div class="connection-content">
-          <p class="connection-explanation">
+          <p v-if="isLocalStep(edgeTarget)" class="connection-explanation">Delay happens before this local step evaluates its result.</p>
+          <p v-else class="connection-explanation">
             Delay happens before {{ edgeTarget.label }}. Wait for checks and repeats
             <strong>{{ edgeTarget.method }} {{ edgeTarget.path }}</strong
             >, keeping the source response unchanged.
@@ -1240,14 +1297,14 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
             At a join, all incoming connections must be ready. Delays overlap after dependencies
             complete; all response conditions must match the same target response.
           </p>
-          <StepWaiting :step="edgeEdit" :operation="edgeOperation" :disabled="pending" />
+          <StepWaiting :step="edgeEdit" :operation="edgeOperation" :disabled="pending" :local="isLocalStep(edgeTarget)" />
           <div v-if="edgeEdit.from !== null" class="connection-target-actions">
             <button v-for="input in edgeTarget.inputs.filter(input => input.location !== 'body' && inputProducers(input, draft).includes(edgeEdit.from))"
               :key="input.location + ':' + input.name" type="button" class="secondary"
               @click="editConnectionTarget(input)">Edit {{ input.name }} in target request</button>
           </div>
           <StepInputs
-            v-if="edgeEdit.from !== null"
+            v-if="edgeEdit.from !== null && !isLocalStep(edgeTarget)"
             :step="mappingEdit"
             :operation="edgeOperation"
             :steps="draft.steps"
@@ -1257,7 +1314,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
             :fixed-source="edgeEdit.from"
             :disabled="pending"
           />
-          <p v-else class="muted">
+          <p v-else-if="edgeEdit.from === null" class="muted">
             Start has no response to bind. Use this connection to configure an independent request.
           </p>
           <p
@@ -1336,6 +1393,10 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         }}
       </p>
       <ul class="endpoint-options">
+        <li v-if="!search.trim() && !draft.steps.find(step => step.id === pickingStepId)?.operationKey">
+          <button type="button" @click="addLocal('random')"><span class="method">LOCAL</span><strong>Pick random</strong><small>Choose one item for later steps</small></button>
+          <button type="button" @click="addLocal('expression')"><span class="method">LOCAL</span><strong>Expression</strong><small>Calculate a value for later steps</small></button>
+        </li>
         <li v-for="item in filtered" :key="item.key">
           <button type="button" @click="add(item)">
             <span class="method" :data-method="item.method">{{ item.method }}</span
@@ -1351,10 +1412,10 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
     <dialog ref="resumeDialog" class="builder-dialog" aria-labelledby="resume-title">
       <form @submit.prevent="runRemaining">
         <header><h3 id="resume-title">Run remaining steps</h3></header>
-        <p>These requests have not been sent in this run. They use the original run settings and the responses already received.</p>
+        <p>These steps have not run yet or were cancelled before sending a request. They use the original run settings and available results.</p>
         <ol>
           <li v-for="step in resumable" :key="step.id">
-            {{ step.label }} · <code>{{ step.operation.method }} {{ step.operation.path }}</code>
+            {{ step.label }} · <code>{{ step.local ? 'Local computation' : step.operation.method + ' ' + step.operation.path }}</code>
             <span v-if="step.entryPolicies.some(policy => policy.waitFor?.retryCount > 0)"> · May repeat while waiting</span>
           </li>
         </ol>

@@ -108,9 +108,9 @@ defineExpose({
       <ol class="review-targets">
         <li v-for="step in review" :key="step.id">
           <strong>{{ step.label }}</strong
-          ><code>{{ step.operation.method }} {{ step.operation.path }}</code
-          ><span>{{ step.target.api }} · {{ step.target.label }}</span
-          ><small v-if="activePresets.length">{{
+          ><code v-if="step.local">Local computation</code><code v-else>{{ step.operation.method }} {{ step.operation.path }}</code
+          ><span v-if="step.target">{{ step.target.api }} · {{ step.target.label }}</span
+          ><small v-if="!step.local && activePresets.length">{{
             step.presetOverrides.length
               ? 'Preset fields: ' + step.presetOverrides.join(', ')
               : 'No matching preset fields (or shared presets disabled for this API).'

@@ -1,3 +1,4 @@
+import { isLocalStep, localOperation } from './localStep.js'
 import { normalizeParameterNames } from './parameterNames.js'
 import { normalizeBodyFieldNames } from './bodyFieldNames.js'
 import { stepIssue } from './stepIssue.js'
@@ -66,6 +67,22 @@ export function prepareBlueprint(blueprint, { operations, configuration, createS
     }
     let issueInput
     try {
+      if (isLocalStep(definition)) {
+        return [{
+          id: definition.id,
+          label: definition.label,
+          local: true,
+          operation: localOperation,
+          session: { body: '', fields: {} },
+          values: new Map(),
+          entryPolicies: edges.filter(edge => edge.to === definition.id),
+          presetOverrides: [],
+          inputs: definition.inputs,
+          dependencies: dependencies(definition, blueprint),
+          status: 'waiting',
+          error: '',
+        }]
+      }
       if (!definition.operationKey) throw new Error(`${definition.label}: choose an endpoint before running.`)
       const operation = byKey.get(definition.operationKey)
       if (!operation || (operation.apiId ?? 'local') !== definition.apiId || operation.method !== definition.method || operation.path !== definition.path)
