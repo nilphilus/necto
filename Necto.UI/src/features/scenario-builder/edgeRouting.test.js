@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {createEdgeRouter,routeGeometry,placeConnectionControls,CARD_WIDTH,CARD_HEIGHT} from './edgeRouting.js'
+import {createEdgeRouter,routeConnections,routeGeometry,placeConnectionControls,CARD_WIDTH,CARD_HEIGHT} from './edgeRouting.js'
 const card=(id,x,y)=>({step:{id},x,y})
 function assertClear(route,nodes,from,to){
  assert.ok(route,'route exists')
@@ -71,4 +71,31 @@ test('keeps a route available when separate-lane search is exhausted', () => {
  const connections = [{ from: 'a', to: 'b' }, { from: 'a', to: 'c' }]
  const route = createEdgeRouter(nodes, 300, { connections, budget: 0 })
  assertClear(route('a', 'c'), nodes, 'a', 'c')
+})
+
+function routesCross(first, second) {
+ const segments = route => route.points.slice(1).map((point, index) => [route.points[index], point])
+ const between = (value, a, b) => Math.min(a, b) < value && value < Math.max(a, b)
+ return segments(first).some(([a, b]) => segments(second).some(([c, d]) => {
+  if ((a.x === b.x) === (c.x === d.x)) return false
+  const [h1, h2, v1, v2] = a.x === b.x ? [c, d, a, b] : [a, b, c, d]
+  return between(v1.x, h1.x, h2.x) && between(h1.y, v1.y, v2.y)
+ }))
+}
+
+test('avoids crossings between short routes and detours, including reversed routing order', () => {
+ const nodes = [card('a', 170, 80), card('b', 170, 280), card('c', 450, 80),
+  card('d', 450, 280), card('e', 730, 80), card('f', 730, 280)]
+ const fixtures = [
+  [['a', 'c'], ['a', 'e']],
+  [['a', 'd'], ['c', 'd']],
+  [['a', 'f'], ['a', 'b']],
+  [['a', 'b'], ['a', 'd']],
+ ]
+ for (const pairs of fixtures) {
+  const connections = pairs.map(([from, to]) => ({ from, to }))
+  const routes = routeConnections(nodes, 500, connections)
+  assert.ok(routes.every(Boolean), JSON.stringify(pairs))
+  assert.equal(routesCross(...routes), false, JSON.stringify(pairs))
+ }
 })

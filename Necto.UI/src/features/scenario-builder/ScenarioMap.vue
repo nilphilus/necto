@@ -1,5 +1,5 @@
 <script setup>
-import { CARD_HEIGHT, CARD_WIDTH, createEdgeRouter, placeConnectionControls } from './edgeRouting.js'
+import { CARD_HEIGHT, CARD_WIDTH, routeConnections, placeConnectionControls } from './edgeRouting.js'
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
 import { inputProducers } from './variables.js'
 import { canRetryStep } from './runner.js'
@@ -83,12 +83,12 @@ const layout = computed(() => {
     width = Math.max(baseWidth, ...nodes.map((node) => node.x + 250))
   const byId = new Map(nodes.map((node) => [node.step.id, node]))
   const connections = allConnections(props.blueprint)
-  const route = createEdgeRouter(nodes, height, { connections })
-  const edges = connections.flatMap((edge) => {
+  const routes = routeConnections(nodes, height, connections)
+  const edges = connections.flatMap((edge, index) => {
     const from = byId.get(edge.from),
       to = byId.get(edge.to)
     if (!to || (edge.from !== null && !from)) return []
-    const geometry = route(edge.from, edge.to)
+    const geometry = routes[index]
     return [
       {
         ...edge,
