@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { newBlueprint, newStep, validateBlueprint, parseBlueprint } from './model.js'
-import { prepareBlueprint, executeBlueprint } from './runner.js'
+import { executeBlueprint } from './runner.js'
+import { prepareBlueprint } from './prepareBlueprint.js'
 import { abortableDelay, expectedValue, validateWaiting, waitMatches } from './waiting.js'
 import { savedBlueprint } from './useBuilder.js'
 

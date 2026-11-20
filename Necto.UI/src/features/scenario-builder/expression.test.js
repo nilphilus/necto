@@ -4,7 +4,8 @@ import assert from 'node:assert/strict'
 import { evaluateExpression, parseExpression, validateExpression } from './expression.js'
 import { newBlueprint, newStep, validateBlueprint, layers } from './model.js'
 import { savedBlueprint } from './useBuilder.js'
-import { executeBlueprint, prepareBlueprint } from './runner.js'
+import { executeBlueprint } from './runner.js'
+import { prepareBlueprint } from './prepareBlueprint.js'
 import { parseShared, serializeShared, sharedDefinition } from '../scenario-folder/format.js'
 const binding = (name, stepId, responsePointer = '') => ({
   name,

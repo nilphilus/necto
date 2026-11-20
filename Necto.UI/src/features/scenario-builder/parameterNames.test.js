@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { newBlueprint, newStep } from './model.js'
 import { normalizeParameterNames } from './parameterNames.js'
-import { executeBlueprint, prepareBlueprint } from './runner.js'
+import { executeBlueprint } from './runner.js'
+import { prepareBlueprint } from './prepareBlueprint.js'
 
 const parameters = [
   { in: 'query', name: 'Type', required: true, schema: { type: 'string' } },

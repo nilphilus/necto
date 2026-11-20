@@ -12,7 +12,8 @@ import {
   applyInput,
   parseHuman,
 } from './model.js'
-import { prepareBlueprint, executeBlueprint } from './runner.js'
+import { executeBlueprint } from './runner.js'
+import { prepareBlueprint } from './prepareBlueprint.js'
 import { patternTokens, generateValue } from './generation.js'
 import { useBuilder, savedBlueprint } from './useBuilder.js'
 import { readOperations } from '../api-catalog/catalog.js'

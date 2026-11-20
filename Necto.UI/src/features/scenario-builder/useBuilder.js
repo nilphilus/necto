@@ -6,7 +6,8 @@ import { sharedOrigin } from '../scenario-definitions/origin.js'
 import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { newBlueprint, parseHuman } from './model.js'
-import { canRetryStep, prepareBlueprint, executeBlueprint, remainingSteps } from './runner.js'
+import { canRetryStep, executeBlueprint, remainingSteps } from './runner.js'
+import { prepareBlueprint } from './prepareBlueprint.js'
 import { upgradeBlueprint } from './connections.js'
 
 const clone = value => JSON.parse(JSON.stringify(value))

@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { prepareBlueprint, executeBlueprint } from './runner.js'
+import { executeBlueprint } from './runner.js'
+import { prepareBlueprint } from './prepareBlueprint.js'
 import { newBlueprint, newStep } from './model.js'
 import { normalizeBodyFieldNames } from './bodyFieldNames.js'
 

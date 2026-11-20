@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import { newBlueprint, newStep, dependencies, layers, validateBlueprint, parseBlueprint } from './model.js'
 import { allConnections, connectionKey, upgradeBlueprint } from './connections.js'
 import { savedBlueprint } from './useBuilder.js'
-import { prepareBlueprint, executeBlueprint } from './runner.js'
+import { executeBlueprint } from './runner.js'
+import { prepareBlueprint } from './prepareBlueprint.js'
 const op=id=>({key:id,name:id,apiId:'local',path:'/'+id,method:'GET',parameters:[{in:'query',name:'id',schema:{type:'integer'}}],tags:['Demo'],resolve:value=>value,servers:[]})
 const blueprint=(...ids)=>({...newBlueprint(),steps:ids.map(id=>({...newStep(op(id),{fields:{},body:''}),id}))})
 const ctx=data=>({operations:data.steps.map(step=>op(step.id)),configuration:{apiBaseUrl:'https://api.test'},createSession:()=>({fields:{},body:''}),valuesFor:()=>new Map()})
