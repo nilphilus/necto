@@ -238,6 +238,9 @@ watch(() => props.blueprint.steps.map((step) => step.id).join('|'), cancel)
       ><button v-if="selected && blueprint.steps.some(step => step.id === selected)" type="button" class="secondary"
         :disabled="disabled || blueprint.steps.length >= 100"
         @click="emit('create-next', { from: selected })">Add next request</button>
+      <button v-if="blueprint.steps.length" type="button" class="secondary"
+        :disabled="disabled || blueprint.steps.length >= 100" @click="emit('add-first')">+ Add request</button>
+      <slot name="actions" />
       <button v-if="blueprint.steps.length" type="button" class="secondary" aria-haspopup="dialog" @click="showConnections()">
         Connections ({{ layout.edges.length }})
       </button><label v-if="blueprint.steps.length"

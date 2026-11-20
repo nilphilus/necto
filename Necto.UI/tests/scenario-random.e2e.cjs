@@ -1,6 +1,6 @@
 const {run}=require('./qa-fixture.cjs')
 run(async({p,assert,builder,add,execute,review,save,saved,shot,calls})=>{
- await builder();await p.getByRole('textbox',{name:'Scenario name',exact:true}).fill('Pick an invoice row');await add('Invoice rows');await add('Create invoice')
+ await builder();await p.getByRole('button', { name: 'Scenario details', exact: true }).click(); await p.getByRole('textbox', { name: 'Scenario name', exact: true }).fill('Pick an invoice row'); await p.getByRole('dialog', { name: 'Scenario details' }).getByRole('button', { name: 'Done' }).click();await add('Invoice rows');await add('Create invoice')
  const body=p.getByRole('region',{name:'Request body schema',exact:true}),panel=body.getByRole('region',{name:'Configure body field'})
  await body.getByRole('combobox',{name:'Source for customerId',exact:true}).selectOption('random')
  const random=panel.locator('.random-source')

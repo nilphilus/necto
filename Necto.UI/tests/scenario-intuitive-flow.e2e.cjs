@@ -57,7 +57,7 @@ run(async ({ p, assert, builder, save, closeEditor, review, calls }) => {
   const limit = dialog.getByRole('spinbutton', { name: 'Parallel requests for this run' })
   await limit.fill('1')
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
-  await p.getByText('Saved', { exact: true }).first().waitFor()
+  await p.getByTitle('All changes saved').waitFor()
   dialog = await review()
   assert.equal(await limit.inputValue(), '4')
   await limit.fill('1')
@@ -81,6 +81,6 @@ run(async ({ p, assert, builder, save, closeEditor, review, calls }) => {
   assert.equal(calls.length, 2)
   await p.getByRole('button', { name: '← Scenarios', exact: true }).click()
   await p.getByRole('button', { name: 'New scenario', exact: true }).click()
-  assert.equal(await p.getByRole('textbox', { name: 'Scenario name' }).inputValue(), 'Untitled scenario')
+  assert.equal(await p.locator('.scenario-title').innerText(), 'Untitled scenario')
 
 })

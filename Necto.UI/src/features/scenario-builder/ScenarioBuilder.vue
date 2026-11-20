@@ -6,7 +6,6 @@ import ScenarioRunReview from './ScenarioRunReview.vue'
 import { suggestRunPresets } from './reviewPresets.js'
 import { parseBuilderImport } from './definitionImport.js'
 import { suggestInputs } from './inputSuggestions.js'
-import FolderSave from '../scenario-folder/FolderSave.vue'
 import FolderFeedback from '../scenario-folder/FolderFeedback.vue'
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue'
 import SentRequest from './SentRequest.vue'
@@ -17,7 +16,7 @@ import StepInputs from './StepInputs.vue'
 import SharedVariables from './SharedVariables.vue'
 import { variableProducer, inputProducers } from './variables.js'
 import StepWaiting from './StepWaiting.vue'
-import { savedBlueprint } from './definition.js'
+import { downloadBuilderDefinition } from './downloadDefinition.js'
 import {
   dependencies,
   newBlueprint,
@@ -233,6 +232,10 @@ function attempt(action) {
     error.value = cause.message
   }
 }
+const detailsDialog = ref(null)
+const savedScenario = computed(() => saved.value.find(item => item.id === draft.value.id))
+const canShare = computed(() => Boolean(savedScenario.value && !dirty.value && !pending.value &&
+  !props.folder?.pending && !props.folder?.restoring))
 const hasUnsavedDraft = computed(() =>
   dirty.value && (draft.value.steps.length > 0 || Boolean(draft.value.description) ||
     draft.value.name !== 'Untitled scenario' || saved.value.some((item) => item.id === draft.value.id))
@@ -623,19 +626,7 @@ async function goToIssue(issue, showResult = false) {
   focus?.focus({ preventScroll: true })
 }
 function exportDefinition() {
-  attempt(() => {
-    const data = savedBlueprint(draft.value)
-    const text = JSON.stringify(data, null, 2)
-    if (text.length > 2 * 1024 * 1024) throw new Error('Builder exports are limited to 2 MB.')
-    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'necto-scenario-builder.json'
-    link.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-    notice.value =
-      'Export includes static request inputs. Review before sharing; run answers and responses are excluded.'
-  })
+  attempt(() => downloadBuilderDefinition(draft.value))
 }
 async function importDefinition(event) {
   const file = event.target.files?.[0]
@@ -723,66 +714,14 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         ← Scenarios
       </button>
       <h2 id="builder-title">Scenario Builder</h2>
-    </header>
-    <div class="builder-toolbar">
-      <div class="scenario-identity">
-        <label class="scenario-name">
-          Name
-          <input v-model="draft.name" :disabled="pending" maxlength="200" aria-label="Scenario name">
-        </label>
-        <div class="builder-actions" role="group" aria-label="Current scenario actions">
-          <button type="button" class="secondary" :disabled="pending || !!validation" @click="save">Save</button>
-          <button type="button" class="primary"
-            :disabled="pending || busy || !draft.steps.length || !!validation" @click="runDirectly">Run</button>
-          <button type="button" class="secondary"
-            :disabled="pending || busy || !draft.steps.length || !!validation" @click="reviewRun">
-            Review &amp; run
-          </button>
-          <button v-if="pending" type="button" class="secondary" @click="store.stop">Stop run</button>
-          <span class="save-state">{{ dirty ? 'Unsaved changes' : 'Saved' }}</span>
-        </div>
-      </div>
-      <details class="scenario-description">
-        <summary>Scenario details</summary>
-        <textarea
-          v-model="draft.description"
-          :disabled="pending"
-          maxlength="500"
-          rows="2"
-          aria-label="Scenario description"
-          placeholder="What does this scenario do?"
-        />
-        <label class="scenario-parallelism">Default parallel requests
-          <input v-model.number="draft.concurrency" :disabled="pending" type="number" min="1" max="8" step="1">
-        </label>
-      </details>
-      <button
-        type="button"
-        class="secondary"
-        :disabled="pending || draft.steps.length >= 100"
-        v-if="draft.steps.length"
-        @click="openAdd"
-      >
-        + Add request
-      </button>
-      <SharedVariables
-        :key="draft.id"
-        :blueprint="draft"
-        :operations="operations"
-        :results="execution.steps"
-        :disabled="pending"
-        @save="draft.variables = $event"
-      />
+      <span class="scenario-title">{{ draft.name }}</span>
+      <button type="button" class="secondary icon-button" aria-label="Scenario details" title="Scenario details"
+        aria-haspopup="dialog" @click="detailsDialog.showModal()">ⓘ</button>
       <details class="builder-more">
-        <summary>More</summary>
+        <summary class="secondary icon-button" aria-label="More scenario actions" title="More scenario actions">⋯</summary>
         <div>
-          <FolderSave
-            :folder="folder"
-            kind="builder"
-            :scenario="draft"
-            :disabled="pending || !!validation"
-            @configure="emit('folder-settings')"
-          />
+          <button v-if="folder" type="button" class="secondary" :disabled="pending || !!validation || folder.pending"
+            @click="folder.download('builder', draft)">Download team file</button>
           <button
             type="button"
             class="secondary"
@@ -823,8 +762,38 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
           </p>
         </div>
       </details>
-    </div>
-    <FolderFeedback :folder="folder" />
+      <div class="builder-actions" role="group" aria-label="Current scenario actions">
+        <button type="button" :class="dirty ? 'primary' : 'secondary'"
+          :title="dirty ? 'Save latest changes' : 'All changes saved'"
+          :disabled="pending || !!validation" @click="save">Save</button>
+        <button v-if="folder?.connected" type="button" class="secondary icon-button"
+          aria-label="Export to shared workspace folder"
+          :title="canShare ? 'Export to shared workspace folder' : 'Save latest changes before exporting to the shared workspace folder'"
+          :disabled="!canShare" @click="folder.save('builder', draft)">
+          <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 13V3m-4 4 4-4 4 4M3 12v5h14v-5" />
+          </svg>
+        </button>
+        <button type="button" class="primary"
+          :disabled="pending || busy || !draft.steps.length || !!validation" @click="runDirectly">Run</button>
+        <button type="button" class="secondary"
+          :disabled="pending || busy || !draft.steps.length || !!validation" @click="reviewRun">Review &amp; run</button>
+        <button v-if="pending" type="button" class="secondary" @click="store.stop">Stop run</button>
+      </div>
+    </header>
+    <dialog ref="detailsDialog" class="builder-dialog scenario-details" aria-labelledby="scenario-details-title">
+      <form method="dialog">
+        <h3 id="scenario-details-title">Scenario details</h3>
+        <label>Name<input v-model="draft.name" :disabled="pending" maxlength="200" aria-label="Scenario name"></label>
+        <label>Description<textarea v-model="draft.description" :disabled="pending" maxlength="500" rows="3"
+          aria-label="Scenario description" placeholder="What does this scenario do?" /></label>
+        <label>Default parallel requests
+          <input v-model.number="draft.concurrency" :disabled="pending" type="number" min="1" max="8" step="1">
+        </label>
+        <footer><button type="submit" class="primary">Done</button></footer>
+      </form>
+    </dialog>
+    <FolderFeedback :folder="folder" floating />
     <p v-if="error || validation" class="builder-message error" role="alert">
       {{ error || validation }}
       <button v-if="!error && validationIssue?.stepId" type="button" class="secondary"
@@ -922,7 +891,12 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         @configure="openConnection"
         @create-next="createNext"
         @retry="retryStep"
-      />
+      >
+        <template #actions>
+          <SharedVariables :key="draft.id" :blueprint="draft" :operations="operations"
+            :results="execution.steps" :disabled="pending" @save="draft.variables = $event" />
+        </template>
+      </ScenarioMap>
     </div>
     <dialog
       ref="stepDialog"
@@ -1229,9 +1203,6 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
           <button v-if="validation && validationIssue?.stepId" type="button" class="secondary"
             @click="goToIssue(validationIssue)">Go to step</button>
         </p>
-        <div v-if="tab === 'configure' && folder?.connected" class="step-folder-feedback">
-          <FolderFeedback :folder="folder" />
-        </div>
         <footer class="step-dialog-footer" :class="{ 'response-footer': tab === 'response' }">
           <small v-if="tab === 'configure'"
             >Edits update the current draft. Save the scenario to keep them in this browser.</small
@@ -1243,14 +1214,6 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
             @click="save"
           >
             Save scenario</button
-          ><button
-            v-if="tab === 'configure' && folder?.connected"
-            type="button"
-            class="secondary"
-            :disabled="pending || !!validation || folder.pending || folder.restoring"
-            @click="folder.save('builder', draft)"
-          >
-            Save to folder</button
           ><button type="button" class="primary" @click="stepDialog.close()">Done</button>
         </footer>
       </div>
@@ -1449,7 +1412,6 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 </template>
 <style scoped>
 .request-inputs { padding-block-start: .15rem; }
-.scenario-parallelism { margin-top: .45rem; }
 .request-input-heading { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; justify-content: space-between; margin-bottom: .55rem; }
 .request-input-heading h4 { margin: 0; font-size: .9rem; }
 .request-input-heading button { font-size: .75rem; }
@@ -1458,17 +1420,6 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 .parameter-label { display: grid; gap: .25rem; font-size: .8rem; margin-bottom: .25rem; }
 .parameter-label small { color: var(--muted); }
 
-.scenario-description {
-  flex: 1 1 13rem;
-  min-width: 0;
-  font-size: .8rem;
-}
-.scenario-description textarea {
-  display: block;
-  width: 100%;
-  margin-top: .35rem;
-  resize: vertical;
-}
 
 .response-step-meta {
   display: flex;
@@ -1482,9 +1433,6 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 }
 .response-footer {
   justify-content: flex-end;
-}
-.step-folder-feedback {
-  padding-inline: 1rem;
 }
 .step-editor-error {
   margin: 0;
@@ -1685,55 +1633,26 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
   padding: 0.8rem;
   gap: 0.65rem;
 }
-.builder-header,
-.builder-actions,
-.scenario-identity,
-.builder-toolbar {
+.builder-header, .builder-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.45rem 0.65rem;
+  gap: .4rem;
+  font-size: .78rem;
 }
-.builder-header h2 {
-  font-size: 1rem;
-  margin: 0;
-}
-.builder-header {
-  font-size: 0.78rem;
-}
-.scenario-identity {
-  min-width: 0;
-}
-.save-state {
-  font-size: 0.68rem;
-  color: var(--muted);
-}
-.builder-toolbar {
-  font-size: 0.75rem;
-}
-.builder-toolbar label {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-}
-.builder-toolbar input,
-.builder-toolbar select {
-  min-width: 0;
-  padding: 0.35rem;
-  max-width: 15rem;
-}
-.scenario-name {
-  min-width: 0;
-}
-.scenario-name input {
-  flex: 1;
-}
+.builder-header h2 { font-size: 1rem; margin: 0; }
+.scenario-title { color: var(--muted); font-weight: 400; overflow-wrap: anywhere; }
+.builder-actions { margin-inline-start: auto; }
+.icon-button { display: inline-grid; place-items: center; min-width: 1.8rem; min-height: 1.8rem; }
+.scenario-details form, .scenario-details label { display: grid; gap: .45rem; }
+.scenario-details footer { display: flex; justify-content: flex-end; }
 .builder-more {
   position: relative;
 }
 .builder-more summary {
   cursor: pointer;
-  padding: 0.4rem;
+  list-style: none;
+  padding: .2rem .45rem;
 }
 .builder-more > div {
   position: absolute;
@@ -2018,21 +1937,15 @@ summary {
   .inspector-content {
     max-height: none;
   }
-  .scenario-identity,
-  .scenario-name {
-    width: 100%;
-  }
-  .builder-toolbar select,
-  .builder-toolbar input {
-    max-width: none;
-    flex: 1;
-  }
+  .builder-actions { margin-inline-start: 0; }
   .human-queue {
     max-height: none;
   }
   .builder-more > div {
-    right: auto;
-    left: 0;
+    position: fixed;
+    inset-inline: 1rem;
+    top: auto;
+    width: auto;
   }
   .builder-dialog button {
     min-height: 40px;

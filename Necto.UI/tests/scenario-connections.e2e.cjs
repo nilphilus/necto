@@ -104,9 +104,7 @@ const document = {
   await p.goto(base)
   await p.getByRole('button', { name: 'Scenarios', exact: true }).click()
   await p.getByRole('button', { name: 'New scenario' }).click()
-  await p
-    .getByRole('textbox', { name: 'Scenario name', exact: true })
-    .fill('Drag, connect and wait for a report')
+  await p.getByRole('button', { name: 'Scenario details', exact: true }).click(); await p.getByRole('textbox', { name: 'Scenario name', exact: true }).fill('Drag, connect and wait for a report'); await p.getByRole('dialog', { name: 'Scenario details' }).getByRole('button', { name: 'Done' }).click()
   const add = async (name) => {
     await p.getByRole('button', { name: '+ Add request', exact: true }).click()
     await p.getByRole('searchbox', { name: 'Find endpoint', exact: true }).fill(name)

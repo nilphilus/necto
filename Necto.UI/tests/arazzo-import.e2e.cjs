@@ -39,7 +39,7 @@ workflows:
   await dialog.getByRole('list', { name: 'Workflow steps' }).getByText('invoice', { exact: true }).waitFor()
   await dialog.getByRole('button', { name: 'Import and open' }).click()
   await p.getByRole('heading', { name: 'Scenario Builder', exact: true }).waitFor()
-  assert.equal(await p.getByRole('textbox', { name: 'Scenario name', exact: true }).inputValue(), 'Create invoice from customer')
+  assert.equal(await p.locator('.scenario-title').innerText(), 'Create invoice from customer')
   assert.equal(calls.length, 0)
   await execute(2)
   assert.deepEqual(calls, [

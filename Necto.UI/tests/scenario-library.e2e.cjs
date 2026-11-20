@@ -4,9 +4,10 @@ run(async ({ p, assert, builder, add, closeEditor, calls }) => {
   await builder()
   await add('Find customer')
   await closeEditor()
-  await p.getByRole('textbox', { name: 'Scenario name', exact: true }).fill('Check customer')
-  await p.locator('.scenario-description summary').click()
+  await p.getByRole('button', { name: 'Scenario details', exact: true }).click(); await p.getByRole('textbox', { name: 'Scenario name', exact: true }).fill('Check customer'); await p.getByRole('dialog', { name: 'Scenario details' }).getByRole('button', { name: 'Done' }).click()
+  await p.getByRole('button', { name: 'Scenario details', exact: true }).click()
   await p.getByRole('textbox', { name: 'Scenario description', exact: true }).fill('Look up a customer and inspect their ID.')
+  await p.getByRole('dialog', { name: 'Scenario details' }).getByRole('button', { name: 'Done' }).click()
   await p.getByRole('button', { name: 'Save', exact: true }).click()
 
   await p.evaluate(() => {
@@ -27,7 +28,7 @@ run(async ({ p, assert, builder, add, closeEditor, calls }) => {
   await card.getByText('Look up a customer and inspect their ID.', { exact: true }).waitFor()
   await card.getByRole('button', { name: 'Open Builder scenario Check customer', exact: true }).click()
   await p.getByRole('heading', { name: 'Scenario Builder', exact: true }).waitFor()
-  assert.equal(await p.getByRole('textbox', { name: 'Scenario name', exact: true }).inputValue(), 'Check customer')
+  assert.equal(await p.locator('.scenario-title').innerText(), 'Check customer')
 
   await p.getByRole('button', { name: '← Scenarios', exact: true }).click()
   await card.getByRole('button', { name: 'Review and run Check customer', exact: true }).click()
@@ -46,4 +47,12 @@ run(async ({ p, assert, builder, add, closeEditor, calls }) => {
   assert.equal(await quick.getByRole('button', { name: 'Run scenario', exact: true }).count(), 0)
   await quick.getByRole('status').getByText('completed', { exact: true }).waitFor()
   assert.deepEqual(calls.map((call) => call.path), ['/customer', '/customer'])
+  const [definition] = await Promise.all([
+    p.waitForEvent('download'),
+    card.getByRole('button', { name: 'Export definition', exact: true }).click(),
+  ])
+  assert.equal(definition.suggestedFilename(), 'necto-scenario-builder.json')
+  await card.getByRole('button', { name: 'Delete Builder scenario Check customer' }).click()
+  await card.waitFor({ state: 'detached' })
+
 })
