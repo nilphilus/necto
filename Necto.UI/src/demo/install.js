@@ -1,4 +1,5 @@
 import { createDemoApi } from './api.js'
+import { installStarterScenario } from './starterScenario.js'
 
 export async function installDemo() {
   const base = new URL('.', document.baseURI)
@@ -39,6 +40,8 @@ export async function installDemo() {
       }))
     }
   } catch { /* Presets can still be entered manually when storage is unavailable. */ }
+  try { installStarterScenario(localStorage, openApiUrl.href, contract) }
+  catch { /* The demo remains usable when browser storage is unavailable. */ }
 
   const handle = createDemoApi(seed, apiBase)
   globalThis.fetch = async (input, options) => {
