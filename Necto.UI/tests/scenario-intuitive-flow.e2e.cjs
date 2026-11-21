@@ -4,6 +4,7 @@ run(async ({ p, assert, builder, save, closeEditor, review, calls }) => {
   await p.route('**/openapi.json', async (route) => {
     const response = await route.fetch()
     const document = await response.json()
+    document.paths['/invoices'].post.deprecated = true
     document.paths['/invoices'].post.parameters = [
       { in: 'query', name: 'region', required: true, schema: { type: 'string' } },
       { in: 'query', name: 'department', required: true, schema: { type: 'string' } },
@@ -54,6 +55,7 @@ run(async ({ p, assert, builder, save, closeEditor, review, calls }) => {
   await save()
 
   dialog = await review()
+  await dialog.getByText('Deprecated endpoint', { exact: true }).waitFor()
   const limit = dialog.getByRole('spinbutton', { name: 'Parallel requests for this run' })
   await limit.fill('1')
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()

@@ -109,7 +109,8 @@ defineExpose({
         </p>
         <ol class="review-targets">
           <li v-for="step in review" :key="step.id">
-            <strong>{{ step.label }}</strong
+            <strong>{{ step.label }}</strong>
+            <small v-if="step.operation.deprecated">Deprecated endpoint</small>
             ><code v-if="step.local">Local computation</code><code v-else>{{ step.operation.method }} {{ step.operation.path }}</code
             ><span v-if="step.target">{{ step.target.api }} · {{ step.target.label }}</span
             ><small v-if="!step.local && activePresets.length">{{

@@ -935,6 +935,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
                 + Next request
               </button>
             </div>
+            <small v-if="operation?.deprecated" class="muted">Deprecated endpoint</small>
             <code
               ><span class="method" :data-method="selected.method">{{ selected.method }}</span>
               {{ selected.path }}</code

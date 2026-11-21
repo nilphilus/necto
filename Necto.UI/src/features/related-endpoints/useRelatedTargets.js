@@ -35,6 +35,8 @@ export function useRelatedTargets(current, { targetsFor, sourcesFor, createDraft
         selectedCandidates: selectedByTarget.get(destination.key) ?? [],
         candidates,
       }
-    })
+    }).sort((a, b) =>
+      Number(b.preferred) - Number(a.preferred) ||
+      Number(Boolean(a.operation.deprecated)) - Number(Boolean(b.operation.deprecated)))
   })
 }
