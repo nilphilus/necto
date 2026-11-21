@@ -79,8 +79,11 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Necto.OpenApi version: $version" >> "$GITHUB_STEP_SUMMARY"
 
+  ui-checks:
+    uses: ./.github/workflows/ui-checks.yml
+
   pack:
-    needs: version
+    needs: [version, ui-checks]
     if: needs.version.outputs.version != ''
     runs-on: ubuntu-latest
     env:
