@@ -14,6 +14,8 @@ for(const [kind,code] of [['budget','RESPONSE_LIMIT_EXCEEDED'],['network','NETWO
   if(kind==='timeout')return new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('{'))}}),{headers:{'content-type':'application/json'}})
   return new Response(kind==='budget'?'x'.repeat(2*1024*1024):'{"secret":"private-token"}',{status:kind==='http'?503:200,headers:{'content-type':'application/json'}})
  }
+ // AbortSignal.timeout does not keep the Node event loop alive on its own.
+ const keepAlive=kind==='timeout'?setInterval(()=>{},1000):undefined
  try{
   const report=await runScenario({scenario:saved,document,baseUrl:'https://example.test'})
   assert.equal(report.steps[0].step,1);assert.equal(report.steps[0].failure.code,code)
@@ -21,7 +23,7 @@ for(const [kind,code] of [['budget','RESPONSE_LIMIT_EXCEEDED'],['network','NETWO
   if(kind==='timeout')assert.equal(report.steps[0].failure.timeoutMs,20)
   if(kind==='http')assert.equal(report.steps[0].failure.httpStatus,503)
   const xml=junitReport(report);assert.match(xml,new RegExp(code));assert.ok(!JSON.stringify(report).includes('private-token'));assert.ok(!xml.includes('private-token'))
- }finally{globalThis.fetch=previous}
+ }finally{clearInterval(keepAlive);globalThis.fetch=previous}
 })
 test('binding failures have their own code before a request is executed',async()=>{
  const plan=[{operation:{},session:{},bindings:[{sourceStep:0}],status:'waiting'}]
