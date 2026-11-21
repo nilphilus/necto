@@ -1,3 +1,4 @@
+import { isLocalStep } from './localStep.js'
 import { validateSharedIdentity } from '../scenario-definitions/sharedIdentity.js'
 import { teamCollection } from '../scenario-definitions/teamCollection.js'
 import { randomSnapshot } from './random.js'
@@ -16,7 +17,7 @@ export function savedBlueprint(draft) {
   draft = upgradeBlueprint(draft)
   const saved = clone({
     format: draft.format,
-    version: 7,
+    version: draft.steps.some(isLocalStep) ? 8 : 7,
     variables: draft.variables.map(variableSnapshot),
     id: draft.id,
     name: draft.name.trim(),

@@ -88,7 +88,8 @@ test('local random and expression steps expose JSON to parallel requests without
   step.inputs = [{ source: 'response', location: 'query', name: 'id', stepId: 'expression', responsePointer: '' }]
  }
  const shared = parseShared(serializeShared('builder', scenario, context.operations), context.operations)
- const plan = prepareBlueprint(savedBlueprint(shared.scenario), context)
+ assert.equal(shared.scenario.version, 8)
+ const plan = prepareBlueprint(savedBlueprint({ ...shared.scenario, version: 7 }), context)
  let picks = 0
  const calls = []
  const result = await executeBlueprint(plan, {

@@ -66,7 +66,9 @@ export function layers(blueprint) {
   return result
 }
 export function validateBlueprint(blueprint) {
-  if (blueprint?.format !== 'necto-scenario-builder' || ![1, 2, 3, 4, 5, 6, 7].includes(blueprint.version) || typeof blueprint.id !== 'string' || !blueprint.id ||
+  if (blueprint?.format === 'necto-scenario-builder' && Number.isInteger(blueprint.version) && blueprint.version > 8)
+    throw new Error(`Scenario Builder format v${blueprint.version} requires a newer version of Necto.`)
+  if (blueprint?.format !== 'necto-scenario-builder' || ![1, 2, 3, 4, 5, 6, 7, 8].includes(blueprint.version) || typeof blueprint.id !== 'string' || !blueprint.id ||
     typeof blueprint.name !== 'string' || !blueprint.name.trim() || blueprint.name.length > 200 || !Array.isArray(blueprint.steps) || blueprint.steps.length > 100 ||
     !Number.isInteger(blueprint.concurrency) || blueprint.concurrency < 1 || blueprint.concurrency > 8) throw new Error('Invalid Scenario Builder definition (maximum 100 steps; parallelism 1–8).')
   if (blueprint.description !== undefined &&

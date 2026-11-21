@@ -83,9 +83,11 @@ Maximum 50 checks per request. Do not retain sensitive expected values. Non-JSON
 
 ## Validation scope
 
-The packaged validator uses Necto's actual version-7 model validator, with outer file checks (2 MiB, 25,000 values, 64 levels, including embedded JSON). It rejects invalid graphs, inputs, generators, waits and variables. It is intentionally Builder-only. Necto remains the final import/runtime authority; future formats may require an updated skill. API identity, schema/business compatibility, authorization and secret review require the discovery steps in SKILL.md.
+The packaged validator uses Necto's actual model validator, with outer file checks (2 MiB, 25,000 values, 64 levels, including embedded JSON). It rejects invalid graphs, inputs, generators, waits and variables. It is intentionally Builder-only. Necto remains the final import/runtime authority; future formats may require an updated skill. API identity, schema/business compatibility, authorization and secret review require the discovery steps in SKILL.md.
 
 ## Local computation steps
+
+Use format version 8 when a scenario includes local steps. Necto can still read earlier v7 files containing local steps and exports them as v8.
 
 A local step evaluates one `random` or `expression` input once per run and
 publishes the JSON result without issuing an HTTP request. Give the step
