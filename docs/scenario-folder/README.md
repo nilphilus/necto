@@ -6,11 +6,11 @@ Use a local Git checkout to share quick chains and Scenario Builder definitions.
 
 1. Clone your team's repository locally.
 2. In **Settings → Workspace → Scenario folder**, choose that checkout. Necto remembers the directory handle for this API workspace in this browser.
-3. In **Scenario Builder → More**, choose **Save to folder**. Quick scenarios have the same action on their cards.
+3. Save the Builder scenario and use the upload icon beside **Save** to export to the connected workspace folder. The **Scenarios** cards also offer **Save to folder**.
 4. Review and commit files under `necto-scenarios/`, then use your normal Git workflow.
 5. After a teammate's `git pull`, use **Reload folder** and **Import** on the required file. Open its saved browser definition to edit it.
 
-Import updates saved browser definitions. It keeps any currently unsaved draft and never runs a request. Builder files appear in its **Saved** selector; quick chains appear in **Scenarios**. Browser Save remains a separate action. Local deletion and Disconnect leave the files on disk intact.
+Import updates saved browser definitions. It keeps any currently unsaved draft and never runs a request. Both Builder files and quick chains appear in **Scenarios**. Browser Save remains a separate action. Local deletion and Disconnect leave the files on disk intact.
 
 ![Folder settings and shared definitions](images/scenario-folder.png)
 
@@ -48,7 +48,7 @@ Imports are limited to 25,000 JSON values and 64 nesting levels, including embed
 
 Directory selection requires File System Access support in a secure context, such as desktop Chrome/Edge over HTTPS or localhost. Remembered access is restored without displaying a permission prompt; **Reconnect folder** requests permission when needed. If IndexedDB is unavailable, the connection can still work for the current session.
 
-Browsers without directory selection, including common Android configurations, can use **Download team file** and **Settings → Workspace → Import team scenario file**. The JSON format is identical. Each teammate chooses their own checkout; handles and permissions are never shared through Git.
+Browsers without directory selection, including common Android configurations, can use **Export** and **Scenarios → Import scenario**. The JSON format is identical. Each teammate chooses their own checkout; handles and permissions are never shared through Git.
 
 ## Validation
 

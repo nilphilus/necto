@@ -1,13 +1,15 @@
 # Scenario Builder
 
-Build a workflow, not just a replay of a request chain.
+Build a workflow with parallel branches, response bindings and local computations. This guide follows the current repository UI. Check your installed version against the [NuGet releases](https://github.com/nilphilus/necto/releases) if menus or supported file formats differ.
 
-- **Parallel branches and joins:** run several requests, combine their responses in another, then branch again.
-- **Your connections:** add any visible endpoint, including external APIs and endpoints Necto did not link. Reuse the same endpoint in multiple named steps.
-- **Four input sources:** static request values, an earlier JSON response, generated data, or a question asked before sending.
-- **A readable map:** named request cards, dependency arrows and live status. Select a card to configure it or inspect its response.
+## First run
 
-Open **Scenarios → Scenario Builder**. The existing **Save Scenario** remains the quick way to replay a linear chain.
+1. Add Necto to an ASP.NET Core application or open the [live demo scenario library](https://nilphilus.github.io/necto/demo/#/scenarios).
+2. In the demo, run **Building billing history**. On your own API, open **Scenarios → New scenario** and add a read endpoint.
+3. Open the result of **List buildings** and inspect the connection to **List invoices for the first building**. The first building ID fills the invoice filter.
+4. Use **Save** to keep an edited definition in this browser. Return to **Scenarios** and use **Export** on the card to share the file. A teammate can load it through **Import scenario**.
+
+On the map, click a card to highlight its connections. Use its pencil button to edit or its result badge to inspect the response. Drag the background to pan and use Ctrl + wheel to zoom.
 
 ![Scenario map and selected response](images/connection-map.png)
 
@@ -18,7 +20,7 @@ Open **Scenarios → Scenario Builder**. The existing **Save Scenario** remains 
 3. **Drag the output handle ● to another request's input handle** to connect them. You can also tap/click an output and then an input, or use **Connections → Add without dragging** with the keyboard.
 4. Click **⚙ on the line** to open its settings next to that connection. Configure Delay, Wait for, and response values to copy from the source into the target. Choose a target parameter/JSON body path and a source response JSON Pointer; inferred mappings are not required.
 5. Choose **Apply connection** to save popup edits. **Cancel**, Escape and clicking outside discard those edits. The connection created by a drag remains; use **Remove connection** to delete it. Removing a connection also removes its response bindings after confirmation.
-6. **Save**, then **Review & run** to inspect targets, incoming policies and parallelism before sending.
+6. **Save**, then select **Run** to start with the current presets. Use **Review & run** to inspect targets, policies and parallelism first.
 
 **Create the next request in one gesture:** drag an output handle onto empty map space. Builder adds a connected empty request at that position and opens the endpoint picker. Search and choose an endpoint (or press Enter for a single match). Closing the picker leaves the draft request in place; select it and choose **Choose endpoint…** later. Saved drafts may contain empty requests, but execution requires every request to have an endpoint.
 
@@ -58,13 +60,13 @@ Use **Expand body editor** for a wider workspace. Closing it keeps your draft ed
 
 **Raw JSON** remains available, including the existing body editor's media/form/file controls. **Advanced body bindings** provides direct JSON Pointer editing. Non-JSON bodies retain their existing editor. Additional properties and recursive/deep branches can be edited as JSON rather than eagerly expanding an unbounded tree. Large property lists and arrays have explicit “Show more” controls; schema fields are not silently truncated.
 
-Explicit Run preset sources apply to named fields, not the entire body. Presets still override matching fields regardless of the selected source. New definitions use v5 so older clients reject these new source rules; existing v1–v4 definitions still open. There is no scripting or automatic inference of cross-API business meaning.
+A preset source applies to a named field. When one value needs to be calculated or selected once and passed to multiple requests, add a **Pick random** or **Expression** local step. It publishes a JSON result without sending an HTTP request. Definitions with local steps now export as format v8.
 
 ![Schema fields and their value sources](images/schema-field-sources.png)
 
 ## Run with presets
 
-Choose **Review & run → Presets for this run**. Active API presets are initially selected; you can select a different set or clear them for this run. The displayed order matters: the **last selected preset wins** when fields overlap. This does not change the global active presets or the saved scenario.
+Choose active presets in the Builder's **Presets** bar. Their displayed order matters because the last selected preset wins when fields overlap. **Review & run** shows the matching fields. If a required field is missing, Builder can suggest a matching preset for global activation or accept a value for this run.
 
 Presets override matching path/query/header parameters and JSON body properties, including nested objects and array items, using the normal preset name-matching rules. Values keep their schema/JSON types. Unmatched fields retain their static, response, generated, human or shared-variable source.
 
@@ -74,8 +76,6 @@ Presets override matching path/query/header parameters and JSON body properties,
 - External APIs still honor their existing shared-presets opt-in.
 
 Run review lists matching field paths without exposing their values. You can select a preset to fill a required field even if the initial review reports it missing. **No presets** uses the scenario's own inputs. Retry attempts use the same selected values, and the execution bar records the chosen preset names.
-
-![Choose and order presets for a scenario run](images/preset-run-review.png)
 
 ## Response fields
 
@@ -87,7 +87,7 @@ Editing a definition marks previous results as belonging to the previous run. Th
 
 ## Shared variables
 
-Open **Variables** in the Builder toolbar and define a name and source. In a request's **Dynamic inputs**, choose **Shared variable** and select that name. Bind it to any supported parameter, JSON field or whole body.
+Open **Variables** on the map beside **Connections** and define a name and source. In a request's **Dynamic inputs**, choose **Shared variable** and select that name. Bind it to any supported parameter, JSON field or whole body.
 
 | Source | Behavior |
 | --- | --- |
