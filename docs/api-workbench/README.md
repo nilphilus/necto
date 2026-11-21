@@ -34,6 +34,16 @@ Native OpenAPI Links take precedence over additional Necto mappings. Complete `$
 
 ## CI runner
 
+Use the CLI for **Quick chain** scenarios. The **CI** action is on Quick chain cards in **Scenarios**. It creates a CI bundle for the runner.
+
+| Workflow | Where it runs |
+| --- | --- |
+| Quick chain with compatible inputs and checks | Necto UI or the CI runner |
+| Scenario Builder with a graph or local steps | Necto UI |
+| Interactive browser authentication, file uploads, or cross-API execution | Necto UI, subject to API and browser configuration |
+
+A team scenario file exported for the shared folder is a UI exchange format. Use the **CI** action for a runner bundle. Keep pipeline credentials in your CI secret store.
+
 Install the UI dependencies first (Node 22.12+ and pnpm), then run from the repository root:
 
 ```sh

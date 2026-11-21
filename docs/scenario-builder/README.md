@@ -152,7 +152,7 @@ Supported: literals, character ranges/classes, `\d`, `\w`, `\s` (a space), `?`, 
 - **More → Copy quick scenario** copies a saved linear chain without modifying it. Fixed response paths are supported; filtered array selectors require configuring a response pointer manually.
 - Limits: 100 steps, 1–8 simultaneous HTTP requests, 100 saved definitions and 2 MB of saved definitions per workspace; individual imports/exports are limited to 2 MB.
 
-A failure stops scheduling new steps and aborts in-flight requests where possible. Completed writes cannot be rolled back, and requests are repeated only when a step explicitly enables response-value waiting. HTTP and network errors are not retried by that setting. Execution happens in the browser, so the tab must remain open. This version does not add a background scheduler, loops, conditional branches or a CLI format; the existing quick-scenario CI runner is unchanged.
+A failure stops scheduling new steps and aborts in-flight requests where possible. Completed writes cannot be rolled back, and requests are repeated only when a step explicitly enables response-value waiting. HTTP and network errors are not retried by that setting. Execution happens in the browser, so the tab must remain open. This version does not add a background scheduler, loops, conditional branches or a CLI format; the [CI runner supports Quick chain scenarios](../api-workbench/README.md#ci-runner).
 
 ## Validation
 
