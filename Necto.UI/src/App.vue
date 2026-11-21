@@ -38,6 +38,7 @@ import { useBuilder } from './features/scenario-builder/useBuilder.js'
 import ScenarioBuilder from './features/scenario-builder/ScenarioBuilder.vue'
 import { useScenarios } from './features/scenarios/useScenarios.js'
 import { rememberBinding } from './features/scenarios/scenario.js'
+import { trimRouteHistory } from './features/routing/routeHistory.js'
 import { readRoute, routePath } from './features/routing/routes.js'
 import ValuesEditor from './features/environments/ValuesEditor.vue'
 import { buildRequest, hasPresetFor } from './features/request-runner/request.js'
@@ -365,7 +366,7 @@ async function confirmPresetDeletion(open) {
 }
 
 function runInContext(operation, session) {
-  return run(operation, session, valuesFor(operation))
+  return run(operation, session, valuesFor(operation)).finally(() => trimRouteHistory(historyEntries))
 }
 
 const relatedResults = computed(() => {
@@ -406,6 +407,7 @@ function writeRoute(route, { replace = false, preserveUrl = false } = {}) {
     historyEntries.delete(history.state?.nectoEntry)
     history.replaceState(state, '', preserveUrl ? window.location.href : url)
   } else history.pushState(state, '', url)
+  trimRouteHistory(historyEntries)
   activeRoute = route
   pendingRoute.value = null
   routeError.value = ''
