@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -23,13 +24,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     env:
       PAGES_ARTIFACT_NAME: github-pages-${{ github.run_attempt }}
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      artifact_name: ${{ steps.artifact.outputs.name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -51,12 +51,37 @@ jobs:
             --assembly SampleApi.FastEndpoints/bin/Release/net10.0/SampleApi.FastEndpoints.dll \
             --output "$RUNNER_TEMP/necto-pages/demo/fixtures"
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - name: Set artifact name
+        id: artifact
+        run: echo "name=$PAGES_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ runner.temp }}/necto-pages
-          name: ${{ env.PAGES_ARTIFACT_NAME }}
+          name: ${{ steps.artifact.outputs.name }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Wait for Pages artifact to be listed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: ${{ needs.build.outputs.artifact_name }}
+        run: |
+          for attempt in {1..12}; do
+            if count=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" -X GET -f name="$ARTIFACT_NAME" --jq '.total_count') &&
+               [[ "$count" == 1 ]]; then
+              exit 0
+            fi
+            if [[ "$attempt" != 12 ]]; then sleep 5; fi
+          done
+          echo "::error::Pages artifact '$ARTIFACT_NAME' is not available for this run."
+          exit 1
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
         with:
-          artifact_name: ${{ env.PAGES_ARTIFACT_NAME }}
+          artifact_name: ${{ needs.build.outputs.artifact_name }}
