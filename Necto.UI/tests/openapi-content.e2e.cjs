@@ -346,6 +346,7 @@ const document = {
   assert.match(await targets.first().innerText(), /Invoice details/)
   assert.equal(await targets.first().getByText('OpenAPI Link', { exact: true }).count(), 1)
   assert.match(await targets.nth(1).innerText(), /Related payment/)
+  await targets.nth(1).getByText('Deprecated', { exact: true }).waitFor()
   assert.equal(await targets.first().getByRole('combobox', { name: 'id path' }).inputValue(), '42')
   await shot('preferred-links')
   await next.getByRole('button', { name: 'About link to Invoice details', exact: true }).click()

@@ -65,6 +65,7 @@ const ready = computed(() => props.canSend(props.target.operation, choices.value
     </div>
     <div class="destination-title">
       <strong>{{ target.operation.name }}</strong>
+      <small v-if="target.operation.deprecated">Deprecated</small>
       <small v-if="target.preferred" class="link-origin">OpenAPI Link</small>
       <DescriptionHelp :label="(target.preferred ? 'About link to ' : 'Why related request ') + target.operation.name" :description="target.description" />
       <small v-if="target.operation.apiId && target.operation.apiId !== 'local'">{{ target.operation.apiName }} [{{ target.operation.apiId }}]</small>
