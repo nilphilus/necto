@@ -1,4 +1,5 @@
 <script setup>
+import BuilderErrorNotice from './BuilderErrorNotice.vue'
 import { isLocalStep, localOperation, localStepInput } from './localStep.js'
 import RandomSourceEditor from './RandomSourceEditor.vue'
 import ExpressionEditor from './ExpressionEditor.vue'
@@ -54,9 +55,13 @@ const nextRequest = ref(null)
 const pickingStepId = ref(''),
   removedStep = ref(null)
 const stepDialog = ref(null)
+const stepEditorOpen = ref(false)
 async function showStep() {
   await nextTick()
-  if (selected.value && !stepDialog.value.open) stepDialog.value.showModal()
+  if (selected.value && !stepDialog.value.open) {
+    stepDialog.value.showModal()
+    stepEditorOpen.value = true
+  }
 }
 const selectedId = ref(''),
   tab = ref('configure'),
@@ -162,6 +167,28 @@ const validationIssue = computed(() => {
   }
 })
 const validation = computed(() => validationIssue.value?.message ?? '')
+const validationKey = computed(() => JSON.stringify([
+  draft.value.id, validation.value, validationIssue.value?.stepId, validationIssue.value?.target,
+]))
+const hideValidation = ref(false)
+const hideRunError = ref(false)
+watch(validationKey, () => { hideValidation.value = false }, { flush: 'sync' })
+watch(() => execution.error, () => { hideRunError.value = false }, { flush: 'sync' })
+const noticeKind = computed(() => {
+  if (error.value) return 'action'
+  if (validation.value && !hideValidation.value) return 'validation'
+  if (execution.error && !hideRunError.value) return 'run'
+  return ''
+})
+const errorMessage = computed(() => ({
+  action: error.value, validation: validation.value, run: execution.error,
+})[noticeKind.value])
+function dismissError() {
+  if (noticeKind.value === 'action') error.value = ''
+  else if (noticeKind.value === 'validation') hideValidation.value = true
+  else if (noticeKind.value === 'run') hideRunError.value = true
+}
+
 const failedStep = computed(() => execution.steps.find(step => step.status === 'failed'))
 const requestParameters = computed(() => (operation.value?.parameters ?? []).filter(
   parameter => ['path', 'query', 'header'].includes(parameter.in)
@@ -785,11 +812,9 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       </form>
     </dialog>
     <FolderFeedback :folder="folder" floating />
-    <p v-if="error || validation" class="builder-message error" role="alert">
-      {{ error || validation }}
-      <button v-if="!error && validationIssue?.stepId" type="button" class="secondary"
-        @click="goToIssue(validationIssue)">Go to step</button>
-    </p>
+    <BuilderErrorNotice v-if="errorMessage && !stepEditorOpen" :message="errorMessage"
+      :can-locate="noticeKind === 'validation' && !!validationIssue?.stepId"
+      @locate="goToIssue(validationIssue)" @dismiss="dismissError" />
     <p v-if="removedStep" class="builder-message muted" role="status">
       Step removed: {{ removedStep.step.label }}.
       <button type="button" class="secondary" :disabled="pending" @click="undoRemoveStep">
@@ -812,7 +837,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         >{{ execution.steps.filter((step) => step.status === 'completed').length }} /
         {{ execution.steps.length }} completed</span
       ><span v-if="questions.size">{{ questions.size }} awaiting your input</span
-      ><span class="error">{{ execution.error }}</span>
+      >
       <span v-if="execution.stale">Retry and continuation are unavailable because the scenario changed.</span>
       <button v-if="resumable.length" type="button" class="secondary" :disabled="busy"
         @click="resumeDialog.showModal()">Run remaining steps</button>
@@ -894,6 +919,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       ref="stepDialog"
       class="builder-inspector step-dialog"
       aria-labelledby="step-dialog-title"
+      @close="stepEditorOpen = false"
       @click="(event) => event.target === stepDialog && stepDialog.close()"
     >
       <div class="step-dialog-shell">
@@ -1187,15 +1213,10 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
             Add first request
           </button>
         </div>
-        <p
-          v-if="tab === 'configure' && (validation || error)"
-          class="step-editor-error error"
-          role="alert"
-        >
-          {{ validation || error }}
-          <button v-if="validation && validationIssue?.stepId" type="button" class="secondary"
-            @click="goToIssue(validationIssue)">Go to step</button>
-        </p>
+        <BuilderErrorNotice v-if="stepEditorOpen && errorMessage && noticeKind !== 'run'"
+          :message="errorMessage" in-dialog
+          :can-locate="noticeKind === 'validation' && !!validationIssue?.stepId"
+          @locate="goToIssue(validationIssue)" @dismiss="dismissError" />
         <footer class="step-dialog-footer" :class="{ 'response-footer': tab === 'response' }">
           <small v-if="tab === 'configure'"
             >Edits update the current draft. Save the scenario to keep them in this browser.</small
@@ -1426,14 +1447,6 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
 }
 .response-footer {
   justify-content: flex-end;
-}
-.step-editor-error {
-  margin: 0;
-  padding: 0.5rem 1rem;
-  font-size: 0.78rem;
-  max-height: 5rem;
-  overflow: auto;
-  overflow-wrap: anywhere;
 }
 .applied-suggestions {
   background: var(--surface);
