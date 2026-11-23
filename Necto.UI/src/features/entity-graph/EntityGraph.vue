@@ -157,7 +157,7 @@ header p { margin: .4rem 0 1rem; font-size: .9rem; }
 .schema-key { color: #38684f; }.mapping-key { color: #805914; }
 .graph-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 21rem); border: 1px solid var(--line); border-radius: .75rem; overflow: hidden; background: var(--surface); }
 .graph-stage { position:relative; min-width:0; overflow:hidden; }
-.graph-canvas { min-width: 0; height: 65vh; min-height: 26rem; overflow: auto; background-color: #f6f9f7; background-image: radial-gradient(#d4ded8 1px, transparent 1px); background-size: 18px 18px; }
+.graph-canvas { min-width: 0; height: 65vh; min-height: 26rem; overflow: auto; background-color: var(--canvas); background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 18px 18px; }
 .graph-canvas.pannable { cursor: grab; user-select: none; }
 .graph-canvas.panning, .graph-canvas.panning .entity-node { cursor: grabbing; }
 .entity-node { cursor: pointer; }

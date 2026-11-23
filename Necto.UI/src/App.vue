@@ -1,4 +1,6 @@
 <script setup>
+import AppearanceSettings from './features/appearance/AppearanceSettings.vue'
+import { useAppearance } from './features/appearance/useAppearance.js'
 import { registerWorkspaceApis } from './features/authentication/registerWorkspaceApis.js'
 import { useScenarioFolder } from './features/scenario-folder/useScenarioFolder.js'
 import OperationTasks from './features/api-catalog/OperationTasks.vue'
@@ -84,9 +86,6 @@ const workspaceLocked = computed(() => scenarioPending.value || builderPending.v
 const scenarioBusy = computed(() => workspaceLocked.value || mappingPending.value || externalPending.value || [...sessions.values(), ...chain.value.map(step => step.session)].some(session => session.pending))
 const catalogMedia = matchMedia('(max-width: 760px)')
 const catalogOpen = ref(!catalogMedia.matches)
-const catalogWidth = ref(240)
-try { const width = Number(localStorage.getItem('necto:catalog-width')); if (width >= 180 && width <= 360) catalogWidth.value = width } catch { /* Optional layout preference. */ }
-watch(catalogWidth, width => { try { localStorage.setItem('necto:catalog-width', String(width)) } catch { /* Memory-only fallback. */ } })
 const syncCatalog = () => { catalogOpen.value = !catalogMedia.matches }
 catalogMedia.addEventListener('change', syncCatalog)
 onUnmounted(() => catalogMedia.removeEventListener('change', syncCatalog))
@@ -97,6 +96,7 @@ function selectCatalogOperation(operation, group) {
 const defaultPresetColor = '#287557'
 const settingsOpen = ref(false)
 const settingsTab = ref('presets')
+const appearance = useAppearance()
 const skeletonWalking = ref(false)
 let stampClicks = 0
 let firstStampClick = 0
@@ -921,6 +921,8 @@ function removeScenario(id) {
               >
                 Workspace
               </button>
+              <button type="button" class="secondary" :aria-pressed="settingsTab === 'appearance'"
+                @click="settingsTab = 'appearance'">Appearance</button>
             </nav>
           </div>
           <div :inert="workspaceLocked">
@@ -1036,10 +1038,10 @@ function removeScenario(id) {
                 </div>
               </div>
             </section>
+            <AppearanceSettings v-show="settingsTab === 'appearance'" :appearance="appearance" />
             <WorkspaceSettings
               :folder="scenarioFolder"
               v-show="settingsTab === 'workspace'"
-              v-model:catalog-width="catalogWidth"
               :import-document="importDocument"
               :document-source="documentSource"
               :restore-document="restoreServerDocument"
@@ -1117,7 +1119,7 @@ function removeScenario(id) {
           </details>
         </template>
       </ScenarioPanel>
-      <div :inert="settingsOpen" v-show="!graphView" class="layout navigation-layout" :class="{ 'catalog-collapsed': !catalogOpen }" :style="{ '--catalog-width': catalogWidth + 'px' }">
+      <div :inert="settingsOpen" v-show="!graphView" class="layout navigation-layout" :class="{ 'catalog-collapsed': !catalogOpen }" :style="{ '--catalog-width': appearance.catalogWidth + 'px' }">
         <div class="catalog-sidebar">
           <button
             v-if="!catalogOpen"
@@ -1132,7 +1134,8 @@ function removeScenario(id) {
             <span aria-hidden="true">{{ catalogOpen ? '‹' : '›' }}</span>
           </button>
           <div v-show="catalogOpen" id="endpoint-catalog" class="catalog-container">
-            <EndpointCatalog :inert="workspaceLocked"
+            <EndpointCatalog :inert="workspaceLocked" :compact="appearance.compactCatalog"
+              v-model:hide-deprecated="appearance.hideDeprecated" v-model:show-paths="appearance.showPaths"
               :groups="groups"
               :external-count="connections.length" :show-external="showExternalApis" :external-loading="externalPending"
               @toggle-external="showExternalApis = $event"
@@ -1230,7 +1233,8 @@ function removeScenario(id) {
               </form>
             </dialog>
             <CaptureRequestsDialog ref="captureDialog" :scenarios="builderScenarios" :save="saveCapturedRequests" />
-            <OperationRunner @capture-requests="captureRequests" :prepare="prepareRequest" :cancel="cancelRequest" :history="requestHistory" :configuration="configuration" :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :preset-colors="presetColors" :default-preset-color="defaultPresetColor" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" :parameter-choices="parameter => choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
+            <OperationRunner :pin-next-by-default="appearance.pinNextRequests"
+              :next-request-width="appearance.nextRequestWidth" :default-response-view="appearance.responseView" @capture-requests="captureRequests" :prepare="prepareRequest" :cancel="cancelRequest" :history="requestHistory" :configuration="configuration" :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :preset-colors="presetColors" :default-preset-color="defaultPresetColor" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" :parameter-choices="parameter => choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
               @choose-parameter="(location, choice) => choose(current.session, location, choice)" @edit-preset="editActivePreset"
               :value-sources="(location, name) => sourcesFor(current.operation, location, name)"
               @open-source="operation => selectCatalogOperation(operation, operation.tags[0])">
@@ -1280,18 +1284,26 @@ function removeScenario(id) {
 :root {
   color-scheme: light;
   font-family: system-ui, sans-serif;
-  color: #202b27;
-  --surface: #fff;
-  --canvas: #f7f9f6;
-  --subtle: #f3f6f3;
-  --line: #dce4de;
-  --muted: #53625c;
-  --accent: #145949;
-  --accent-soft: #e2f1e9;
+  color: light-dark(#202b27, #e0ece6);
+  --surface: light-dark(#fff, #1c2824);
+  --canvas: light-dark(#f7f9f6, #121d19);
+  --subtle: light-dark(#f3f6f3, #24352e);
+  --line: light-dark(#dce4de, #465c51);
+  --muted: light-dark(#53625c, #aebfb7);
+  --accent: light-dark(#145949, #94dbbf);
+  --accent-soft: light-dark(#e2f1e9, #25483b);
+  --accent-button: light-dark(#145949, #21694f);
+  --accent-hover: light-dark(#104737, #2b7a60);
+  --error-text: light-dark(#8f2225, #ffb4aa);
+  --error-surface: light-dark(#fff0ef, #462824);
+  --warning-surface: light-dark(#fff8e6, #423521);
+  --warning-text: light-dark(#755018, #f1cb8a);
   background: var(--canvas);
 }
+:root[data-necto-theme='dark'] { color-scheme: dark; }
+:root[data-necto-theme='system'] { color-scheme: light dark; }
 *, *::before, *::after { box-sizing: border-box; }
-body { margin: 0; background: #eef2ee; }
+body { margin: 0; background: light-dark(#eef2ee, #101a16); }
 #app {
   --app-gutter: 1rem;
   position: relative;
@@ -1479,7 +1491,7 @@ body { margin: 0; background: #eef2ee; }
 .endpoint-help-content { position: absolute; top: 100%; right: 0; z-index: 8; width: min(30rem, 100%); padding: .75rem; background: var(--surface); border: 1px solid var(--line); border-radius: .5rem; box-shadow: 0 5px 20px #20352c20; }
 .endpoint-help-content .preset-guidance { margin-block: .65rem; }
 .muted { color: var(--muted); }
-.error { color: #8f2225; }
+.error { color: var(--error-text); }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { border: 0; border-radius: .45rem; background: transparent; cursor: pointer; }
 button:hover { background: var(--accent-soft); }
@@ -1491,8 +1503,8 @@ input:not([type="checkbox"]), select, textarea {
   border: 1px solid #a2b2a9;
   border-radius: .4rem;
 }
-.primary { padding: .5rem .85rem; background: var(--accent); color: #fff; font-weight: 650; }
-.primary:hover { background: #104737; }
+.primary { padding: .5rem .85rem; background: var(--accent-button); color: #fff; font-weight: 650; }
+.primary:hover { background: var(--accent-hover); }
 .secondary { padding: .35rem .55rem; border: 1px solid var(--line); background: var(--surface); }
 .method {
   display: inline-block;

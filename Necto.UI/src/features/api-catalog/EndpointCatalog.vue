@@ -8,13 +8,14 @@ const props = defineProps({
   activeOperation: { type: String, required: true },
   externalCount: { type: Number, default: 0 },
   showExternal: Boolean,
+  compact: Boolean,
   externalLoading: Boolean,
 })
 const emit = defineEmits(['select-operation', 'toggle-external'])
 
 const filter = ref('')
-const showPaths = ref(false)
-const hideDeprecated = ref(false)
+const showPaths = defineModel('showPaths', { type: Boolean, default: false })
+const hideDeprecated = defineModel('hideDeprecated', { type: Boolean, default: false })
 const hasDeprecated = computed(() => props.groups.some(group => group.operations.some(operation => operation.deprecated)))
 const expanded = ref(new Set())
 const collapsedMatches = ref(new Set())
@@ -51,7 +52,7 @@ function toggleGroup(name) {
 </script>
 
 <template>
-  <nav class="catalog" aria-label="API endpoints">
+  <nav class="catalog" :class="{ compact }" aria-label="API endpoints">
     <header class="catalog-title-row">
       <h2 class="catalog-title">Endpoints</h2>
       <div class="catalog-options">
@@ -160,6 +161,9 @@ function toggleGroup(name) {
   font-size: .8rem;
   overflow-wrap: anywhere;
 }
+.compact .catalog-operation { padding-block: .2rem; min-height: 24px; }
+.compact .group-label { padding-block: .25rem; }
+.compact .deprecated-label { margin-block-start: -.2rem; }
 .catalog-operation .method { justify-self: start; font-size: .625rem; }
 .catalog-operation.deprecated { color: var(--muted); }
 .catalog-operation.deprecated .method { filter: grayscale(1); }

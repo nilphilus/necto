@@ -173,7 +173,7 @@ h2 { margin: 0; font-size: 1.75rem; letter-spacing: -.035em; } header p { margin
 .zoom { display: flex; gap: .25rem; margin-left: auto; }.legend { color: var(--muted); font-size: .8rem; }
 .graph-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem); border: 1px solid var(--line); border-radius: .75rem; overflow: hidden; background: var(--surface); }
 .graph-stage { position:relative; min-width:0; overflow:hidden; }
-.graph-canvas { min-width: 0; height: 65vh; min-height: 26rem; overflow: auto; background-color: #f6f9f7; background-image: radial-gradient(#d4ded8 1px, transparent 1px); background-size: 18px 18px; }
+.graph-canvas { min-width: 0; height: 65vh; min-height: 26rem; overflow: auto; background-color: var(--canvas); background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 18px 18px; }
 svg { display: block; }.endpoint-node { width: 100%; height: 110px; display: flex; flex-direction: column; justify-content: center; align-items: start; gap: .4rem; padding: .8rem; border: 1px solid #a5bdae; border-radius: .65rem; background: var(--surface); box-shadow: 0 3px 9px #1c4b3210; text-align: left; }
 .endpoint-node:hover { background: var(--accent-soft); border-color: var(--accent); }.endpoint-node.active { border: 2px solid var(--accent); background: var(--accent-soft); }
 .node-title { display: flex; gap: .4rem; align-items: baseline; width: 100%; }.node-title strong, .endpoint-node code { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

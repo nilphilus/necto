@@ -27,6 +27,9 @@ const props = defineProps({
   defaultPresetColor: { type: String, required: true },
   selectors: { type: Array, default: () => [] },
   hasRelated: Boolean,
+  pinNextByDefault: { type: Boolean, default: true },
+  nextRequestWidth: { type: Number, default: 272 },
+  defaultResponseView: { type: String, default: 'auto' },
   cancel: Function,
   prepare: Function,
   configuration: Object,
@@ -76,8 +79,8 @@ const displayedBody = computed({
   set: body => { props.session.body = body },
 })
 const relatedPinned = ref(false)
-watch([() => props.session, () => props.hasRelated && Boolean(props.session.result)], ([, available]) => {
-  relatedPinned.value = available
+watch([() => props.session, () => props.hasRelated && Boolean(props.session.result), () => props.pinNextByDefault], ([, available, pin]) => {
+  relatedPinned.value = available && pin
 }, { immediate: true })
 const pinnedToolsHost = ref(null)
 const form = ref(null)
@@ -375,9 +378,9 @@ function sendShortcut(event) {
         </p>
         <template v-if="session.result">
           <p v-if="responseStale" class="muted response-stale" :class="{ 'response-stale-info': !session.error }" role="status">{{ session.error ? (session.result?.incomplete ? 'Response reception did not complete. No complete preview is available.' : 'The latest request did not complete. Showing the previous response.') : 'Inputs changed. This response belongs to the previous request.' }}</p>
-          <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }">
+          <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }" :style="{ '--next-request-width': nextRequestWidth + 'px' }">
           <div class="response-body">
-            <ResponsePreview ref="responsePreview" :result="session.result" :presentation="previewPreferences" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="responseStale">
+            <ResponsePreview ref="responsePreview" :result="session.result" :presentation="previewPreferences" :default-view="defaultResponseView" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="responseStale">
               <template #actions><NextRequestsPanel ref="nextRequests" v-if="hasRelated" v-model:pinned="relatedPinned" :operation-key="operation.key" :pin-target="pinnedToolsHost"><slot name="related" :search-response="searchResponse" /></NextRequestsPanel></template>
             </ResponsePreview>
 
@@ -512,7 +515,7 @@ button.preset-stamp:hover { background: color-mix(in srgb, var(--preset-color) 3
 .response-content.related-pinned .response-body { grid-row: 1; }
 
 @container (min-width: 48rem) {
-  .response-content.related-pinned { grid-template-columns: minmax(0, 1fr) 17rem; }
+  .response-content.related-pinned { grid-template-columns: minmax(0, 1fr) var(--next-request-width); }
   .response-content.related-pinned .pinned-tools-host { grid-column: 2; grid-row: 1; position: sticky; top: 1rem; max-height: calc(100dvh - 10rem); overflow: auto; }
 }
 .response-type { margin: 0 0 .35rem; color: var(--muted); font-size: .74rem; overflow-wrap: anywhere; }
