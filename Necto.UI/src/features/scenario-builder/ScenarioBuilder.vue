@@ -1846,7 +1846,7 @@ summary {
   padding: 0.75rem;
   border: 1px solid #cdad63;
   border-radius: 0.6rem;
-  background: #fff8e6;
+  background: var(--warning-surface);
   display: grid;
   gap: 0.6rem;
 }

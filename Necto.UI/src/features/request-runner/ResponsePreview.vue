@@ -20,6 +20,7 @@ const props = defineProps({
   selectors: { type: Array, default: () => [] },
   operation: Object,
   presentation: Object,
+  defaultView: { type: String, default: 'auto' },
   pending: Boolean,
   stale: Boolean,
 })
@@ -137,15 +138,15 @@ const xmlAvailable = computed(
 const range = computed(() => pageRange(text.value.length, textPage.value, TEXT_PAGE_SIZE))
 const visibleText = computed(() => text.value.slice(range.value.start, range.value.end))
 watch(
-  () => props.result,
-  (result, previous) => {
-    if (result.stream?.view && result.stream.view === previous?.stream?.view) return
+  [() => props.result, () => props.defaultView],
+  ([result, mode], [previous, previousMode]) => {
+    if (mode === previousMode && result.stream?.view && result.stream.view === previous?.stream?.view) return
     expansionModes.clear()
     previewPages.clear()
     textPage.value = 1
-    raw.value = false
+    raw.value = mode === 'raw'
     table.value = Boolean(
-      props.presentation?.view === 'table' &&
+      mode === 'auto' && props.presentation?.view === 'table' &&
         props.presentation.viewKey === tablePreferenceKey(props.operation, [], result.json)
     )
     tableReturn.value = null

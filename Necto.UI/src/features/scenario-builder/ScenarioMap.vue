@@ -662,16 +662,16 @@ marker path {
 }
 .map-node[data-status='failed'] {
   border-color: #b83d40;
-  background: #fff0ef;
+  background: var(--error-surface);
 }
 .map-node[data-status='needs-input'] {
   border-color: #bb842c;
-  background: #fff6df;
+  background: var(--warning-surface);
 }
 .map-node[data-status='retry-wait'],
 .map-node[data-status='delaying'] {
   border-color: #8c7a48;
-  background: #fff9ec;
+  background: var(--warning-surface);
 }
 .map-node[data-status='running'] {
   box-shadow: 0 0 0 3px #318d6c33;
@@ -768,9 +768,9 @@ marker path {
   font-size: 1rem;
 }
 .edge-settings.timed {
-  background: #fff5d8;
+  background: var(--warning-surface);
   border-color: #b79b55;
-  color: #755018;
+  color: var(--warning-text);
 }
 .edge-settings:hover, .edge-settings:focus-visible, .edge-settings.active {
   z-index: 4;
