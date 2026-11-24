@@ -17,6 +17,7 @@ export function useBuilder(configuration) {
   const key = computed(() => workspaceIdentity(configuration.value) && builderCollectionKey(workspaceIdentity(configuration.value)))
   const dirty = computed(() => JSON.stringify(savedBlueprintSafe(draft.value)) !== JSON.stringify(savedBlueprintSafe(saved.value.find(item => item.id === draft.value.id))))
   let controller, revision = 0
+  let rejected = [], unreadable = false
   let resolvedVariables = new Map(), runOptions
   function savedBlueprintSafe(value) { try { return savedBlueprint(value) } catch { return value } }
   function stop() { controller?.abort() }
@@ -26,19 +27,29 @@ export function useBuilder(configuration) {
   }
   function clearRun() { stop(); resolvedVariables = new Map(); runOptions = undefined; questions.clear(); Object.assign(execution, { status: 'idle', steps: [], error: '', stale: false, presetNames: [] }) }
   function load() {
-    saved.value = []; error.value = ''
+    saved.value = []; error.value = ''; rejected = []; unreadable = false
     if (!key.value) return
     try {
-      saved.value = readBuilderCollection(localStorage.getItem(key.value))
-    } catch (cause) { error.value = `Could not load Scenario Builder. ${cause.message}` }
+      const result = readBuilderCollection(localStorage.getItem(key.value))
+      saved.value = result.available
+      rejected = result.rejected.map(item => item.blueprint)
+      if (rejected.length) error.value = `Could not load ${rejected.length} saved Builder scenario(s). ${result.rejected[0].message}`
+    } catch (cause) {
+      unreadable = true
+      error.value = `Could not load Scenario Builder. ${cause.message}`
+    }
   }
   watch(key, () => { revision++; clearRun(); draft.value = newBlueprint(); notice.value = ''; load() }, { immediate: true, flush: 'sync' })
   onWorkspaceImport(key, load)
   onScopeDispose(() => { revision++; stop() })
   function persist(next) {
     if (!key.value) throw new Error('Load an API before saving.')
-    const text = JSON.stringify(builderCollection(next))
-    if (next.length > 100 || text.length > 2 * 1024 * 1024) throw new Error('Builder storage is limited to 100 scenarios and 2 MB per workspace.')
+    if (unreadable) throw new Error('The saved Builder collection could not be read. Existing data was kept.')
+    if (next.some(item => rejected.some(previous => previous?.id === item.id)))
+      throw new Error('Import a valid team file to replace the unreadable definition.')
+    const records = [...next, ...rejected]
+    const text = JSON.stringify(builderCollection(records))
+    if (records.length > 100 || text.length > 2 * 1024 * 1024) throw new Error('Builder storage is limited to 100 scenarios and 2 MB per workspace.')
     try { localStorage.setItem(key.value, text) } catch { throw new Error('Could not save in this browser. Export the definition instead.') }
     saved.value = next
   }

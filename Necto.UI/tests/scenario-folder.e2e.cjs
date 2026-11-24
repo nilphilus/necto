@@ -43,5 +43,15 @@ require('./qa-fixture.cjs').run(async({p,assert,builder,add,save,calls,closeEdit
  await region.getByRole('button',{name:'Disconnect folder',exact:true}).click();await waitIdle();assert.equal((await readFiles()).length,2);await close()
  await p.addInitScript(()=>{window.showDirectoryPicker=undefined});await p.reload();await settings();await folderRegion().getByText(/Local folder access is unavailable/).waitFor();const teamFile=files.find(file=>JSON.parse(file.text).kind==='builder');await folderRegion().getByLabel('Import team scenario file',{exact:true}).setInputFiles({name:teamFile.name,mimeType:'application/json',buffer:Buffer.from(teamFile.text)});await folderRegion().getByRole('status').filter({hasText:'Imported “Edited after import” into this browser'}).waitFor();await p.setViewportSize({width:390,height:844});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal(calls.length,0)
  await close();const fallback=p.locator('[data-scenario-id="quick-folder"]');const [download]=await Promise.all([p.waitForEvent('download'),fallback.getByRole('button',{name:'Export',exact:true}).click()]);const downloaded=await fs.readFile(await download.path(),'utf8');assert.equal(JSON.parse(downloaded).kind,'chain');assert.ok(!downloaded.includes('_sharedSource'))
+ await p.getByRole('button',{name:'Scenario folder',exact:true}).click()
+ await folderRegion().getByText(/Local folder access is unavailable/).waitFor()
+ await close()
+ const standalone=JSON.parse(teamFile.text).scenario
+ standalone.name='Standalone Builder file'
+ await p.locator('.library-actions input[type=file]').setInputFiles({
+  name:'old-builder.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(standalone)),
+ })
+ await p.getByRole('button',{name:'Open Builder scenario Standalone Builder file',exact:true}).waitFor()
+ assert.equal(calls.length,0)
  console.log('PASS: real browser directory reads/writes, IndexedDB handle restore, builder/quick files, redaction, disk conflicts before/after reload/import, preserved drafts, provenance across save/reload, disconnect, unsupported-browser file import/download and mobile layout. No API requests executed.')
 })

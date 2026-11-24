@@ -7,11 +7,13 @@ async function importFile(folder,event){const file=event.target.files?.[0];event
 <template>
  <section v-if="folder" class="scenario-folder" aria-label="Scenario folder">
   <h3>Scenario folder</h3><p>Choose your team's local Git checkout or its <code>necto-scenarios/</code> folder. Folder files must end in <code>.necto.json</code>. Use Git outside Necto to share changes.</p>
-  <p v-if="!folder.supported">Local folder access is unavailable in this browser. Import or download team files instead; desktop Chrome and Edge support directory access on HTTPS or localhost.</p>
+  <p v-if="!folder.secureContext">Local folder access requires HTTPS or localhost. Open Necto over a secure connection, or import a team file below.</p>
+  <p v-else-if="!folder.supported">Local folder access is unavailable in this browser context. Open Necto directly in a desktop Chrome or Edge tab, or import a team file below.</p>
   <p v-if="folder.connected"><strong>{{folder.path}}</strong><small>{{folder.remembered?'Folder preference saved for this API in this browser.':'Connected for this session.'}}</small></p>
   <div class="folder-actions"><button v-if="folder.supported" type="button" class="secondary" :disabled="folder.pending" @click="folder.choose">{{folder.connected?'Change folder':'Choose folder'}}</button><button v-if="folder.connected" type="button" class="secondary" :disabled="folder.pending" @click="folder.disconnect">Disconnect folder</button></div>
   <FolderLibrary :folder="folder" />
-  <label>Import team scenario file<input type="file" accept=".json,application/json" :disabled="folder.pending||folder.restoring" @change="importFile(folder,$event)"></label>
+  <label>Import team scenario file<input type="file" accept=".json,application/json" :disabled="folder.pending" @change="importFile(folder,$event)"></label>
+  <p>For a standalone Builder JSON file or Arazzo workflow, use <strong>Scenarios → Import scenario</strong>.</p>
   <p class="sharing-note">Only definitions are shared. Authorize credentials and run results are excluded. Known sensitive fields in structured data are removed; review free text and business data before committing files.</p>
   <FolderFeedback :folder="folder" />
  </section>

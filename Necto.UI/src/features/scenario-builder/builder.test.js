@@ -16,6 +16,7 @@ import { executeBlueprint } from './runner.js'
 import { prepareBlueprint } from './prepareBlueprint.js'
 import { patternTokens, generateValue } from './generation.js'
 import { useBuilder, savedBlueprint } from './useBuilder.js'
+import { teamDefinitions } from './definition.js'
 import { readOperations } from '../api-catalog/catalog.js'
 import { initialPayload, resolveRequestValues, buildRequest } from '../request-runner/request.js'
 import { exportWorkspace, inspectWorkspace } from '../workbench/workspace.js'
@@ -392,6 +393,39 @@ test('builder persistence excludes results and files, reloads on workspace impor
   await nextTick()
   assert.equal(builder.saved.value.length, 0)
   assert.equal(builder.draft.value.steps.length, 0)
+})
+
+test('invalid saved definitions stay on disk and do not block other scenarios or team imports', (t) => {
+  const previous = globalThis.localStorage
+  const store = globalThis.localStorage = storage(t)
+  const scope = effectScope()
+  t.after(() => {
+    scope.stop()
+    globalThis.localStorage = previous
+  })
+  const workspace = 'https://api.test/openapi.json'
+  const key = 'necto:scenario-builder:' + workspace
+  const valid = draft('available')
+  const invalid = { ...draft('broken'), concurrency: '4' }
+  store.setItem(key, JSON.stringify({ version: 1, blueprints: [valid, invalid] }))
+  const builder = scope.run(() => useBuilder(ref({ openApiUrl: workspace })))
+  assert.deepEqual(builder.saved.value.map(item => item.id), [valid.id])
+  assert.match(builder.error.value, /Saved scenario #2: Scenario parallelism/)
+  assert.throws(() => validateBlueprint({ ...valid, name: '' }), /Scenario name/)
+
+  const importTeam = (definition, confirmReplace) => teamDefinitions.importDefinition({
+    storage: store, workspace, definition: savedBlueprint(definition), confirmReplace,
+    guard() {}, byteLimit: 2 * 1024 * 1024,
+  })
+  builder.saveCaptured(draft('newly saved'))
+  assert.ok(importTeam(draft('from team'), () => assert.fail('No replacement needed')))
+  assert.equal(builder.saved.value.length, 3)
+  assert.deepEqual(JSON.parse(store.getItem(key)).blueprints.find(item => item.id === invalid.id), JSON.parse(JSON.stringify(invalid)))
+  const corrected = { ...invalid, concurrency: 4 }
+  assert.equal(importTeam(corrected, () => false), false)
+  assert.ok(importTeam(corrected, () => true))
+  assert.equal(builder.saved.value.length, 4)
+  assert.equal(builder.error.value, '')
 })
 
 test('saved snapshots whitelist definition data and omit binary contents, results and irrelevant input settings', () => {

@@ -251,7 +251,10 @@ function togglePreset(name, enabled) {
   if (presetStore.setActive(name, enabled)) resetPresetSessions()
 }
 
-async function configureScenarioFolder(){settingsTab.value='workspace';if(!settingsOpen.value)await toggleSettings()}
+async function configureScenarioFolder() {
+  settingsTab.value = 'workspace'
+  if (!settingsOpen.value) await toggleSettings()
+}
 async function toggleSettings() {
   if (settingsOpen.value) {
     closeSettings()
@@ -1449,7 +1452,7 @@ body { margin: 0; background: light-dark(#eef2ee, #101a16); }
   box-shadow: -.5rem 0 1.5rem #202b2729;
   overscroll-behavior: contain;
 }
-.settings-sections { display: flex; flex-basis: 100%; gap: .4rem; margin-top: .65rem; }
+.settings-sections { display: flex; flex-wrap: wrap; flex-basis: 100%; gap: .4rem; margin-top: .65rem; }
 .settings-sections [aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .settings { padding-top: 0; }
 .settings-header { position: sticky; top: 0; z-index: 3; padding: 1rem 0; background: var(--canvas); display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--line); }

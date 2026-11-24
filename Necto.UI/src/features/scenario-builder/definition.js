@@ -83,8 +83,17 @@ export const builderCollection = (blueprints = []) => ({ version: 1, blueprints 
 
 export function readBuilderCollection(text) {
   const collection = JSON.parse(text) ?? builderCollection()
-  validateBuilderCollection(collection)
-  return collection.blueprints
+  validateCollectionShape(collection)
+  const available = [], rejected = []
+  for (const [index, blueprint] of collection.blueprints.entries()) {
+    try {
+      validateBlueprint(blueprint)
+      available.push(blueprint)
+    } catch (cause) {
+      rejected.push({ blueprint, message: `Saved scenario #${index + 1}: ${cause.message}` })
+    }
+  }
+  return { available, rejected }
 }
 
 export const teamDefinitions = teamCollection({
@@ -92,14 +101,19 @@ export const teamDefinitions = teamCollection({
   property: 'blueprints',
   collection: builderCollection,
   canonical: sharedBlueprint,
+  preserveOtherDefinitions: true,
 })
 
-export function validateBuilderCollection(value) {
-  if (value.version !== 1 || !Array.isArray(value.blueprints) || value.blueprints.length > 100)
+function validateCollectionShape(value) {
+  if (value?.version !== 1 || !Array.isArray(value.blueprints) || value.blueprints.length > 100)
     throw new Error('Invalid builder collection.')
+  const ids = value.blueprints.map(item => item?.id).filter(id => typeof id === 'string' && id)
+  if (new Set(ids).size !== ids.length) throw new Error('Duplicate builder IDs.')
+}
+
+export function validateBuilderCollection(value) {
+  validateCollectionShape(value)
   value.blueprints.forEach(validateBlueprint)
-  if (new Set(value.blueprints.map((item) => item.id)).size !== value.blueprints.length)
-    throw new Error('Duplicate builder IDs.')
 }
 
 export const builderTransfer = {
