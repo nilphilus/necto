@@ -11,7 +11,8 @@ async function importFile(folder,event){const file=event.target.files?.[0];event
   <p v-if="folder.connected"><strong>{{folder.path}}</strong><small>{{folder.remembered?'Folder preference saved for this API in this browser.':'Connected for this session.'}}</small></p>
   <div class="folder-actions"><button v-if="folder.supported" type="button" class="secondary" :disabled="folder.pending" @click="folder.choose">{{folder.connected?'Change folder':'Choose folder'}}</button><button v-if="folder.connected" type="button" class="secondary" :disabled="folder.pending" @click="folder.disconnect">Disconnect folder</button></div>
   <FolderLibrary :folder="folder" />
-  <label>Import team scenario file<input type="file" accept=".json,application/json" :disabled="folder.pending||folder.restoring" @change="importFile(folder,$event)"></label>
+  <label>Import team scenario file<input type="file" accept=".json,application/json" :disabled="folder.pending" @change="importFile(folder,$event)"></label>
+  <p>For a standalone Builder JSON file or Arazzo workflow, use <strong>Scenarios → Import scenario</strong>.</p>
   <p class="sharing-note">Only definitions are shared. Authorize credentials and run results are excluded. Known sensitive fields in structured data are removed; review free text and business data before committing files.</p>
   <FolderFeedback :folder="folder" />
  </section>

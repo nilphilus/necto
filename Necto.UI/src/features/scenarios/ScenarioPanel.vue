@@ -94,6 +94,7 @@ function runScenario(scenario) {
         <button type="button" class="primary" :disabled="busy || importing" @click="importInput.click()">Import scenario</button>
         <input ref="importInput" hidden type="file" accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml" @change="importFile">
         <button type="button" class="secondary" :disabled="busy" @click="emit('builder')">New scenario</button>
+        <button type="button" class="secondary" @click="emit('folder-settings')">Scenario folder</button>
       </div>
     </div>
     <p class="builder-intro muted">

@@ -18,8 +18,8 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
  onScopeDispose(()=>{clearTimeout(downloadNoticeTimer);epoch++;directory=undefined;baselines.clear()})
  const assertCurrent=(token,current)=>{if(token!==epoch||current!==key.value)throw new Error('The API workspace changed. Reopen the folder for the current API.')}
  async function permission(handle,prompt=false){if(!handle.queryPermission)return;let value=await handle.queryPermission({mode:'readwrite'});if(value!=='granted'&&prompt)value=await handle.requestPermission({mode:'readwrite'});if(value!=='granted')throw new Error('Folder access needs permission. Use Reconnect to allow access again.')}
- async function perform(action){
-  if(state.pending||state.restoring)return null
+ async function perform(action,{requiresFolder=true}={}){
+  if(state.pending||(requiresFolder&&state.restoring))return null
   clearTimeout(downloadNoticeTimer)
   state.error='';state.notice=''
   if(toValue(locked)){state.error='Wait for active requests or scenario runs before changing folder data.';return null}
@@ -87,7 +87,7 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
   guard()
   if(!importDefinition(parsed,current,guard))return null
   state.notice=`Imported “${parsed.scenario.name}” into this browser. No request was sent.`;return parsed
- })}
+ },{requiresFolder:false})}
  function bindOrigin(kind,source,origin) {
   source._sharedSource=origin
   collections[kind].updateOrigin({storage,workspace:key.value,source,origin})

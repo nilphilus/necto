@@ -71,3 +71,24 @@ test('a slow remembered-folder lookup cannot replace a newly chosen connection',
  const wait=new Promise(done=>resolve=done),folder=scope.run(()=>useScenarioFolder(ref({openApiUrl:'https://api.test/spec'}),ref([operation]),ref(false),{platform:{isSecureContext:true,showDirectoryPicker:async()=>selected,confirm:()=>true},storage,handles:{get:()=>wait,async set(){},async remove(){}}}))
  try{assert.equal(folder.restoring,true);assert.ok(await folder.choose());resolve(remembered);await settle();assert.equal(folder.name,'selected');assert.equal(folder.ready,true)}finally{scope.stop()}
 })
+test('a team file can be imported while the remembered folder is being restored', async () => {
+ const root=memoryFolder(),storage=memoryStorage(),scope=effectScope()
+ const platform={isSecureContext:true,showDirectoryPicker:async()=>root,confirm:()=>true}
+ let finishRestore
+ const restoring=new Promise(done=>{finishRestore=done})
+ const folder=scope.run(()=>useScenarioFolder(
+  ref({openApiUrl:'https://api.test/spec'}),ref([operation]),ref(false),
+  {platform,storage,handles:{get:()=>restoring}}
+ ))
+ try {
+  assert.equal(folder.restoring,true)
+  const source=draft()
+  const imported=await folder.importFile(new Blob([serializeShared('builder',source)]))
+  assert.equal(imported.scenario.id,source.id)
+  assert.equal(folder.restoring,true)
+  finishRestore(root)
+  await settle()
+  assert.equal(folder.connected,true)
+  assert.equal(folder.error,'')
+ } finally {scope.stop()}
+})
