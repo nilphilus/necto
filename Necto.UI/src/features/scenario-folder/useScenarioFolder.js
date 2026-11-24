@@ -11,8 +11,9 @@ const collections = { builder: builderDefinitions, chain: quickDefinitions }
 
 export function useScenarioFolder(configuration,operations,locked,options={}) {
  const platform=options.platform??globalThis,storage=options.storage??platform.localStorage,handles=options.handles??folderHandles
- const supported=typeof platform.showDirectoryPicker==='function'&&platform.isSecureContext!==false
- const state=reactive({supported,connected:false,ready:false,restoring:false,pending:false,name:'',path:'',entries:[],error:'',notice:'',remembered:false})
+ const secureContext=platform.isSecureContext!==false
+ const supported=secureContext&&typeof platform.showDirectoryPicker==='function'
+ const state=reactive({supported,secureContext,connected:false,ready:false,restoring:false,pending:false,name:'',path:'',entries:[],error:'',notice:'',remembered:false})
  const key=computed(()=>workspaceIdentity(toValue(configuration)))
  let directory,epoch=0,baselines=new Map(), downloadNoticeTimer
  onScopeDispose(()=>{clearTimeout(downloadNoticeTimer);epoch++;directory=undefined;baselines.clear()})

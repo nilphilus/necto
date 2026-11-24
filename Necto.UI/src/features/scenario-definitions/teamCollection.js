@@ -1,7 +1,7 @@
 import { notifyWorkspaceImport } from '../workbench/workspaceUpdates.js'
 import { sharedOrigin } from './origin.js'
 
-export function teamCollection({ keyForWorkspace, property, collection, canonical }) {
+export function teamCollection({ keyForWorkspace, property, collection, canonical, preserveOtherDefinitions = false }) {
   function importDefinition({ storage, workspace, definition, confirmReplace, guard, byteLimit }) {
     const collectionKey = keyForWorkspace(workspace)
     const before = storage.getItem(collectionKey)
@@ -10,23 +10,23 @@ export function teamCollection({ keyForWorkspace, property, collection, canonica
       throw new Error(
         'The saved browser collection is invalid. Export or repair it before importing.'
       )
-    const existing = stored[property].map((item) => {
+    const existing = preserveOtherDefinitions ? stored[property] : stored[property].map((item) => {
       const definition = canonical(item),
         origin = sharedOrigin(item._sharedSource)
       return origin ? { ...definition, _sharedSource: origin } : definition
     })
-    if (new Set(existing.map((item) => item.id)).size !== existing.length)
-      throw new Error('The browser collection contains duplicate IDs.')
-    const previous = existing.find((item) => item.id === definition.id)
-    if (
-      previous &&
-      JSON.stringify(canonical(previous)) !== JSON.stringify(canonical(definition)) &&
-      !confirmReplace(
-        `Replace the saved browser definition “${previous.name}”? Unsaved drafts are kept. No request will run.`
-      )
-    )
-      return false
-    const next = [...existing.filter((item) => item.id !== definition.id), definition]
+    const ids = existing.map(item => item?.id).filter(id => typeof id === 'string' && id)
+    if (new Set(ids).size !== ids.length) throw new Error('The browser collection contains duplicate IDs.')
+    const previous = existing.find(item => item?.id === definition.id)
+    if (previous) {
+      let same
+      try { same = JSON.stringify(canonical(previous)) === JSON.stringify(canonical(definition)) }
+      catch (error) { if (!preserveOtherDefinitions) throw error }
+      if (!same && !confirmReplace(
+        `Replace the saved browser definition “${definition.name}”? Unsaved drafts are kept. No request will run.`
+      )) return false
+    }
+    const next = [...existing.filter(item => item?.id !== definition.id), definition]
     if (next.length > 100)
       throw new Error('A browser scenario collection supports at most 100 definitions.')
     const text = JSON.stringify(collection(next))

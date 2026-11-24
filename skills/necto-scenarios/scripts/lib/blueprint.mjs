@@ -5895,7 +5895,8 @@ function layers(blueprint) {
 }
 function validateBlueprint(blueprint) {
 	if (blueprint?.format === "necto-scenario-builder" && Number.isInteger(blueprint.version) && blueprint.version > 8) throw new Error(`Scenario Builder format v${blueprint.version} requires a newer version of Necto.`);
-	if (blueprint?.format !== "necto-scenario-builder" || ![
+	if (blueprint?.format !== "necto-scenario-builder") throw new Error("Expected the necto-scenario-builder format.");
+	if (![
 		1,
 		2,
 		3,
@@ -5904,7 +5905,12 @@ function validateBlueprint(blueprint) {
 		6,
 		7,
 		8
-	].includes(blueprint.version) || typeof blueprint.id !== "string" || !blueprint.id || typeof blueprint.name !== "string" || !blueprint.name.trim() || blueprint.name.length > 200 || !Array.isArray(blueprint.steps) || blueprint.steps.length > 100 || !Number.isInteger(blueprint.concurrency) || blueprint.concurrency < 1 || blueprint.concurrency > 8) throw new Error("Invalid Scenario Builder definition (maximum 100 steps; parallelism 1–8).");
+	].includes(blueprint.version)) throw new Error("Scenario Builder version must be an integer from 1 to 8.");
+	if (typeof blueprint.id !== "string" || !blueprint.id) throw new Error("Scenario ID is missing or invalid.");
+	if (typeof blueprint.name !== "string" || !blueprint.name.trim() || blueprint.name.length > 200) throw new Error("Scenario name must contain 1–200 characters.");
+	if (!Array.isArray(blueprint.steps)) throw new Error("Scenario steps must be an array.");
+	if (blueprint.steps.length > 100) throw new Error("A scenario supports at most 100 steps.");
+	if (!Number.isInteger(blueprint.concurrency) || blueprint.concurrency < 1 || blueprint.concurrency > 8) throw new Error("Scenario parallelism (concurrency) must be an integer from 1 to 8.");
 	if (blueprint.description !== void 0 && (typeof blueprint.description !== "string" || blueprint.description.length > 500)) throw new Error("Scenario descriptions are limited to 500 characters.");
 	if (blueprint.version < 3 && blueprint.connections !== void 0 && (!Array.isArray(blueprint.connections) || blueprint.connections.length)) throw new Error("Connections require Scenario Builder version 3.");
 	const ids = /* @__PURE__ */ new Set(), localIds = /* @__PURE__ */ new Set();
