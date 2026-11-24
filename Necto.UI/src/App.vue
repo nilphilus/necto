@@ -881,7 +881,6 @@ function removeScenario(id) {
           v-if="settingsOpen"
           id="settings-panel"
           class="work-area settings"
-          :class="{ 'settings-presets': settingsTab === 'presets' }"
           role="dialog"
           aria-modal="true"
           @keydown="trapSettingsFocus"
@@ -1445,7 +1444,7 @@ body { margin: 0; background: light-dark(#eef2ee, #101a16); }
   position: fixed;
   z-index: 4;
   inset: var(--app-gutter) var(--app-gutter) var(--app-gutter) auto;
-  width: min(28rem, calc(100% - 2 * var(--app-gutter)));
+  width: min(46rem, calc(100% - 2 * var(--app-gutter)));
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: .75rem;
@@ -1458,9 +1457,8 @@ body { margin: 0; background: light-dark(#eef2ee, #101a16); }
 .settings-header { position: sticky; top: 0; z-index: 3; padding: 1rem 0; background: var(--canvas); display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--line); }
 .settings h2 { margin: 0; }
 .settings h3 { margin: 0; font-size: 1rem; }
-.settings-presets { width: min(46rem, calc(100% - 2 * var(--app-gutter))); }
 @media (max-width: 630px) {
-  .settings.settings-presets { padding-inline: .85rem; }
+  .settings { padding-inline: .85rem; }
   .preset-layout { grid-template-columns: minmax(0, 1fr); }
   .preset-list { max-height: 9rem; }
   .preset-list button, .preset-create button { min-height: 2.75rem; }

@@ -81,70 +81,97 @@ async function loadDocument(event) {
 </script>
 <template>
   <section class="workspace-settings">
-    <ScenarioFolderSettings :folder="folder" />
-    <h3>Workspace</h3>
-    <p>
-      Transfer saved requests, scenarios, presets and API connections.
-      Authentication credentials and uploaded files are excluded. Sensitive
-      field names are removed.
-    </p>
-    <label
-      ><input v-model="includeBodies" type="checkbox" /> Include request bodies
-      and form values</label
-    >
-    <p v-if="includeBodies">
-      Review the exported file before sharing: arbitrary text and business data
-      may contain secrets.
-    </p>
-    <button type="button" @click="download">Export workspace</button>
-    <label
-      >Import workspace JSON<input
-        type="file"
-        accept=".json,application/json"
-        @change="inspect"
-    /></label>
-    <div v-if="preview">
-      <p v-if="unavailable">
-        {{ unavailable }} steps refer to operations outside the current catalog.
-        Enable the matching API before running them.
-      </p>
-      <TransferPreview :workspace="preview" @applied="imported" />
+    <div class="workspace-column">
+      <div class="workspace-card">
+        <ScenarioFolderSettings :folder="folder" />
+      </div>
+      <section class="workspace-card" aria-labelledby="workspace-transfer-title">
+        <h3 id="workspace-transfer-title">Workspace import and export</h3>
+        <p>
+          Transfer saved requests, scenarios, presets and API connections.
+          Authentication credentials and uploaded files are excluded. Sensitive
+          field names are removed.
+        </p>
+        <label class="workspace-checkbox">
+          <input v-model="includeBodies" type="checkbox" />
+          <span>Include request bodies and form values</span>
+        </label>
+        <p v-if="includeBodies">
+          Review the exported file before sharing: arbitrary text and business data
+          may contain secrets.
+        </p>
+        <button type="button" class="secondary" @click="download">Export workspace</button>
+        <label
+          >Import workspace JSON<input
+            type="file"
+            accept=".json,application/json"
+            @change="inspect"
+        /></label>
+        <div v-if="preview">
+          <p v-if="unavailable">
+            {{ unavailable }} steps refer to operations outside the current catalog.
+            Enable the matching API before running them.
+          </p>
+          <TransferPreview :workspace="preview" @applied="imported" />
+        </div>
+      </section>
     </div>
-    <h3>OpenAPI document</h3>
-    <p v-if="documentSource">Source: {{ documentSource.name }}<template v-if="documentSource.workspaceName"> · Workspace: {{ documentSource.workspaceName }}</template></p>
-    <button v-if="documentSource?.kind === 'import'" type="button" @click="restoreDocument">Return to server document</button>
-    <p>
-      Load JSON or YAML for this session. Supports Swagger 2.0 conversion,
-      OpenAPI 3.0/3.1 and common 3.2 operations. External references require
-      HTTP(S) access and CORS; credentials are omitted.
-    </p>
-    <label>Document association
-      <select v-model="documentAssociation">
-        <option value="separate">Open another API in a separate workspace</option>
-        <option value="current">Update the contract of the current API</option>
-      </select>
-    </label>
-    <template v-if="documentAssociation === 'separate'">
-      <label>API workspace name<input v-model="workspaceName" maxlength="200" placeholder="Defaults to file name" /></label>
-      <p>Drafts, saved requests, scenarios, presets and server choices are separate. Use the same workspace name when reopening this API.</p>
-    </template>
-    <p v-else>Keep this API’s workspace and credentials. Existing workflows will use the imported contract and its servers.</p>
-    <label
-      >Local API document<input
-        type="file"
-        accept=".json,.yaml,.yml"
-        @change="loadDocument"
-    /></label>
-    <p v-if="message" role="status">{{ message }}</p>
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
+    <section class="workspace-card" aria-labelledby="workspace-document-title">
+      <h3 id="workspace-document-title">OpenAPI document</h3>
+      <p v-if="documentSource">Source: {{ documentSource.name }}<template v-if="documentSource.workspaceName"> · Workspace: {{ documentSource.workspaceName }}</template></p>
+      <button v-if="documentSource?.kind === 'import'" type="button" @click="restoreDocument">Return to server document</button>
+      <p>
+        Load JSON or YAML for this session. Supports Swagger 2.0 conversion,
+        OpenAPI 3.0/3.1 and common 3.2 operations. External references require
+        HTTP(S) access and CORS; credentials are omitted.
+      </p>
+      <label>Document association
+        <select v-model="documentAssociation">
+          <option value="separate">Open in a separate workspace</option>
+          <option value="current">Update the current API contract</option>
+        </select>
+      </label>
+      <template v-if="documentAssociation === 'separate'">
+        <label>API workspace name<input v-model="workspaceName" maxlength="200" placeholder="Defaults to file name" /></label>
+        <p>Drafts, saved requests, scenarios, presets and server choices are separate. Use the same workspace name when reopening this API.</p>
+      </template>
+      <p v-else>Keep this API’s workspace and credentials. Existing workflows will use the imported contract and its servers.</p>
+      <label
+        >Local API document<input
+          type="file"
+          accept=".json,.yaml,.yml"
+          @change="loadDocument"
+      /></label>
+      <p v-if="message" role="status">{{ message }}</p>
+      <p v-if="error" class="error" role="alert">{{ error }}</p>
+    </section>
   </section>
 </template>
 <style scoped>
 .workspace-settings {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 0.85rem;
+}
+.workspace-column,
+.workspace-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.65rem;
-  padding: 1rem;
-  max-width: 50rem;
+  min-width: 0;
+}
+.workspace-card {
+  align-content: start;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: var(--surface);
+}
+@media (min-width: 680px) {
+  .workspace-settings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .workspace-settings h3,
 .workspace-settings p {
@@ -160,8 +187,17 @@ label {
   flex-wrap: wrap;
   align-items: center;
 }
-input[type='file'] {
+.workspace-checkbox {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+input, select {
+  min-width: 0;
   max-width: 100%;
+}
+input[type='file'], select {
+  width: 100%;
 }
 button {
   justify-self: start;
