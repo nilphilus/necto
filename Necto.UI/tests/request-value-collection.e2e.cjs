@@ -14,6 +14,8 @@ run(async ({ p, assert, calls }) => {
   await p.route('**/mappings', route => route.fulfill({ json: [
     { source: { operationId: 'Customer', property: 'id' },
       target: { operationId: 'Create', location: 'query', name: 'assetId' } },
+    { source: { operationId: 'Customer', property: 'id' },
+      target: { operationId: 'Create', location: 'body', name: 'customerId' } },
     { source: { operationId: 'Rows', eachItem: true, property: 'id' },
       target: { operationId: 'Create', location: 'header', name: 'tenant' } },
   ] }))
@@ -30,26 +32,28 @@ run(async ({ p, assert, calls }) => {
   const wizard = p.getByRole('dialog', { name: 'Find request values' })
   const send = wizard.getByRole('button', { name: 'Send request', exact: true })
   assert.equal(calls.length, 0)
+  await wizard.getByRole('checkbox', { name: /customerId body/ }).check()
   await send.click()
-  await wizard.getByLabel('Use response value for query assetId', { exact: true }).selectOption('0')
+  await wizard.getByRole('button', { name: 'Select object at []', exact: true }).click()
   await wizard.getByRole('button', { name: /Invoice rows/ }).click()
   await send.click()
-  await wizard.getByLabel('Use response value for header tenant', { exact: true }).selectOption('7')
-  await wizard.getByRole('status').filter({ hasText: '2 of 2 selected fields collected' }).waitFor()
+  await wizard.getByRole('button', { name: 'Select object at [7]', exact: true }).click()
+  await wizard.getByRole('status').filter({ hasText: '3 of 3 selected fields collected' }).waitFor()
   assert.equal(p.url(), route)
   assert.equal(await field('assetId').inputValue(), '')
   assert.equal(await field('tenant').inputValue(), '')
-  await wizard.getByRole('button', { name: 'Apply 2 values' }).click()
+  await wizard.getByRole('button', { name: 'Apply 3 values' }).click()
   await wizard.waitFor({ state: 'hidden' })
   assert.equal(await field('assetId').inputValue(), '42')
   assert.equal(await field('tenant').inputValue(), '7')
   assert.equal(await reference.inputValue(), 'Keep this draft')
+  assert.equal(JSON.parse(await p.locator('.request-pane textarea').first().inputValue()).customerId, 42)
   assert.deepEqual(calls.map(call => call.path), ['/customer', '/rows'])
 
   await trigger.click()
   await wizard.getByRole('checkbox', { name: /tenant header/ }).check()
   await send.click()
-  await wizard.getByLabel('Use response value for header tenant', { exact: true }).selectOption('3')
+  await wizard.getByRole('button', { name: 'Select object at [3]', exact: true }).click()
   await wizard.getByRole('button', { name: 'Cancel', exact: true }).click()
   await wizard.waitFor({ state: 'hidden' })
   assert.equal(await field('tenant').inputValue(), '7')

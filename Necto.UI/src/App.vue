@@ -1318,11 +1318,11 @@ function removeScenario(id) {
     <CollectValuesDialog ref="valueCollector" :operation="current?.operation" :session="current?.session"
       :workspace="workspaceIdentity(configuration)" :fields="collectableFields" :choices-for="choicesFor"
       :create-session="createDraft" :cancel-request="cancelRequest" :apply="applyRequestValues">
-      <template #default="{ operation, session }">
+      <template #default="{ operation, session, selectors, selectObject }">
         <OperationRunner :key="operation.key" :operation="operation" :session="session"
           :configuration="configuration" :values="valuesFor(operation)" :preset-colors="presetColors"
-          :default-preset-color="defaultPresetColor" :default-response-view="appearance.responseView"
-          :run="runInContext" :prepare="prepareRequest" :cancel="cancelRequest"
+          :default-preset-color="defaultPresetColor" default-response-view="preview" :selectors="selectors"
+          @select-response-object="selectObject" :run="runInContext" :prepare="prepareRequest" :cancel="cancelRequest"
           @inspect-openapi="trigger => inspectOpenApi(operation, trigger)" />
       </template>
     </CollectValuesDialog>
