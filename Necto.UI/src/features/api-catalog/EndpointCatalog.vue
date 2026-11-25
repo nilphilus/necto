@@ -1,4 +1,5 @@
 <script setup>
+import { moveThroughSearchResults } from '../workbench/searchKeyboard.js'
 import DescriptionHelp from '../workbench/DescriptionHelp.vue'
 import { computed, ref, watch } from 'vue'
 
@@ -14,6 +15,7 @@ const props = defineProps({
 const emit = defineEmits(['select-operation', 'toggle-external'])
 
 const filter = ref('')
+const searchInput = ref(null)
 const showPaths = defineModel('showPaths', { type: Boolean, default: false })
 const hideDeprecated = defineModel('hideDeprecated', { type: Boolean, default: false })
 const hasDeprecated = computed(() => props.groups.some(group => group.operations.some(operation => operation.deprecated)))
@@ -32,6 +34,13 @@ const visibleGroups = computed(() => props.groups.map((group, index) => ({
 
 watch(() => props.activeGroup, name => { if (name) expanded.value.add(name) }, { immediate: true })
 watch(query, () => collapsedMatches.value.clear())
+
+function navigateSearch(event) {
+  if (!query.value || !['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(event.key)) return
+  const results = [...event.currentTarget.querySelectorAll('.catalog-operation')]
+    .filter(button => button.getClientRects().length > 0)
+  moveThroughSearchResults(event, searchInput.value, results)
+}
 
 function isExpanded(name) {
   return query.value ? !collapsedMatches.value.has(name) : expanded.value.has(name)
@@ -52,7 +61,7 @@ function toggleGroup(name) {
 </script>
 
 <template>
-  <nav class="catalog" :class="{ compact }" aria-label="API endpoints">
+  <nav class="catalog" :class="{ compact }" aria-label="API endpoints" @keydown="navigateSearch">
     <header class="catalog-title-row">
       <h2 class="catalog-title">Endpoints</h2>
       <div class="catalog-options">
@@ -73,7 +82,7 @@ function toggleGroup(name) {
       <label><input type="checkbox" role="switch" :checked="showExternal" @change="$emit('toggle-external', $event.target.checked)"> External APIs ({{ externalCount }})</label>
       <small>{{ externalLoading ? 'Loading external services…' : showExternal ? 'Local + external services' : 'Local service only' }}</small>
     </div>
-    <input v-model="filter" type="search" aria-label="Find an endpoint" placeholder="Find an endpoint">
+    <input ref="searchInput" v-model="filter" type="search" aria-label="Find an endpoint" placeholder="Find an endpoint">
 
     <p v-if="!visibleGroups.length" role="status">
       {{ groups.length ? 'No matching endpoints.' : 'No endpoints in this document.' }}
