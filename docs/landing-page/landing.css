@@ -467,7 +467,7 @@ h1>span {
 }
 .product-tabs {
   display:grid;
-  grid-template-columns:repeat(5,minmax(0,1fr));
+  grid-template-columns:repeat(6,minmax(0,1fr));
   gap:5px;
   margin-bottom:17px;
   border-bottom:1px solid var(--line)
