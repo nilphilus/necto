@@ -19,6 +19,7 @@ import NectoSkeleton from './NectoSkeleton.vue'
 import { useCatalog } from './features/api-catalog/catalog.js'
 import OpenApiDocumentPicker from './features/api-catalog/OpenApiDocumentPicker.vue'
 import EndpointCatalog from './features/api-catalog/EndpointCatalog.vue'
+import OpenApiInspector from './features/openapi-inspector/OpenApiInspector.vue'
 import OperationRunner from './features/request-runner/OperationRunner.vue'
 import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
 import RequestSamples from './features/request-runner/RequestSamples.vue'
@@ -133,6 +134,21 @@ const chain = computed(() => {
 const currentIndex = computed(() => inspectedScenarioStep.value === null ? chain.value.length - 1 : Math.min(inspectedScenarioStep.value, chain.value.length - 1))
 const current = computed(() => chain.value[currentIndex.value])
 const authorizedCount = computed(() => { const api = authentication.apis.get(current.value?.operation.apiId ?? 'local'); return Object.keys(api?.credentials ?? {}).length + (api?.access ? 1 : 0) })
+const openApiInspector = ref(null)
+function inspectOpenApi(operation, trigger, fragment) {
+  const external = operation.apiId && operation.apiId !== 'local'
+    ? externalApis.contexts.value.find(api => api.id === operation.apiId)
+    : null
+  openApiInspector.value?.open({
+    document: external?.document ?? (operation.apiId && operation.apiId !== 'local' ? null : spec.value),
+    source: external?.name ?? (operation.apiId && operation.apiId !== 'local' ? operation.apiName :
+      documentSource.value.kind === 'import' ? documentSource.value.name :
+        openApiDocuments.value.find(document => document.url === configuration.value?.openApiUrl)?.name ?? documentSource.value.name),
+    method: operation.method.toLowerCase(),
+    path: operation.path,
+    fragment,
+  }, trigger)
+}
 const activeServerDocument = computed(() => documentSource.value.kind === 'server' ? configuration.value?.openApiUrl : undefined)
 async function switchOpenApiDocument(url) {
   if (scenarioBusy.value || url === activeServerDocument.value) return
@@ -1237,7 +1253,7 @@ function removeScenario(id) {
               </form>
             </dialog>
             <CaptureRequestsDialog ref="captureDialog" :scenarios="builderScenarios" :save="saveCapturedRequests" />
-            <OperationRunner :pin-next-by-default="appearance.pinNextRequests"
+            <OperationRunner @inspect-openapi="trigger => inspectOpenApi(current.operation, trigger)" :pin-next-by-default="appearance.pinNextRequests"
               :next-request-width="appearance.nextRequestWidth" :default-response-view="appearance.responseView" @capture-requests="captureRequests" :prepare="prepareRequest" :cancel="cancelRequest" :history="requestHistory" :configuration="configuration" :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :preset-colors="presetColors" :default-preset-color="defaultPresetColor" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" :parameter-choices="parameter => choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
               @choose-parameter="(location, choice) => choose(current.session, location, choice)" @edit-preset="editActivePreset"
               :value-sources="(location, name) => sourcesFor(current.operation, location, name)"
@@ -1275,6 +1291,7 @@ function removeScenario(id) {
         </div>
       </div>
     </template>
+    <OpenApiInspector ref="openApiInspector" />
   </main>
 </template>
 
