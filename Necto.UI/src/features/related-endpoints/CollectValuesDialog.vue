@@ -18,6 +18,8 @@ const activePosition = ref(0)
 const moreOpen = ref(false)
 const sourceQuery = ref('')
 const selectionFeedback = shallowRef(null)
+const rememberedChecks = new WeakMap()
+const priorChecks = shallowRef(null)
 const issue = ref('')
 let trigger
 
@@ -83,16 +85,20 @@ const response = computed(() => {
 })
 const selectionNote = computed(() => {
   const feedback = selectionFeedback.value
-  return feedback && feedback.result === response.value &&
-    JSON.stringify(feedback.path) === JSON.stringify(response.value?.selectedPath) ? feedback.text : ''
+  if (!feedback || feedback.result !== response.value ||
+      JSON.stringify(feedback.path) !== JSON.stringify(response.value?.selectedPath)) return ''
+  return [
+    feedback.chosen.length && `Collected: ${fieldNames(feedback.chosen)}`,
+    feedback.ambiguous.length && `Choose a value for: ${fieldNames(feedback.ambiguous)}`,
+  ].filter(Boolean).join(' · ')
 })
 function selectorsFor(field) {
   return field.sources.filter(item => item.operation.key === activeSourceKey.value).map(item => item.selector)
 }
 const selectors = computed(() => response.value && source.value
   ? source.value.fields.flatMap(selectorsFor) : [])
-function candidatesFor(field, path) {
-  const results = new Map([[activeSourceKey.value, [{ ...response.value, selectedPath: path }]]])
+function candidatesFor(field, path, key = activeSourceKey.value, result = response.value) {
+  const results = new Map([[key, [{ ...result, selectedPath: path }]]])
   return props.choicesFor(props.operation, field.location, field.name, results)
     .filter(choice => choice.name === field.name && choice.binding)
 }
@@ -100,6 +106,38 @@ const mappedFields = computed(() => source.value && response.value
   ? source.value.fields.map(field => ({ ...field, mapped: candidatesFor(field) }))
   : [])
 const foundFields = computed(() => mappedFields.value.filter(field => field.mapped.length))
+const unavailableFields = computed(() => response.value?.ok && !response.value.incomplete
+  ? mappedFields.value.filter(field => canCollect(field) && !field.mapped.length)
+  : [])
+function alternatives(field, key = activeSourceKey.value) {
+  return field.sources.filter(item => item.operation.key !== key)
+}
+function mappedPaths(field, key = activeSourceKey.value) {
+  return [...new Set(field.sources.filter(item => item.operation.key === key).map(item => item.path))].join(', ')
+}
+function checkKey(field, operationKey) {
+  return JSON.stringify([operationKey, field.key, field.sources
+    .filter(source => source.operation.key === operationKey)
+    .map(source => JSON.stringify([source.id, source.operation.configuration?.openApiUrl])).sort()])
+}
+function checkedFields(item) {
+  const key = item.operation.key
+  if (sourceSessions.get(key)?.result || sourceSessions.get(key)?.pending) return []
+  return item.fields.filter(field => priorChecks.value?.has(checkKey(field, key)))
+}
+function rememberChecks() {
+  const checks = new Set(priorChecks.value)
+  for (const [key, session] of sourceSessions) {
+    if (!session.result?.ok || session.result.incomplete || session.pending || session.resultStale) continue
+    for (const field of selectedFields.value) {
+      if (!field.sources.some(source => source.operation.key === key)) continue
+      const signature = checkKey(field, key)
+      if (candidatesFor(field, undefined, key, session.result).length) checks.delete(signature)
+      else checks.add(signature)
+    }
+  }
+  rememberedChecks.set(origin.value, { workspace: props.workspace, operation: props.operation, checks })
+}
 const choices = computed(() => mappedFields.value.filter(canCollect).map(field => {
   const selectedPath = response.value.selectedPath
   const matchesAtSelection = selectedPath ? candidatesFor(field, selectedPath) : []
@@ -150,18 +188,31 @@ function selectObject(path) {
       chosen.push(field)
     } else if (candidates.length > 1) ambiguous.push(field)
   }
-  const text = [
-    chosen.length && `Collected: ${fieldNames(chosen)}`,
-    ambiguous.length && `Choose a value for: ${fieldNames(ambiguous)}`,
-  ].filter(Boolean).join(' · ')
-  selectionFeedback.value = { result, path, text }
+  selectionFeedback.value = { result, path, chosen, ambiguous }
+}
+function focusElement(element) {
+  element?.scrollIntoView({ block: 'nearest' })
+  element?.focus({ preventScroll: true })
+}
+async function focusSources(field, exclude) {
+  focusedField.value = field.key
+  sourceQuery.value = ''
+  const keys = [...new Set(field.sources.map(item => item.operation.key))]
+  if (!exclude && keys.length === 1) {
+    const item = sourceOptions.value.find(item => item.operation.key === keys[0])
+    if (item) activate(item)
+    await nextTick()
+    focusElement(dialog.value.querySelector('.source-workbench .request-footer button[type="submit"]'))
+    return
+  }
+  moreOpen.value = Boolean(exclude)
+  await nextTick()
+  const button = [...dialog.value.querySelectorAll('[data-source-key]')]
+    .find(element => element.dataset.sourceKey !== exclude)
+  focusElement(button)
 }
 function focusMissingField() {
-  const key = missingFields.value[0]?.key
-  const row = [...dialog.value.querySelectorAll('[data-value-field]')]
-    .find(element => element.dataset.valueField === key)
-  row?.scrollIntoView({ block: 'nearest' })
-  row?.querySelector('input')?.focus({ preventScroll: true })
+  if (missingFields.value[0]) void focusSources(missingFields.value[0])
 }
 
 function activate(item) {
@@ -183,6 +234,9 @@ async function open(element, location, name) {
   if (!props.session || props.session.pending || !props.fields.length || dialog.value.open) return
   trigger = element
   origin.value = props.session
+  const previous = rememberedChecks.get(props.session)
+  priorChecks.value = previous && previous.workspace === props.workspace && previous.operation === props.operation
+    ? previous.checks : null
   issue.value = ''
   focusedField.value = ''
   editingField.value = ''
@@ -205,6 +259,7 @@ function close() {
   selectionFeedback.value = null
   selected.clear()
   origin.value = null
+  priorChecks.value = null
   trigger?.focus()
   trigger = null
 }
@@ -221,13 +276,21 @@ function toggle(field, enabled) {
 
 function collect(field, event) {
   const candidate = field.candidates[Number(event.target.value)]
-  if (event.target.value && candidate) collectValue(field, candidate)
+  if (event.target.value && candidate) {
+    const feedback = selectionFeedback.value
+    collectValue(field, candidate)
+    if (feedback && feedback.result === response.value && feedback.ambiguous.some(item => item.key === field.key)) {
+      selectionFeedback.value = { ...feedback, chosen: [...feedback.chosen, field],
+        ambiguous: feedback.ambiguous.filter(item => item.key !== field.key) }
+    }
+  }
   event.target.value = ''
 }
 function apply() {
   if (!origin.value || origin.value !== props.session || props.session.pending || !count.value) return
   try {
     props.apply(origin.value, selectedFields.value.flatMap(field => collected.has(field.key) ? [collected.get(field.key)] : []))
+    rememberChecks()
     dialog.value.close()
   } catch (error) { issue.value = error.message }
 }
@@ -250,7 +313,7 @@ defineExpose({ open })
         <aside>
           <fieldset>
             <legend>Fields to fill</legend>
-            <div v-for="field in fields" :key="field.key" class="field-row" :data-value-field="field.key">
+            <div v-for="field in fields" :key="field.key" class="field-row">
               <label class="field-choice">
                 <input type="checkbox" :checked="selected.has(field.key)" @change="toggle(field, $event.target.checked)">
                 <span><code>{{ field.name }}</code> <small>{{ field.location }}</small>
@@ -278,10 +341,11 @@ defineExpose({ open })
               aria-label="Filter source endpoints" placeholder="Filter by name, method or path">
             <p v-if="moreOpen && sourceQuery.trim() && !sourceChoices.length" class="muted" role="status">No matching sources.</p>
             <button v-for="item in sourceChoices" :key="item.operation.key" type="button" class="secondary source-option"
-              :aria-pressed="activeSourceKey === item.operation.key" @click="activate(item)">
+              :data-source-key="item.operation.key" :aria-pressed="activeSourceKey === item.operation.key" @click="activate(item)">
               <strong>{{ item.operation.name }}</strong>
               <code>{{ item.operation.method }} {{ item.operation.path }}</code>
               <small>{{ item.operation.apiName }}</small>
+              <small v-if="checkedFields(item).length">Checked · no values found for {{ fieldNames(checkedFields(item)) }}</small>
               <small>Can fill: {{ fieldNames(item.missing.length ? item.missing : item.fields) }}</small>
             </button>
             <button v-if="hiddenSourceCount" class="secondary" type="button" :aria-expanded="moreOpen" @click="moreOpen = !moreOpen">
@@ -299,10 +363,16 @@ defineExpose({ open })
             <small role="status">
               <template v-if="sourceSession.pending">Checking response…</template>
               <template v-else-if="response?.incomplete">Response incomplete.</template>
+              <template v-else-if="!response && checkedFields(source).length">Checked · no values found for {{ fieldNames(checkedFields(source)) }}</template>
               <template v-else-if="!response">Can fill: {{ fieldNames(source.fields) }}</template>
               <template v-else-if="foundFields.length">Values found: {{ fieldNames(foundFields) }}</template>
               <template v-else>No mapped values found in this response.</template>
             </small>
+            <div v-for="field in unavailableFields" :key="field.key" class="unavailable-field">
+              <small><code>{{ field.name }}</code> · expected <code>{{ mappedPaths(field) }}</code></small>
+              <button v-if="alternatives(field).length" type="button" class="secondary"
+                @click="focusSources(field, activeSourceKey)">Other sources for {{ field.name }}</button>
+            </div>
           </header>
           <div v-if="choices.some(field => field.candidates.length)" class="response-values" aria-label="Mapped response values">
             <h3>Choose values from the response</h3>
@@ -363,6 +433,8 @@ fieldset { border: 1px solid var(--line); border-radius: .45rem; margin: 0 0 .75
 .source-option[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
 .active-source { position: sticky; top: 0; z-index: 2; display: grid; gap: .2rem; padding: .5rem .65rem; margin-bottom: .6rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--surface); }
 .active-source > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .5rem; }
+.unavailable-field { display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem; }
+.unavailable-field button { padding: .15rem .35rem; font-size: .75rem; }
 .active-source small { color: var(--muted); }
 h2, h3 { margin: 0 0 .25rem; font-size: 1rem; }
 .response-values { display: grid; gap: .4rem; border: 1px solid var(--line); border-radius: .45rem; padding: .6rem; margin-bottom: .6rem; background: var(--subtle); }

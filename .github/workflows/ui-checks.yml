@@ -29,6 +29,6 @@ jobs:
       - name: Verify core browser workflows
         run: |
           export PLAYWRIGHT_MODULE="$RUNNER_TEMP/necto-browser/node_modules/playwright"
-          for flow in openapi-content request-value-collection openapi-inspector scenario-intuitive-flow scenario-library scenario-local-steps scenario-folder scenario-edge-routing; do
+          for flow in openapi-content request-value-collection request-value-next-actions openapi-inspector scenario-intuitive-flow scenario-library scenario-local-steps scenario-folder scenario-edge-routing; do
             node "Necto.UI/tests/$flow.e2e.cjs"
           done
