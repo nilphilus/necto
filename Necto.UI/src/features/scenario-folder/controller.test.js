@@ -92,3 +92,43 @@ test('a team file can be imported while the remembered folder is being restored'
   assert.equal(folder.error,'')
  } finally {scope.stop()}
 })
+
+test('a manual reconnect can replace a stalled passive permission check', async () => {
+ const root = memoryFolder()
+ let finishPassiveCheck
+ root.queryPermission = () => new Promise(resolve => { finishPassiveCheck = resolve })
+ const f = await fixture({remembered: root})
+ try {
+  assert.equal(f.folder.connected, true)
+  assert.equal(f.folder.restoring, true)
+  const reconnect = f.folder.reload()
+  assert.equal(root.permissionRequests, 1)
+  assert.ok(await reconnect)
+  assert.equal(f.folder.ready, true)
+  assert.match(f.folder.scanSummary, /0 scenario files found/)
+  finishPassiveCheck('denied')
+  await settle()
+  assert.equal(f.folder.ready, true)
+  assert.equal(f.folder.restoring, false)
+ } finally { f.scope.stop() }
+})
+
+test('reload reports new and changed files and lists valid definitions alongside warnings', async () => {
+ const f = await fixture()
+ try {
+  await f.folder.choose()
+  const directory = await scenarioDirectory(f.root, true)
+  const source = draft()
+  directory.files.set('broken.necto.json', 'invalid JSON')
+  directory.files.set('valid.necto.json', serializeShared('builder', source))
+  assert.ok(await f.folder.reload())
+  assert.match(f.folder.scanSummary, /1 new/)
+  assert.equal(f.folder.entries.length, 1)
+  assert.match(f.folder.scanWarnings[0], /broken\.necto\.json/)
+  directory.files.set('valid.necto.json', serializeShared('builder', { ...source, name: 'Edited' }))
+  assert.ok(await f.folder.reload())
+  assert.match(f.folder.scanSummary, /1 changed/)
+  assert.ok(await f.folder.reload())
+  assert.match(f.folder.scanSummary, /No changes/)
+ } finally { f.scope.stop() }
+})

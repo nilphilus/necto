@@ -13,12 +13,37 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
  const platform=options.platform??globalThis,storage=options.storage??platform.localStorage,handles=options.handles??folderHandles
  const secureContext=platform.isSecureContext!==false
  const supported=secureContext&&typeof platform.showDirectoryPicker==='function'
- const state=reactive({supported,secureContext,connected:false,ready:false,restoring:false,pending:false,name:'',path:'',entries:[],error:'',notice:'',remembered:false})
+ const state=reactive({supported,secureContext,connected:false,ready:false,restoring:false,pending:false,name:'',path:'',entries:[],scanSummary:'',scanWarnings:[],error:'',notice:'',remembered:false})
  const key=computed(()=>workspaceIdentity(toValue(configuration)))
  let directory,epoch=0,baselines=new Map(), downloadNoticeTimer
  onScopeDispose(()=>{clearTimeout(downloadNoticeTimer);epoch++;directory=undefined;baselines.clear()})
  const assertCurrent=(token,current)=>{if(token!==epoch||current!==key.value)throw new Error('The API workspace changed. Reopen the folder for the current API.')}
- async function permission(handle,prompt=false){if(!handle.queryPermission)return;let value=await handle.queryPermission({mode:'readwrite'});if(value!=='granted'&&prompt)value=await handle.requestPermission({mode:'readwrite'});if(value!=='granted')throw new Error('Folder access needs permission. Use Reconnect to allow access again.')}
+ const permissionOptions = { mode: 'readwrite' }
+ async function permission(handle, prompt = false, reconnect = false) {
+  if (!handle.queryPermission) return
+  let value = reconnect
+   ? await handle.requestPermission(permissionOptions)
+   : await handle.queryPermission(permissionOptions)
+  if (value !== 'granted' && prompt && !reconnect) value = await handle.requestPermission(permissionOptions)
+  if (value !== 'granted') throw new Error('Folder access needs permission. Use Reconnect folder to allow access again.')
+ }
+ async function updateFolderList(handle, guard, compare = false) {
+  const warnings = []
+  const entries = await scanDirectory(handle, { onFileError: message => warnings.push(message) })
+  guard()
+  const previous = new Map(state.entries.map(entry => [entry.name, entry.text]))
+  const added = entries.filter(entry => !previous.has(entry.name)).length
+  const changed = entries.filter(entry => previous.has(entry.name) && previous.get(entry.name) !== entry.text).length
+  const currentNames = new Set(entries.map(entry => entry.name))
+  const noLongerListed = state.entries.filter(entry => !currentNames.has(entry.name)).length
+  const changes = [added && `${added} new`, changed && `${changed} changed`, noLongerListed && `${noLongerListed} no longer listed`].filter(Boolean)
+  state.scanSummary = compare
+   ? (changes.length ? `Folder checked: ${changes.join(', ')}.` : 'Folder checked. No changes to the list.')
+   : `Folder checked. ${entries.length} scenario ${entries.length === 1 ? 'file' : 'files'} found.`
+  state.scanWarnings = warnings
+  state.entries = entries
+  state.ready = true
+ }
  async function perform(action,{requiresFolder=true}={}){
   if(state.pending||(requiresFolder&&state.restoring))return null
   clearTimeout(downloadNoticeTimer)
@@ -29,7 +54,7 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
   try{return await action(()=>assertCurrent(token,current),current)}catch(error){if(token===epoch&&error.name!=='AbortError')state.error=error.message;return null}finally{state.pending=false}
  }
  watch(key,async current=>{
-  const token=++epoch;directory=undefined;baselines=new Map();Object.assign(state,{connected:false,ready:false,name:'',path:'',entries:[],error:'',notice:'',remembered:false,restoring:false})
+  const token=++epoch;directory=undefined;baselines=new Map();Object.assign(state,{connected:false,ready:false,name:'',path:'',entries:[],scanSummary:'',scanWarnings:[],error:'',notice:'',remembered:false,restoring:false})
   if(!current||!supported)return
   state.restoring=true
   try{
@@ -37,7 +62,8 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
    directory=remembered;Object.assign(state,{connected:true,remembered:true,name:remembered.name,path:scenarioFolderPath(remembered)})
    // Restoring a preference never prompts for filesystem access.
    if(remembered.queryPermission&&await remembered.queryPermission({mode:'readwrite'})!=='granted')return
-   const entries=await scanDirectory(remembered);assertCurrent(token,current);state.entries=entries;state.ready=true
+   if (token !== epoch) return
+   await updateFolderList(remembered, () => assertCurrent(token, current))
   }catch(error){if(token===epoch&&directory)state.error=error.message}
   finally{if(token===epoch)state.restoring=false}
  },{immediate:true})
@@ -45,20 +71,28 @@ export function useScenarioFolder(configuration,operations,locked,options={}) {
  async function choose(){stopRestore();return perform(async(guard,current)=>{
   if(!supported)throw new Error('This browser cannot select local folders. Import or download team files instead.')
   const selected=await platform.showDirectoryPicker({id:'necto-scenarios',mode:'readwrite'});guard();await permission(selected,true);guard()
-  directory=selected;baselines.clear();Object.assign(state,{connected:true,ready:false,name:selected.name,path:scenarioFolderPath(selected),entries:[]})
+  directory=selected;baselines.clear();Object.assign(state,{connected:true,ready:false,name:selected.name,path:scenarioFolderPath(selected),entries:[],scanSummary:'',scanWarnings:[]})
   try{await handles.set(current,selected);guard();state.remembered=true}catch(error){guard();state.remembered=false;state.notice='Folder connected for this session; this browser could not remember it.'}
-  const entries=await scanDirectory(selected);guard();state.entries=entries;state.ready=true
+  await updateFolderList(selected, guard)
   state.notice||='Folder connected. After git pull, use Reload folder.'
   return true
  })}
- async function reload(){return perform(async guard=>{
-  if(!directory)throw new Error('Choose a scenario folder first.')
-  await permission(directory,true);guard();state.ready=false
-  const entries=await scanDirectory(directory);guard();state.entries=entries;state.ready=true;state.notice='Folder reloaded. Import a file to update its saved browser definition.';return true
- })}
+ async function reload() {
+  if (directory) stopRestore()
+  return perform(async guard => {
+   if (!directory) throw new Error('Choose a scenario folder first.')
+   const compare = Boolean(state.scanSummary)
+   state.ready = false
+   // Request permission before another await can consume the click's activation.
+   await permission(directory, true, true)
+   guard()
+   await updateFolderList(directory, guard, compare)
+   return true
+  })
+ }
  async function disconnect(){stopRestore();return perform(async(guard,current)=>{
   let forgotten=true;try{await handles.remove(current)}catch{forgotten=false}
-  guard();directory=undefined;baselines.clear();Object.assign(state,{connected:false,ready:false,name:'',path:'',entries:[],remembered:false});state.notice=forgotten?'Folder disconnected. Files and browser scenarios were kept.':'Disconnected for this session. This browser could not remove the remembered folder preference. Files were kept.';return true
+  guard();directory=undefined;baselines.clear();Object.assign(state,{connected:false,ready:false,name:'',path:'',entries:[],scanSummary:'',scanWarnings:[],remembered:false});state.notice=forgotten?'Folder disconnected. Files and browser scenarios were kept.':'Disconnected for this session. This browser could not remove the remembered folder preference. Files were kept.';return true
  })}
  function importDefinition(file,current,guard) {
   return collections[file.kind].importDefinition({

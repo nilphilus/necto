@@ -19,6 +19,7 @@ require('./qa-fixture.cjs').run(async({p,assert,builder,add,save,calls,closeEdit
  const library=p.locator('.folder-library:visible')
  await library.locator('summary').click()
  await library.getByRole('button',{name:'Reload folder',exact:true}).click();await waitIdle()
+ await library.getByRole('status').filter({hasText:'Folder checked: 1 changed.'}).waitFor()
  await reopenBuilder()
  await p.getByRole('button',{name:'Export to shared workspace folder',exact:true}).click();await p.getByRole('alert').filter({hasText:'changed on disk'}).waitFor();assert.equal(JSON.parse((await readFiles())[0].text).scenario.name,'Teammate edit')
  await scenarioList()
