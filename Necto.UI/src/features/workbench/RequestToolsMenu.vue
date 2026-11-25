@@ -150,6 +150,7 @@ onUnmounted(() => {
     ref="advanced"
     v-bind="props"
     hide-trigger
+    @inspect-openapi="emit('inspect-openapi', $event)"
     @closed="target => (target ?? trigger)?.focus()" @edit-request="emit('edit-request')" @capture-requests="emit('capture-requests', $event)"
   />
 </template>

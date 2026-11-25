@@ -8,6 +8,10 @@ import { pointerParts } from './pointers.js'
 import { normalizeBodyFieldNames } from './bodyFieldNames.js'
 import StepInputs from './StepInputs.vue'
 const props=defineProps({step:Object,operation:Object,steps:Array,operations:Array,variables:Array,results:Array,disabled:Boolean})
+const emit = defineEmits(['inspect-openapi'])
+function inspectBody(event, path) {
+  emit('inspect-openapi', event.currentTarget, { kind: 'request-body', mediaType: media.value?.[0], pointer: path })
+}
 function rawMode(){if(Object.keys(props.step.request.bodyFieldEdits??{}).length&&!window.confirm('Discard unfinished number edits and open the last valid JSON?'))return;delete props.step.request.bodyFieldEdits;selectedPath.value = null;mode.value='raw'}
 const mode=ref('fields'),expanded=ref(false),dialog=ref(null),dialogHost=ref(null)
 async function expand(){dialog.value.showModal();expanded.value=true;await nextTick()}
@@ -86,7 +90,7 @@ provide(BODY_VALUE,computed(()=>parsed.value.value))
 </script>
 <template>
  <section class="scenario-body-editor" aria-label="Request body schema">
-  <header><h4>Request body</h4><div v-if="json" role="group" aria-label="Body editing mode"><button type="button" class="secondary" :aria-pressed="mode==='fields'" @click="mode='fields'">JSON builder</button><button type="button" class="secondary" :aria-pressed="mode==='raw'" @click="rawMode">Raw JSON</button><button type="button" class="secondary" @click="expand">Expand body editor</button></div></header>
+  <header><h4>Request body</h4><div><button type="button" class="secondary" @click="inspectBody($event)">Inspect in OpenAPI</button><div v-if="json" role="group" aria-label="Body editing mode"><button type="button" class="secondary" :aria-pressed="mode==='fields'" @click="mode='fields'">JSON builder</button><button type="button" class="secondary" :aria-pressed="mode==='raw'" @click="rawMode">Raw JSON</button><button type="button" class="secondary" @click="expand">Expand body editor</button></div></div></header>
   <Teleport :disabled="!expanded" :to="dialogHost??'body'">
    <div class="body-editor-content">
     <p v-if="casingConflict" class="error" role="alert">{{ casingConflict }}</p>
@@ -134,7 +138,10 @@ provide(BODY_VALUE,computed(()=>parsed.value.value))
        aria-label="Configure body field">
        <header>
          <div class="field-panel-title"><h4>Configure field</h4><code>{{ selectedPath || '(whole body)' }}</code></div>
-         <button type="button" class="secondary" @click="closeField">Back to body</button>
+         <div class="field-inspector-actions">
+           <button type="button" class="secondary" @click="inspectBody($event, selectedPath)">Inspect field in OpenAPI</button>
+           <button type="button" class="secondary" @click="closeField">Back to body</button>
+         </div>
        </header>
        <p v-if="expectedTypes" class="body-guidance">Expected type · {{ expectedTypes }}</p>
        <StepInputs :key="selectedPath" :step="step" :operation="operation" :steps="steps" :operations="operations"
@@ -165,5 +172,6 @@ provide(BODY_VALUE,computed(()=>parsed.value.value))
   .editing-field .body-tree { display: none; }
 }
 
-.raw-json-label { display:grid; gap:.35rem; font-size:.75rem; }.raw-json-label textarea { width:100%; min-width:0; font: .75rem/1.5 ui-monospace,Consolas,monospace; }.body-editor-content { container-type:inline-size; }.body-editor-dialog { width:min(64rem,calc(100% - 2rem)); max-height:85dvh; padding:0; overflow:hidden; border:1px solid var(--line); border-radius:.7rem; background:var(--surface); color:inherit; }.body-editor-dialog::backdrop { background:#17342640; }.dialog-shell { display:flex; flex-direction:column; max-height:85dvh; }.dialog-shell > header { padding:.85rem 1rem; border-bottom:1px solid var(--line); flex:none; }.dialog-shell h3 { margin:0; font-size:1rem; }.dialog-host { overflow:auto; min-height:0; padding:0 1rem 1rem; }.scenario-body-editor { border-top:1px solid var(--line); margin-top:.8rem; padding-top:.7rem; min-width:0; }header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem; }h4 { margin:0; font-size:.85rem; }header > div { display:flex; gap:.3rem; font-size:.7rem; }header [aria-pressed=true] { background:var(--accent-soft); color:var(--accent); border-color:var(--accent); }.body-guidance { color:var(--muted); font-size:.7rem; line-height:1.5; }.raw-body { border:0; padding:0; min-width:0; margin-top:.6rem; }.advanced-body-bindings { font-size:.75rem; margin:.7rem 0; }summary { cursor:pointer; margin-bottom:.5rem; }.error { font-size:.75rem; }
+[aria-label="Body editing mode"], .field-inspector-actions { display: flex; flex-wrap: wrap; gap: .3rem; }
+.raw-json-label { display:grid; gap:.35rem; font-size:.75rem; }.raw-json-label textarea { width:100%; min-width:0; font: .75rem/1.5 ui-monospace,Consolas,monospace; }.body-editor-content { container-type:inline-size; }.body-editor-dialog { width:min(64rem,calc(100% - 2rem)); max-height:85dvh; padding:0; overflow:hidden; border:1px solid var(--line); border-radius:.7rem; background:var(--surface); color:inherit; }.body-editor-dialog::backdrop { background:#17342640; }.dialog-shell { display:flex; flex-direction:column; max-height:85dvh; }.dialog-shell > header { padding:.85rem 1rem; border-bottom:1px solid var(--line); flex:none; }.dialog-shell h3 { margin:0; font-size:1rem; }.dialog-host { overflow:auto; min-height:0; padding:0 1rem 1rem; }.scenario-body-editor { border-top:1px solid var(--line); margin-top:.8rem; padding-top:.7rem; min-width:0; }header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem; }h4 { margin:0; font-size:.85rem; }header > div { display:flex; flex-wrap:wrap; gap:.3rem; font-size:.7rem; }header [aria-pressed=true] { background:var(--accent-soft); color:var(--accent); border-color:var(--accent); }.body-guidance { color:var(--muted); font-size:.7rem; line-height:1.5; }.raw-body { border:0; padding:0; min-width:0; margin-top:.6rem; }.advanced-body-bindings { font-size:.75rem; margin:.7rem 0; }summary { cursor:pointer; margin-bottom:.5rem; }.error { font-size:.75rem; }
 </style>

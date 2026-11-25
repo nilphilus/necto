@@ -19,7 +19,7 @@ const props = defineProps({
   hideTrigger: Boolean,
   prepare: Function
 })
-const emit = defineEmits(['closed', 'edit-request', 'capture-requests'])
+const emit = defineEmits(['closed', 'edit-request', 'capture-requests', 'inspect-openapi'])
 const closeTarget = ref(null)
 function restoreFocus() { const target = closeTarget.value?.isConnected ? closeTarget.value : trigger.value; closeTarget.value = null; target?.focus(); emit('closed', target) }
 const requestedSection = ref('Checks')
@@ -148,6 +148,7 @@ function resetServer() {
     <section v-if="tab === 'Contract'" :id="sectionId('Contract')" role="region" aria-label="Contract" tabindex="0">
 
       <h3>{{ operation.summary || operation.name }}</h3>
+      <button type="button" class="secondary" @click="emit('inspect-openapi', $event.currentTarget)">Inspect in OpenAPI</button>
       <MarkdownText :text="operation.description" />
       <ContractPanel :operation="operation" :session="session" @use-example="useExample" /><p v-if="error" role="alert" class="error">{{ error }}</p>
     </section>

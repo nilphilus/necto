@@ -49,7 +49,7 @@ const props = defineProps({
   busy: Boolean,
   folder: Object,
 })
-const emit = defineEmits(['back', 'folder-settings', 'activate-preset'])
+const emit = defineEmits(['back', 'folder-settings', 'activate-preset', 'inspect-openapi'])
 const store = props.store
 const { draft, saved, dirty, error, notice, execution, pending, questions } = store
 const nextRequest = ref(null)
@@ -1146,6 +1146,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
               <ScenarioBodyEditor
                 ref="bodyEditor"
                 v-if="operation?.requestBody"
+                @inspect-openapi="(trigger, fragment) => emit('inspect-openapi', operation, trigger, fragment)"
                 :key="selected.id"
                 :step="selected"
                 :operation="operation"
