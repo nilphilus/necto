@@ -13,6 +13,8 @@ const collected = reactive(new Map())
 const sourceSessions = reactive(new Map())
 const activeSourceKey = ref('')
 const focusedField = ref('')
+const editingField = ref('')
+const activePosition = ref(0)
 const moreOpen = ref(false)
 const issue = ref('')
 let trigger
@@ -32,7 +34,7 @@ const sourceOptions = computed(() => {
   return [...groups.values()]
 })
 const rankedSources = computed(() => sourceOptions.value.map(item => {
-  const missing = item.fields.filter(field => !collected.has(field.key))
+  const missing = item.fields.filter(field => canCollect(field))
   const declared = missing.filter(field => field.sources.some(source =>
     source.operation.key === item.operation.key && source.origin === 'openapi')).length
   const session = sourceSessions.get(item.operation.key)
@@ -49,10 +51,17 @@ const recommendedSources = computed(() => {
     for (const field of item.missing) covered.add(field.key)
   }
   const active = rankedSources.value.find(item => item.operation.key === activeSourceKey.value)
-  if (active && !recommended.includes(active)) recommended.unshift(active)
+  if (active && !recommended.includes(active)) recommended.push(active)
   return recommended
 })
-const sourceChoices = computed(() => moreOpen.value ? rankedSources.value : recommendedSources.value)
+const sourceChoices = computed(() => {
+  const options = moreOpen.value ? rankedSources.value : recommendedSources.value
+  const active = options.find(item => item.operation.key === activeSourceKey.value)
+  if (!active) return options
+  const ordered = options.filter(item => item !== active)
+  ordered.splice(activePosition.value, 0, active)
+  return ordered
+})
 const hiddenSourceCount = computed(() => rankedSources.value.length - recommendedSources.value.length)
 const filteredField = computed(() => selectedFields.value.find(field => field.key === focusedField.value))
 const source = computed(() => sourceOptions.value.find(item => item.operation.key === activeSourceKey.value))
@@ -74,7 +83,7 @@ function candidatesFor(field, path) {
 }
 const choices = computed(() => {
   if (!source.value || !response.value) return []
-  return source.value.fields.map(field => {
+  return source.value.fields.filter(canCollect).map(field => {
     const selectedPath = response.value.selectedPath
     const matchesAtSelection = selectedPath ? candidatesFor(field, selectedPath) : []
     const objectPaths = selectorsFor(field)
@@ -83,19 +92,39 @@ const choices = computed(() => {
     return { ...field, candidates: matchesAtSelection.length > 1 ? matchesAtSelection : direct }
   })
 })
+function canCollect(field) {
+  return !collected.has(field.key) || editingField.value === field.key
+}
 function collectValue(field, candidate) {
-  collected.set(field.key, { location: field.location, name: field.name, value: candidate.value })
+  collected.set(field.key, {
+    location: field.location, name: field.name, value: candidate.value, source: source.value.operation.name,
+  })
+  if (editingField.value === field.key) {
+    editingField.value = ''
+    focusedField.value = ''
+  }
+}
+function changeValue(field) {
+  const cancel = editingField.value === field.key
+  editingField.value = cancel ? '' : field.key
+  focusedField.value = cancel ? '' : field.key
+  moreOpen.value = false
+}
+function removeValue(field) {
+  collected.delete(field.key)
+  if (editingField.value === field.key) editingField.value = ''
 }
 function selectObject(path) {
   if (!source.value || !response.value) return
   for (const field of source.value.fields) {
     const candidates = candidatesFor(field, path)
-    if (!collected.has(field.key) && candidates.length === 1) collectValue(field, candidates[0])
+    if (canCollect(field) && candidates.length === 1) collectValue(field, candidates[0])
   }
 }
 
 function activate(item) {
   const key = item.operation.key
+  activePosition.value = Math.max(0, sourceChoices.value.findIndex(option => option.operation.key === key))
   if (!sourceSessions.has(key)) sourceSessions.set(key, props.createSession(item.operation))
   activeSourceKey.value = key
 }
@@ -114,6 +143,8 @@ async function open(element) {
   origin.value = props.session
   issue.value = ''
   focusedField.value = ''
+  editingField.value = ''
+  activePosition.value = 0
   moreOpen.value = false
   selected.clear()
   for (const field of props.fields) if (field.missing) selected.add(field.key)
@@ -136,7 +167,7 @@ function toggle(field, enabled) {
   if (enabled) selected.add(field.key)
   else {
     selected.delete(field.key)
-    collected.delete(field.key)
+    removeValue(field)
     if (focusedField.value === field.key) focusedField.value = ''
   }
   issue.value = ''
@@ -177,10 +208,17 @@ defineExpose({ open })
               <label class="field-choice">
                 <input type="checkbox" :checked="selected.has(field.key)" @change="toggle(field, $event.target.checked)">
                 <span><code>{{ field.name }}</code> <small>{{ field.location }}</small>
-                  <small v-if="collected.has(field.key)" class="collected-value">Collected · {{ label(collected.get(field.key)) }}</small>
+                  <small v-if="collected.has(field.key)" class="collected-value">Collected · {{ label(collected.get(field.key)) }} · {{ collected.get(field.key).source }}</small>
                 </span>
               </label>
-              <button v-if="selected.has(field.key)" class="secondary field-filter" type="button"
+              <div v-if="collected.has(field.key)" class="field-actions">
+                <button class="secondary field-filter" type="button"
+                  :aria-label="(editingField === field.key ? 'Cancel change for ' : 'Change ') + field.location + ' ' + field.name"
+                  @click="changeValue(field)">{{ editingField === field.key ? 'Cancel change' : 'Change' }}</button>
+                <button class="secondary field-filter" type="button" :aria-label="'Remove ' + field.location + ' ' + field.name"
+                  @click="removeValue(field)">Remove</button>
+              </div>
+              <button v-else-if="selected.has(field.key)" class="secondary field-filter" type="button"
                 :aria-label="'Sources for ' + field.location + ' ' + field.name" :aria-pressed="focusedField === field.key"
                 @click="focusedField = focusedField === field.key ? '' : field.key; moreOpen = false">Sources</button>
             </div>
@@ -242,7 +280,8 @@ defineExpose({ open })
 .collect-workspace { display: grid; grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr); gap: .8rem; padding: .8rem; }
 aside, .source-workbench { min-width: 0; overflow-wrap: anywhere; }
 fieldset { border: 1px solid var(--line); border-radius: .45rem; margin: 0 0 .75rem; padding: .5rem; }
-.field-row { display: flex; align-items: flex-start; justify-content: space-between; gap: .25rem; }
+.field-row { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .25rem; }
+.field-actions { display: flex; flex-wrap: wrap; gap: .2rem; margin: 0 0 .25rem auto; }
 .field-filter, .source-reset { padding: .15rem .35rem; font-size: .72rem; }
 .source-reset { margin-bottom: .35rem; }
 .field-filter[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
