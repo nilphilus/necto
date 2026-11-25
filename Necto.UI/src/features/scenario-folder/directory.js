@@ -17,17 +17,24 @@ export async function readScenarioFile(directory,name) {
  if(file.size>FILE_LIMIT)throw new Error(`${name}: file exceeds 2 MiB.`)
  return {text:await file.text(),size:file.size}
 }
-export async function scanDirectory(root) {
+export async function scanDirectory(root, { onFileError } = {}) {
  const directory=await scenarioDirectory(root)
  if(!directory)return []
- const entries=[],ids=new Set();let total=0,visited=0
+ const entries=[],ids=new Set();let total=0,visited=0,managed=0
  for await(const [name,handle] of directory.entries()){
   if(++visited>1000)throw new Error('The scenario subfolder has too many entries. Keep it dedicated to scenario files.')
   if(handle.kind!=='file'||!name.endsWith(FILE_SUFFIX))continue
-  if(entries.length>=100)throw new Error('A scenario folder supports at most 100 managed files.')
+  if(++managed>100)throw new Error('A scenario folder supports at most 100 managed files.')
   const file=await readScenarioFile(directory,name);total+=file.size
   if(total>20*1024*1024)throw new Error('Scenario folder files exceed the 20 MiB read budget.')
-  let parsed;try{parsed=parseShared(file.text)}catch(error){throw new Error(`${name}: ${error.message}`)}
+  let parsed
+  try { parsed = parseShared(file.text) }
+  catch (error) {
+   const message = `${name}: ${error.message}`
+   if (!onFileError) throw new Error(message)
+   onFileError(message)
+   continue
+  }
   const key=scenarioKey(parsed.kind,parsed.scenario.id)
   if(ids.has(key))throw new Error(`${name}: duplicate scenario ID. Keep one file per scenario.`)
   ids.add(key);entries.push({name,text:file.text,...parsed})
