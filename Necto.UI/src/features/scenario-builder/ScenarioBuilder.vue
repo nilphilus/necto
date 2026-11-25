@@ -1,4 +1,5 @@
 <script setup>
+import { moveThroughSearchResults } from '../workbench/searchKeyboard.js'
 import BuilderErrorNotice from './BuilderErrorNotice.vue'
 import { isLocalStep, localOperation, localStepInput } from './localStep.js'
 import RandomSourceEditor from './RandomSourceEditor.vue'
@@ -52,6 +53,13 @@ const emit = defineEmits(['back', 'folder-settings', 'activate-preset'])
 const store = props.store
 const { draft, saved, dirty, error, notice, execution, pending, questions } = store
 const nextRequest = ref(null)
+const endpointSearch = ref(null)
+
+function navigateEndpointSearch(event) {
+  if (!['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(event.key)) return
+  const results = [...event.currentTarget.querySelectorAll('.endpoint-result')]
+  moveThroughSearchResults(event, endpointSearch.value, results)
+}
 const pickingStepId = ref(''),
   removedStep = ref(null)
 const stepDialog = ref(null)
@@ -1338,6 +1346,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
       aria-labelledby="add-request-title"
       @click="(event) => event.target === addDialog && addDialog.close()"
       @close="nextRequest = null"
+      @keydown="navigateEndpointSearch"
     >
       <header>
         <h3 id="add-request-title">
@@ -1353,10 +1362,10 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
         </button>
       </header>
       <input
+        ref="endpointSearch"
         v-model="search"
         type="search"
         aria-label="Find endpoint"
-        @keydown.enter.prevent="filtered.length === 1 && add(filtered[0])"
         placeholder="Search name, route or API"
       />
       <p v-if="nextRequest" class="muted">Add after: {{ draft.steps.find((step) => step.id === nextRequest.from)?.label ?? 'Start' }}</p>
@@ -1373,7 +1382,7 @@ onScopeDispose(() => window.removeEventListener('beforeunload', beforeUnload))
           <button type="button" @click="addLocal('expression')"><span class="method">LOCAL</span><strong>Expression</strong><small>Calculate a value for later steps</small></button>
         </li>
         <li v-for="item in filtered" :key="item.key">
-          <button type="button" @click="add(item)">
+          <button type="button" class="endpoint-result" @click="add(item)">
             <span class="method" :data-method="item.method">{{ item.method }}</span
             ><strong>{{ item.name }}</strong
             ><code>{{ item.path }}</code
