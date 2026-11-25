@@ -1,7 +1,7 @@
 import { importedWorkspaceId } from '../workbench/workspaceIdentity.js'
 import { computed, onMounted, onScopeDispose, ref } from 'vue'
 import { resolveReference } from '../workbench/openapiReference.js'
-import { parseDocument, bundleReferences } from '../workbench/document.js'
+import { readDocumentSource } from '../workbench/document.js'
 import { useExternalApis } from '../external-apis/connections.js'
 
 const methods = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace', 'query']
@@ -11,7 +11,7 @@ async function fetchJson(url, authentication, signal, apiDocument = false) {
   const response = await (authentication?.metadataFetch(url, 'local', { signal, headers: { Accept: accept } }) ?? fetch(url, { signal, headers: { Accept: accept } }))
   if (!response.ok) throw new Error(`HTTP ${response.status}${response.status === 401 ? ' — sign in using Authorize, then retry.' : response.status === 403 ? ' — access denied for this account.' : ''}`)
   if (response.redirected || !/json|yaml|text\/plain/i.test(response.headers.get('content-type') ?? '')) throw new Error('The documentation endpoint returned a login page. Use Authorize or sign into the product, then retry.')
-  const data = apiDocument ? await bundleReferences(parseDocument(await response.text()), new URL(url, document.baseURI).href, (url, options) => fetch(url, { ...options, signal })) : await response.json()
+  const data = apiDocument ? await readDocumentSource(await response.text(), new URL(url, document.baseURI).href, (url, options) => fetch(url, { ...options, signal })) : await response.json()
   signal?.throwIfAborted()
   return data
 }
@@ -139,11 +139,12 @@ export function useCatalog(authentication) {
       const current = authentication?.apis.get('local')
       authentication?.register({ id: 'local', name: 'Local API', configuration: configuration.value, document: current?.document, schemes: current?.schemes, origins: [new URL(openApiUrl).origin] })
       const openApiDocument = await fetchJson(openApiUrl, authentication, signal, true)
-      if (!openApiDocument?.openapi) throw new Error('Expected an OpenAPI document. If redirected to a login page, sign into the product first.')
+      if (!openApiDocument?.document?.openapi) throw new Error('Expected an OpenAPI document. If redirected to a login page, sign into the product first.')
       if (version === generation) {
-        spec.value = openApiDocument
+        const { document, ...source } = openApiDocument
+        spec.value = document
         selectedServerUrl = openApiUrl
-        documentSource.value = { kind: 'server', name: 'Server document' }
+        documentSource.value = { ...source, kind: 'server', name: 'Server document' }
       }
     } catch (cause) {
       if (version === generation && !signal.aborted) error.value = `Could not load the API documentation. ${cause.message}`
@@ -160,13 +161,14 @@ export function useCatalog(authentication) {
     documentError.value = ''
     try {
       const openApiDocument = await fetchJson(url, authentication, signal, true)
-      if (!openApiDocument?.openapi) throw new Error('Expected an OpenAPI document.')
+      if (!openApiDocument?.document?.openapi) throw new Error('Expected an OpenAPI document.')
       if (version !== generation) return
       configuration.value = { ...serverSettings, openApiUrl: url }
-      spec.value = openApiDocument
+      const { document, ...source } = openApiDocument
+      spec.value = document
       selectedServerUrl = url
       rememberDocument(url)
-      documentSource.value = { kind: 'server', name: 'Server document' }
+      documentSource.value = { ...source, kind: 'server', name: 'Server document' }
       error.value = ''
     } catch (cause) {
       if (version === generation && !signal.aborted)
@@ -184,12 +186,11 @@ export function useCatalog(authentication) {
     controller?.abort()
     controller = new AbortController()
     const signal = controller.signal
-    const imported = parseDocument(text)
-    const bundled = await bundleReferences(imported, configuration.value.openApiUrl, (url, options) => fetch(url, { ...options, signal }))
+    const { document, ...source } = await readDocumentSource(text, configuration.value.openApiUrl, (url, options) => fetch(url, { ...options, signal }))
     if (version !== generation) return
     if (association === 'separate') configuration.value = { ...configuration.value, workspaceId, overrideServer: false, serverProfiles: {}, endpointMappingsUrl: undefined, entityCatalogUrl: undefined, operationRolesUrl: undefined }
-    spec.value = bundled
-    documentSource.value = { kind: 'import', name, workspaceName: association === 'separate' ? workspaceName.trim() : documentSource.value.workspaceName }
+    spec.value = document
+    documentSource.value = { ...source, kind: 'import', name, workspaceName: association === 'separate' ? workspaceName.trim() : documentSource.value.workspaceName }
     error.value = ''
   }
   onMounted(reload)

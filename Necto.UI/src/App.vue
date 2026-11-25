@@ -138,12 +138,15 @@ const openApiInspector = ref(null)
 function inspectOpenApi(operation, trigger, fragment) {
   const local = {
     document: spec.value,
+    sourceText: documentSource.value.sourceText,
+    convertedFrom: documentSource.value.convertedFrom,
     url: configuration.value?.openApiUrl,
     source: documentSource.value.kind === 'import' ? documentSource.value.name :
       openApiDocuments.value.find(document => document.url === configuration.value?.openApiUrl)?.name ?? documentSource.value.name,
   }
   const external = externalApis.contexts.value.map(api => ({
     id: api.id, document: api.document, source: api.name, url: api.configuration.openApiUrl,
+    sourceText: api.sourceText, convertedFrom: api.convertedFrom,
   }))
   const selected = !operation.apiId || operation.apiId === 'local' ? local :
     external.find(api => api.id === operation.apiId) ?? { source: operation.apiName }
