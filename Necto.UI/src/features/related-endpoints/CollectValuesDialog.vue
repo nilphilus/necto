@@ -81,17 +81,22 @@ function candidatesFor(field, path) {
   return props.choicesFor(props.operation, field.location, field.name, results)
     .filter(choice => choice.name === field.name && choice.binding)
 }
-const choices = computed(() => {
-  if (!source.value || !response.value) return []
-  return source.value.fields.filter(canCollect).map(field => {
-    const selectedPath = response.value.selectedPath
-    const matchesAtSelection = selectedPath ? candidatesFor(field, selectedPath) : []
-    const objectPaths = selectorsFor(field)
-    const direct = candidatesFor(field).filter(choice =>
-      selectableOwner(response.value.json, choice.binding.path, objectPaths) === null)
-    return { ...field, candidates: matchesAtSelection.length > 1 ? matchesAtSelection : direct }
-  })
-})
+const mappedFields = computed(() => source.value && response.value
+  ? source.value.fields.map(field => ({ ...field, mapped: candidatesFor(field) }))
+  : [])
+const foundFields = computed(() => mappedFields.value.filter(field => field.mapped.length))
+const choices = computed(() => mappedFields.value.filter(canCollect).map(field => {
+  const selectedPath = response.value.selectedPath
+  const matchesAtSelection = selectedPath ? candidatesFor(field, selectedPath) : []
+  const objectPaths = selectorsFor(field)
+  const direct = field.mapped.filter(choice =>
+    selectableOwner(response.value.json, choice.binding.path, objectPaths) === null)
+  return { ...field, candidates: matchesAtSelection.length > 1 ? matchesAtSelection : direct }
+}))
+function fieldNames(fields) {
+  return fields.map(field => field.name).join(', ')
+}
+
 function canCollect(field) {
   return !collected.has(field.key) || editingField.value === field.key
 }
@@ -233,7 +238,7 @@ defineExpose({ open })
               <strong>{{ item.operation.name }}</strong>
               <code>{{ item.operation.method }} {{ item.operation.path }}</code>
               <small>{{ item.operation.apiName }}</small>
-              <small>Can fill: {{ (item.missing.length ? item.missing : item.fields).map(field => field.name).join(', ') }}</small>
+              <small>Can fill: {{ fieldNames(item.missing.length ? item.missing : item.fields) }}</small>
             </button>
             <button v-if="hiddenSourceCount" class="secondary" type="button" :aria-expanded="moreOpen" @click="moreOpen = !moreOpen">
               {{ moreOpen ? 'Fewer sources' : 'More sources (' + hiddenSourceCount + ')' }}
@@ -241,6 +246,20 @@ defineExpose({ open })
           </section>
         </aside>
         <section v-if="source && sourceSession" class="source-workbench" aria-label="Source request">
+          <header class="active-source" aria-label="Active source endpoint">
+            <div>
+              <strong>{{ source.operation.name }}</strong>
+              <code>{{ source.operation.method }} {{ source.operation.path }}</code>
+              <small v-if="source.operation.apiId !== 'local'">{{ source.operation.apiName }}</small>
+            </div>
+            <small role="status">
+              <template v-if="sourceSession.pending">Checking response…</template>
+              <template v-else-if="response?.incomplete">Response incomplete.</template>
+              <template v-else-if="!response">Can fill: {{ fieldNames(source.fields) }}</template>
+              <template v-else-if="foundFields.length">Values found: {{ fieldNames(foundFields) }}</template>
+              <template v-else>No mapped values found in this response.</template>
+            </small>
+          </header>
           <div v-if="choices.some(field => field.candidates.length)" class="response-values" aria-label="Mapped response values">
             <h3>Choose values from the response</h3>
             <label v-for="field in choices.filter(item => item.candidates.length)" :key="field.key">
@@ -270,14 +289,15 @@ defineExpose({ open })
 </template>
 
 <style scoped>
-.collect-dialog { width: min(76rem, calc(100vw - 1.5rem)); max-height: calc(100dvh - 1.5rem); padding: 0; overflow: auto; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: .7rem; }
+.collect-dialog { width: min(76rem, calc(100vw - 1.5rem)); max-height: calc(100dvh - 1.5rem); padding: 0; overflow: hidden; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: .7rem; }
+.collect-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
 .collect-dialog::backdrop { background: #0006; }
 .collect-header, .collect-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .6rem; padding: .7rem 1rem; background: var(--surface); }
-.collect-header { position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--line); }
-.collect-footer { position: sticky; bottom: 0; z-index: 2; justify-content: flex-end; border-top: 1px solid var(--line); }
+.collect-header { border-bottom: 1px solid var(--line); }
+.collect-footer { justify-content: flex-end; border-top: 1px solid var(--line); }
 .collect-footer span { margin-right: auto; color: var(--muted); font-size: .8rem; }
 .collect-footer p { flex-basis: 100%; margin: 0; }
-.collect-workspace { display: grid; grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr); gap: .8rem; padding: .8rem; }
+.collect-workspace { display: grid; min-height: 0; overflow: auto; grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr); gap: .8rem; padding: .8rem; }
 aside, .source-workbench { min-width: 0; overflow-wrap: anywhere; }
 fieldset { border: 1px solid var(--line); border-radius: .45rem; margin: 0 0 .75rem; padding: .5rem; }
 .field-row { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .25rem; }
@@ -289,6 +309,9 @@ fieldset { border: 1px solid var(--line); border-radius: .45rem; margin: 0 0 .75
 .collected-value { display: block; color: var(--accent); }
 .source-option { display: grid; gap: .2rem; width: 100%; text-align: left; margin-bottom: .35rem; }
 .source-option[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
+.active-source { position: sticky; top: 0; z-index: 2; display: grid; gap: .2rem; padding: .5rem .65rem; margin-bottom: .6rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--surface); }
+.active-source > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .5rem; }
+.active-source small { color: var(--muted); }
 h2, h3 { margin: 0 0 .25rem; font-size: 1rem; }
 .response-values { display: grid; gap: .4rem; border: 1px solid var(--line); border-radius: .45rem; padding: .6rem; margin-bottom: .6rem; background: var(--subtle); }
 .response-values label { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
