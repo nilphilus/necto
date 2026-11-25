@@ -1,11 +1,17 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { pointerFor } from './pointers.js'
 
-const props = defineProps({ value: null, path: { type: Array, required: true }, label: String, selected: String, initiallyOpen: Boolean })
-const emit = defineEmits(['select'])
-const open = ref(props.initiallyOpen)
-const page = ref(0)
+const props = defineProps({ value: null, path: { type: Array, required: true }, label: String, selected: String, initiallyOpen: Boolean, treeState: Map })
+const emit = defineEmits(['select', 'follow'])
+const open = computed({
+  get: () => props.treeState.get(pointer.value)?.open ?? props.initiallyOpen,
+  set: value => props.treeState.set(pointer.value, { open: value, page: page.value }),
+})
+const page = computed({
+  get: () => props.treeState.get(pointer.value)?.page ?? 0,
+  set: value => props.treeState.set(pointer.value, { open: open.value, page: value }),
+})
 const pageSize = 40
 const container = computed(() => props.value !== null && typeof props.value === 'object')
 const keys = computed(() => container.value ? Object.keys(props.value) : [])
@@ -28,10 +34,12 @@ const scalar = computed(() => {
         <code v-if="container" class="metadata">{{ Array.isArray(value) ? '[' + keys.length + ']' : '{' + keys.length + '}' }}</code>
         <code v-else :class="kind">{{ scalar }}</code>
       </button>
+      <button v-if="path.at(-1) === '$ref' && typeof value === 'string'" type="button" class="secondary"
+        @click="emit('follow', value)">Follow reference</button>
     </div>
     <ul v-if="open && shown.length">
       <InspectorNode v-for="key in shown" :key="key" :label="key" :path="[...path, key]"
-        :value="value[key]" :selected="selected" @select="emit('select', $event)" />
+        :value="value[key]" :selected="selected" :tree-state="treeState" @select="emit('select', $event)" @follow="emit('follow', $event)" />
     </ul>
     <div v-if="open && keys.length > pageSize" class="node-pages">
       <button class="secondary" type="button" :disabled="page === 0" @click="page--">Previous</button>

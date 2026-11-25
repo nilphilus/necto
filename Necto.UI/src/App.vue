@@ -136,14 +136,20 @@ const current = computed(() => chain.value[currentIndex.value])
 const authorizedCount = computed(() => { const api = authentication.apis.get(current.value?.operation.apiId ?? 'local'); return Object.keys(api?.credentials ?? {}).length + (api?.access ? 1 : 0) })
 const openApiInspector = ref(null)
 function inspectOpenApi(operation, trigger, fragment) {
-  const external = operation.apiId && operation.apiId !== 'local'
-    ? externalApis.contexts.value.find(api => api.id === operation.apiId)
-    : null
+  const local = {
+    document: spec.value,
+    url: configuration.value?.openApiUrl,
+    source: documentSource.value.kind === 'import' ? documentSource.value.name :
+      openApiDocuments.value.find(document => document.url === configuration.value?.openApiUrl)?.name ?? documentSource.value.name,
+  }
+  const external = externalApis.contexts.value.map(api => ({
+    id: api.id, document: api.document, source: api.name, url: api.configuration.openApiUrl,
+  }))
+  const selected = !operation.apiId || operation.apiId === 'local' ? local :
+    external.find(api => api.id === operation.apiId) ?? { source: operation.apiName }
   openApiInspector.value?.open({
-    document: external?.document ?? (operation.apiId && operation.apiId !== 'local' ? null : spec.value),
-    source: external?.name ?? (operation.apiId && operation.apiId !== 'local' ? operation.apiName :
-      documentSource.value.kind === 'import' ? documentSource.value.name :
-        openApiDocuments.value.find(document => document.url === configuration.value?.openApiUrl)?.name ?? documentSource.value.name),
+    ...selected,
+    documents: [local, ...external],
     method: operation.method.toLowerCase(),
     path: operation.path,
     fragment,
