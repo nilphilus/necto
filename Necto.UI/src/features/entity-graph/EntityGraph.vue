@@ -44,6 +44,9 @@ const width = computed(() => Math.max(620, ...positions.value.map(node => node.x
 const height = computed(() => Math.max(380, ...positions.value.map(node => node.y + 125)))
 const { autoFit, fit, center } = useGraphViewport(canvas, width, height, zoom)
 const { view, sync, zoomAt, wheel, navigate, isPanning, startPan, movePan, stopPan } = useGraphNavigation(canvas, width, height, zoom, autoFit)
+const displayEdges = computed(() => selected.value
+  ? [...connections.value].sort((a, b) => Number(connected(a)) - Number(connected(b)))
+  : connections.value)
 const miniEdges = computed(() => connections.value.map(edge => ({ ...edge, from:byId.value.get(edge.from), to:byId.value.get(edge.to) })).filter(edge=>edge.from&&edge.to))
 watch(() => props.initialOperationKey, key => { selectedId.value = graph.value.nodes.find(node => node.endpoints.some(entry => entry.operation.key === key))?.id ?? '' }, { immediate: true })
 watch(selected, value => { if (!value) focused.value = false })
@@ -97,7 +100,7 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
         @pointerup="stopPan" @pointercancel="stopPan" @lostpointercapture="stopPan">
         <svg v-if="positions.length" :width="width * zoom" :height="height * zoom" :viewBox="`0 0 ${width} ${height}`" role="group" aria-label="Entity relationships">
           <defs><marker :id="markerId" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" /></marker></defs>
-          <path v-for="edge in connections" :key="edge.id" :d="connectionPath(edge, byId.get(edge.from), byId.get(edge.to))" fill="none" :stroke="edge.kind === 'mapping' ? '#ad7923' : '#57806d'" :stroke-dasharray="edge.kind === 'mapping' ? '6 5' : undefined" :stroke-width="selected && connected(edge) ? 2.5 : 1.5" :opacity="connected(edge) ? .9 : .15" :marker-start="edge.reverse ? `url(#${markerId})` : undefined" :marker-end="edge.forward ? `url(#${markerId})` : undefined">
+          <path v-for="edge in displayEdges" :key="edge.id" :d="connectionPath(edge, byId.get(edge.from), byId.get(edge.to))" fill="none" :stroke="edge.kind === 'mapping' ? '#ad7923' : selected && connected(edge) ? 'var(--accent)' : '#57806d'" :stroke-dasharray="edge.kind === 'mapping' ? '6 5' : undefined" :stroke-width="selected && connected(edge) ? 4 : 1.5" :opacity="selected && connected(edge) ? 1 : connected(edge) ? .9 : .15" :marker-start="edge.reverse ? `url(#${markerId})` : undefined" :marker-end="edge.forward ? `url(#${markerId})` : undefined">
             <title>{{ edge.edges.map(link => `${names.get(link.from)} → ${names.get(link.to)} · ${link.label}`).join('\n') }}</title>
           </path>
           <foreignObject v-for="node in positions" :key="node.id" :x="node.x" :y="node.y" :width="entitySize.width" :height="entitySize.height + 4">

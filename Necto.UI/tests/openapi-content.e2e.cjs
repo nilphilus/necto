@@ -449,6 +449,12 @@ const document = {
   const darkBackground = await background()
   await p.emulateMedia({ colorScheme: 'light' })
   assert.notEqual(await background(), darkBackground)
+  await p.getByRole('button', { name: 'Close settings', exact: true }).click()
+  await p.getByRole('button', { name: 'Endpoint graph', exact: true }).click()
+  await p.getByRole('button', { name: 'Inspect endpoint GET /invoices', exact: true }).click()
+  const endpointEdges = p.getByRole('group', { name: 'Endpoint relationships' }).locator(':scope > path')
+  const endpointWidths = await endpointEdges.evaluateAll(edges => edges.map(edge => Number(edge.getAttribute('stroke-width'))))
+  assert.deepEqual(endpointWidths, [1.5, 4, 4])
   assert.deepEqual(errors, [])
   console.log(
     'PASS: on-demand sanitized descriptions; saved and OpenAPI payload navigation, draft restoration, references and external examples; Links priority; response examples; mobile layout; appearance settings and persistence. No unintended API calls.'
