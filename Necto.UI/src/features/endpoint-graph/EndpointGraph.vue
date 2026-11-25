@@ -48,6 +48,9 @@ const width = computed(() => Math.max(650, ...positions.value.map(node => node.x
 const height = computed(() => Math.max(400, ...positions.value.map(node => node.y + 145)))
 const { autoFit, fit, center } = useGraphViewport(canvas, width, height, zoom)
 const {view,sync,zoomAt,wheel,navigate}=useGraphNavigation(canvas,width,height,zoom,autoFit)
+const displayEdges = computed(() => selected.value
+  ? [...edges.value].sort((a, b) => Number(connected(a)) - Number(connected(b)))
+  : edges.value)
 const miniEdges=computed(()=>edges.value.map(edge=>({...edge,from:positioned.value.get(edge.from),to:positioned.value.get(edge.to)})).filter(edge=>edge.from&&edge.to))
 watch(() => props.initialOperationKey, key => { if (byId.value.has(key)) selectedId.value = key }, { immediate: true })
 watch(selected, value => {
@@ -113,8 +116,8 @@ async function inspect(id) {
       <div class="graph-stage">
       <div ref="canvas" @scroll="sync" @wheel="positions.length && wheel($event)" class="graph-canvas" tabindex="0" aria-label="Scrollable endpoint graph">
         <svg v-if="positions.length" :width="width * zoom" :height="height * zoom" :viewBox="`0 0 ${width} ${height}`" role="group" aria-label="Endpoint relationships">
-          <defs><marker :id="markerId" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#759b8a" /></marker></defs>
-          <path v-for="edge in edges" :key="edge.id" :d="curve(edge)" fill="none" stroke="#759b8a" :stroke-width="selectedId && connected(edge) ? 3 : 1.5" :opacity="connected(edge) ? .95 : .15" :marker-end="`url(#${markerId})`">
+          <defs><marker :id="markerId" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" /></marker></defs>
+          <path v-for="edge in displayEdges" :key="edge.id" :d="curve(edge)" fill="none" :stroke="selected && connected(edge) ? 'var(--accent)' : '#759b8a'" :stroke-width="selected && connected(edge) ? 4 : 1.5" :opacity="selected && connected(edge) ? 1 : connected(edge) ? .95 : .15" :marker-end="`url(#${markerId})`">
             <title>{{ byId.get(edge.from).operation.name }} → {{ byId.get(edge.to).operation.name }} · {{ edge.values.length }} mapped fields</title>
           </path>
           <foreignObject v-for="node in positions" :key="node.id" :x="node.x" :y="node.y" :width="endpointSize.width" :height="endpointSize.height + 4">
