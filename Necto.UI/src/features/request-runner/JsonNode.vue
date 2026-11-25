@@ -89,7 +89,7 @@ watch([() => props.navigation, () => props.value], () => {
   </span>
   <span v-else class="json-object" :data-search-target="target ? 'true' : undefined" :class="{ selected: active, 'search-hit': target }">
     <button v-if="selectable" type="button" class="object-selector" :aria-pressed="Boolean(active)"
-      :aria-label="'Select object at ' + JSON.stringify(path)" @click="$emit('select', path)">{{ active ? 'Selected' : 'Select' }}</button>
+      :aria-label="'Select object at ' + JSON.stringify(path)" @click="$emit('select', path, $event)">{{ active ? 'Selected' : 'Select' }}</button>
     <small v-if="active && selectionNote" class="object-selector">{{ selectionNote }}</small>
     <button v-if="count" type="button" class="object-selector" :aria-expanded="expanded"
       :aria-label="(expanded ? 'Collapse' : 'Expand') + ' ' + JSON.stringify(path)" @click="expanded = !expanded">{{ expanded ? '−' : '+' }}</button>
@@ -101,7 +101,7 @@ watch([() => props.navigation, () => props.value], () => {
       <span v-for="([key, child], index) in entries" :key="key" class="json-entry">
         <span v-if="!array" class="token-key" :class="{ 'search-key': keyTarget(key) }" :data-search-key="keyTarget(key) ? 'true' : undefined">{{ JSON.stringify(key) }}<span class="punctuation">: </span></span>
         <span v-else class="item-index">{{ key }}: </span>
-        <JsonNode :value="child" :path="[...path, key]" :selectors="selectors" :can-select="canSelect" :selection-note="selectionNote" :selected="selected" :navigation="navigation" :expansion="expansion" @page="emit('page',$event)" @toggle-children="emit('toggle-children',$event)" @select="$emit('select', $event)" />{{ range.start + index < count - 1 ? ',' : '' }}
+        <JsonNode :value="child" :path="[...path, key]" :selectors="selectors" :can-select="canSelect" :selection-note="selectionNote" :selected="selected" :navigation="navigation" :expansion="expansion" @page="emit('page',$event)" @toggle-children="emit('toggle-children',$event)" @select="(path, event) => emit('select', path, event)" />{{ range.start + index < count - 1 ? ',' : '' }}
       </span>
     </template>
     <span v-else class="item-index"> … {{ count.toLocaleString() }} {{ array ? 'items' : 'properties' }} </span>

@@ -44,17 +44,21 @@ const rankedSources = computed(() => sourceOptions.value.map(item => {
   const declared = missing.filter(field => field.sources.some(source =>
     source.operation.key === item.operation.key && source.origin === 'openapi')).length
   const session = sourceSessions.get(item.operation.key)
-  return { ...item, missing, declared, hasResponse: Boolean(session?.result && !session.resultStale),
+  const result = !session?.pending && !session?.resultStale ? session?.result : null
+  const checked = result?.ok && !result.incomplete
+  const available = checked ? missing.filter(field => candidatesFor(field, undefined, item.operation.key, result).length) : []
+  const useful = checked ? available : missing.filter(field => !priorChecks.value?.has(checkKey(field, item.operation.key)))
+  return { ...item, missing, useful, declared, available: available.length,
     readOnly: ['GET', 'HEAD'].includes(item.operation.method) }
-}).sort((a, b) => b.missing.length - a.missing.length || Number(b.hasResponse) - Number(a.hasResponse) ||
+}).sort((a, b) => b.useful.length - a.useful.length || b.available - a.available ||
   b.declared - a.declared || Number(b.readOnly) - Number(a.readOnly)))
 const recommendedSources = computed(() => {
   const recommended = [], covered = new Set()
   for (const item of rankedSources.value) {
     if (recommended.length === 3) break
-    if (!item.missing.some(field => !covered.has(field.key))) continue
+    if (!item.useful.some(field => !covered.has(field.key))) continue
     recommended.push(item)
-    for (const field of item.missing) covered.add(field.key)
+    for (const field of item.useful) covered.add(field.key)
   }
   const active = rankedSources.value.find(item => item.operation.key === activeSourceKey.value)
   if (active && !recommended.includes(active)) recommended.push(active)
@@ -176,8 +180,9 @@ function canSelect(path) {
   return Boolean(response.value && source.value?.fields.some(field =>
     canCollect(field) && candidatesFor(field, path).length))
 }
-function selectObject(path) {
+async function selectObject(path, event) {
   if (!source.value || !response.value) return
+  const useKeyboard = event?.detail === 0
   const result = response.value
   const chosen = [], ambiguous = []
   for (const field of source.value.fields) {
@@ -189,6 +194,12 @@ function selectObject(path) {
     } else if (candidates.length > 1) ambiguous.push(field)
   }
   selectionFeedback.value = { result, path, chosen, ambiguous }
+  if (!useKeyboard) return
+  await nextTick()
+  if (!dialog.value?.open) return
+  const selector = ambiguous.length ? '.response-values select' :
+    missingFields.value.length ? '.collection-progress button' : '.collect-footer .primary'
+  focusElement(dialog.value.querySelector(selector))
 }
 function focusElement(element) {
   element?.scrollIntoView({ block: 'nearest' })
@@ -268,7 +279,7 @@ function toggle(field, enabled) {
   if (enabled) selected.add(field.key)
   else {
     selected.delete(field.key)
-    removeValue(field)
+    if (editingField.value === field.key) editingField.value = ''
     if (focusedField.value === field.key) focusedField.value = ''
   }
   issue.value = ''
@@ -317,10 +328,10 @@ defineExpose({ open })
               <label class="field-choice">
                 <input type="checkbox" :checked="selected.has(field.key)" @change="toggle(field, $event.target.checked)">
                 <span><code>{{ field.name }}</code> <small>{{ field.location }}</small>
-                  <small v-if="collected.has(field.key)" class="collected-value">Collected · {{ label(collected.get(field.key)) }} · {{ collected.get(field.key).source }}</small>
+                  <small v-if="collected.has(field.key)" class="collected-value">{{ selected.has(field.key) ? 'Collected' : 'Excluded' }} · {{ label(collected.get(field.key)) }} · {{ collected.get(field.key).source }}</small>
                 </span>
               </label>
-              <div v-if="collected.has(field.key)" class="field-actions">
+              <div v-if="selected.has(field.key) && collected.has(field.key)" class="field-actions">
                 <button class="secondary field-filter" type="button"
                   :aria-label="(editingField === field.key ? 'Cancel change for ' : 'Change ') + field.location + ' ' + field.name"
                   @click="changeValue(field)">{{ editingField === field.key ? 'Cancel change' : 'Change' }}</button>
