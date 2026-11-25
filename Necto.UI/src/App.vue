@@ -69,6 +69,7 @@ const externalPending = computed(() => showExternalApis.value && [...externalSta
 const selectedChain = ref([])
 const inspectedScenarioStep = ref(null)
 const scenarioPanel = ref(null)
+const scenarioFilter = ref('')
 const builderStore = useBuilder(configuration)
 const { saved: builderScenarios, pending: builderPending, error: builderError } = builderStore
 const builderView = ref(null)
@@ -213,6 +214,7 @@ watch(operations, available => {
 watch(() => workspaceIdentity(configuration.value), (next, previous) => {
   if (!previous || next === previous) return
   scenarioStore.stop(); scenarioRuns.clear(); editingScenarioId.value = ''
+  scenarioFilter.value = ''
   sessions.clear(); requestHistory.clear(); historyEntries.clear()
   selectedChain.value = []; inspectedScenarioStep.value = null
   pendingRoute.value = null; routeError.value = ''
@@ -1103,7 +1105,7 @@ function removeScenario(id) {
         :busy="scenarioBusy"
         @back="navigateView('scenarios')"
       />
-      <ScenarioPanel :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="newBuilderScenario" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios"
+      <ScenarioPanel v-model:filter="scenarioFilter" :folder="scenarioFolder" @folder-settings="configureScenarioFolder" @builder="newBuilderScenario" :document="spec" :mappings="endpointMappings" :configuration="configuration" :inert="settingsOpen" v-if="graphView === 'scenarios'" ref="scenarioPanel" :scenarios="scenarios"
         :import-scenario="importLibraryScenario" :builder-scenarios="builderScenarios" :builder-error="builderError" @remove-builder="removeBuilderScenario" @open-builder-scenario="openBuilderScenario" :state="scenarioState" :runs="scenarioRuns"
 
         :deleted="scenarioStore.deleted.value" @undo-remove="undoRemoveScenario" :pending="scenarioPending" :busy="scenarioBusy" :error="scenarioError"

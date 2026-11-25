@@ -5,13 +5,29 @@ import FolderFeedback from '../scenario-folder/FolderFeedback.vue'
 import ScenarioCi from '../workbench/ScenarioCi.vue'
 import ScenarioSkillLink from './ScenarioSkillLink.vue'
 
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { pathLabel } from './scenario.js'
 import ScenarioTrace from './ScenarioTrace.vue'
 const props = defineProps({ scenarios: Array, builderScenarios: Array, builderError: String, importScenario: Function, state: Object, pending: Boolean, busy: Boolean, error: String,
   activePresetNames: Array, runs: Map, document: Object, mappings: Array, configuration: Object, deleted: Object, folder:Object })
 
 const emit = defineEmits(['open', 'run', 'remove', 'stop', 'inspect', 'undo-remove', 'builder', 'open-builder-scenario', 'remove-builder', 'folder-settings'])
+const filter = defineModel('filter', { type: String, default: '' })
+const query = computed(() => filter.value.trim().toLowerCase())
+const hasScenarios = computed(() => props.scenarios.length > 0 || props.builderScenarios.length > 0)
+
+function matches(scenario) {
+  return !query.value || [scenario.name, scenario.description]
+    .some(value => value?.toLowerCase().includes(query.value))
+}
+
+function showQuickScenario(scenario) {
+  return matches(scenario) || props.runs.get(scenario.id)?.status === 'running'
+}
+
+const hasVisibleScenarios = computed(() =>
+  props.builderScenarios.some(matches) || props.scenarios.some(showQuickScenario)
+)
 const importInput = ref(null)
 const importResult = ref(null)
 const importError = ref('')
@@ -33,7 +49,10 @@ async function importFile(event) {
       workflowId.value = result.workflows[0].id
       await nextTick()
       arazzoDialog.value?.showModal()
-    } else importResult.value = result
+    } else if (result) {
+      filter.value = ''
+      importResult.value = result
+    }
   } catch (cause) { importError.value = cause.message }
   finally { importing.value = false }
 }
@@ -45,6 +64,7 @@ async function importWorkflow() {
     const { file, workspace } = arazzoImport.value
     const result = await props.importScenario(file, { workflowId: workflowId.value, workspace })
     importResult.value = result
+    if (result) filter.value = ''
     arazzoDialog.value?.close()
     if (result) emit('open-builder-scenario', result.scenario.id)
   } catch (cause) { importError.value = cause.message }
@@ -133,8 +153,11 @@ function runScenario(scenario) {
     </div>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-if="builderError" class="error" role="alert">{{ builderError }}</p>
+    <input v-if="hasScenarios" v-model="filter" class="scenario-filter" type="search"
+      aria-label="Filter saved scenarios" placeholder="Filter by name or description">
+    <p v-if="hasScenarios && !hasVisibleScenarios" class="muted" role="status">No saved scenarios match your search.</p>
     <ul ref="list" class="saved-list">
-      <li v-for="scenario in builderScenarios" :key="'builder:' + scenario.id" class="scenario-card">
+      <li v-for="scenario in builderScenarios" v-show="matches(scenario)" :key="'builder:' + scenario.id" class="scenario-card">
         <div class="saved-title">
           <h3>{{ scenario.name }}</h3>
           <span class="muted">Builder · {{ scenario.steps.length }} steps</span>
@@ -156,7 +179,7 @@ function runScenario(scenario) {
             @click="removeBuilder(scenario)">Delete</button>
         </div>
       </li>
-      <li v-for="scenario in scenarios" :key="'chain:' + scenario.id" :data-scenario-id="scenario.id" class="scenario-card">
+      <li v-for="scenario in scenarios" v-show="showQuickScenario(scenario)" :key="'chain:' + scenario.id" :data-scenario-id="scenario.id" class="scenario-card">
         <div class="saved-title"><h3>{{ scenario.name }}</h3><span class="muted">Quick chain · {{ scenario.steps.length }} steps</span><ScenarioCi :scenario="scenario" :document="document" :mappings="mappings" :configuration="configuration" /></div>
 
         <p class="card-description">{{ descriptionFor(scenario, ' → ') }}</p>
@@ -198,10 +221,11 @@ function runScenario(scenario) {
         </section>
       </li>
     </ul>
-    <p v-if="!scenarios.length && !builderScenarios.length" class="muted">No scenarios saved for this OpenAPI workspace in this browser. Save a request chain, save a Builder scenario, or import a scenario file.</p>
+    <p v-if="!hasScenarios" class="muted">No scenarios saved for this OpenAPI workspace in this browser. Save a request chain, save a Builder scenario, or import a scenario file.</p>
   </section>
 </template>
 <style scoped>
+.scenario-filter { width: min(100%, 22rem); margin-bottom: .65rem; }
 .library-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
 .scenario-panel .import-result { margin: .5rem 0; overflow-wrap: anywhere; }
 
