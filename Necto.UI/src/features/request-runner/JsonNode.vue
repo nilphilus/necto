@@ -7,7 +7,7 @@ import { isPrefix } from '../payload-search/search.js'
 import PreviewPager from './PreviewPager.vue'
 import XmlPreview from './XmlPreview.vue'
 import { looksLikeXml } from './xmlDetection.js'
-const props = defineProps({ value: {}, path: { type: Array, required: true }, selectors: Array, selected: Array, navigation: Object, root: Boolean, expansion: Object })
+const props = defineProps({ value: {}, path: { type: Array, required: true }, selectors: Array, canSelect: Function, selectionNote: String, selected: Array, navigation: Object, root: Boolean, expansion: Object })
 const emit=defineEmits(['select','page','toggle-children'])
 const xmlOpen = ref(false)
 const xmlAvailable = computed(() => looksLikeXml(props.value))
@@ -21,7 +21,7 @@ const expanded = ref(props.root || props.path.length < 2)
 const range = computed(() => pageRange(container.value ? count.value : typeof props.value === 'string' ? props.value.length : 0,
   page.value, container.value ? PREVIEW_PAGE_SIZE : STRING_PAGE_SIZE))
 const entries = computed(() => expanded.value && container.value ? childEntries(props.value, range.value, keys.value) : [])
-const selectable = computed(() => container.value && !array.value && props.selectors.some(path => matchesPath(path, props.path)))
+const selectable = computed(() => container.value && !array.value && props.selectors.some(path => matchesPath(path, props.path)) && (props.canSelect?.(props.path) ?? true))
 const active = computed(() => props.selected && JSON.stringify(props.selected) === JSON.stringify(props.path))
 const kind = computed(() => props.value === null ? 'null' : typeof props.value)
 const scalar = computed(() => JSON.stringify(typeof props.value === 'string'
@@ -90,6 +90,7 @@ watch([() => props.navigation, () => props.value], () => {
   <span v-else class="json-object" :data-search-target="target ? 'true' : undefined" :class="{ selected: active, 'search-hit': target }">
     <button v-if="selectable" type="button" class="object-selector" :aria-pressed="Boolean(active)"
       :aria-label="'Select object at ' + JSON.stringify(path)" @click="$emit('select', path)">{{ active ? 'Selected' : 'Select' }}</button>
+    <small v-if="active && selectionNote" class="object-selector">{{ selectionNote }}</small>
     <button v-if="count" type="button" class="object-selector" :aria-expanded="expanded"
       :aria-label="(expanded ? 'Collapse' : 'Expand') + ' ' + JSON.stringify(path)" @click="expanded = !expanded">{{ expanded ? '−' : '+' }}</button>
     <button v-if="canToggleChildren" type="button" class="object-selector children-toggle" :aria-pressed="childrenExpanded" :aria-label="(childrenExpanded?'Collapse':'Expand')+' children at '+expansionKey" :title="childrenToggleTitle" @click="toggleChildren"><svg class="children-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 2v12 M3 4h3 M3 8h3 M3 12h3" /><path :d="childrenExpanded ? 'M11 13V3 M8.5 5.5 11 3l2.5 2.5' : 'M11 3v10 M8.5 10.5 11 13l2.5-2.5'" /></svg></button>
@@ -100,7 +101,7 @@ watch([() => props.navigation, () => props.value], () => {
       <span v-for="([key, child], index) in entries" :key="key" class="json-entry">
         <span v-if="!array" class="token-key" :class="{ 'search-key': keyTarget(key) }" :data-search-key="keyTarget(key) ? 'true' : undefined">{{ JSON.stringify(key) }}<span class="punctuation">: </span></span>
         <span v-else class="item-index">{{ key }}: </span>
-        <JsonNode :value="child" :path="[...path, key]" :selectors="selectors" :selected="selected" :navigation="navigation" :expansion="expansion" @page="emit('page',$event)" @toggle-children="emit('toggle-children',$event)" @select="$emit('select', $event)" />{{ range.start + index < count - 1 ? ',' : '' }}
+        <JsonNode :value="child" :path="[...path, key]" :selectors="selectors" :can-select="canSelect" :selection-note="selectionNote" :selected="selected" :navigation="navigation" :expansion="expansion" @page="emit('page',$event)" @toggle-children="emit('toggle-children',$event)" @select="$emit('select', $event)" />{{ range.start + index < count - 1 ? ',' : '' }}
       </span>
     </template>
     <span v-else class="item-index"> … {{ count.toLocaleString() }} {{ array ? 'items' : 'properties' }} </span>

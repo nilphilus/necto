@@ -16,8 +16,12 @@ const focusedField = ref('')
 const editingField = ref('')
 const activePosition = ref(0)
 const moreOpen = ref(false)
+const sourceQuery = ref('')
+const selectionFeedback = shallowRef(null)
 const issue = ref('')
 let trigger
+
+watch(moreOpen, open => { if (!open) sourceQuery.value = '' })
 
 const selectedFields = computed(() => props.fields.filter(field => selected.has(field.key)))
 const sourceOptions = computed(() => {
@@ -54,7 +58,7 @@ const recommendedSources = computed(() => {
   if (active && !recommended.includes(active)) recommended.push(active)
   return recommended
 })
-const sourceChoices = computed(() => {
+const orderedSources = computed(() => {
   const options = moreOpen.value ? rankedSources.value : recommendedSources.value
   const active = options.find(item => item.operation.key === activeSourceKey.value)
   if (!active) return options
@@ -62,14 +66,25 @@ const sourceChoices = computed(() => {
   ordered.splice(activePosition.value, 0, active)
   return ordered
 })
+const sourceChoices = computed(() => {
+  const query = moreOpen.value ? sourceQuery.value.trim().toLowerCase() : ''
+  return orderedSources.value.filter(({ operation }) =>
+    !query || `${operation.method} ${operation.path} ${operation.name}`.toLowerCase().includes(query))
+})
 const hiddenSourceCount = computed(() => rankedSources.value.length - recommendedSources.value.length)
 const filteredField = computed(() => selectedFields.value.find(field => field.key === focusedField.value))
 const source = computed(() => sourceOptions.value.find(item => item.operation.key === activeSourceKey.value))
 const sourceSession = computed(() => sourceSessions.get(activeSourceKey.value))
+const missingFields = computed(() => selectedFields.value.filter(field => !collected.has(field.key)))
 const count = computed(() => selectedFields.value.filter(field => collected.has(field.key)).length)
 const response = computed(() => {
   const session = sourceSession.value
   return session && !session.pending && !session.resultStale ? session.result : null
+})
+const selectionNote = computed(() => {
+  const feedback = selectionFeedback.value
+  return feedback && feedback.result === response.value &&
+    JSON.stringify(feedback.path) === JSON.stringify(response.value?.selectedPath) ? feedback.text : ''
 })
 function selectorsFor(field) {
   return field.sources.filter(item => item.operation.key === activeSourceKey.value).map(item => item.selector)
@@ -119,17 +134,39 @@ function removeValue(field) {
   collected.delete(field.key)
   if (editingField.value === field.key) editingField.value = ''
 }
+function canSelect(path) {
+  return Boolean(response.value && source.value?.fields.some(field =>
+    canCollect(field) && candidatesFor(field, path).length))
+}
 function selectObject(path) {
   if (!source.value || !response.value) return
+  const result = response.value
+  const chosen = [], ambiguous = []
   for (const field of source.value.fields) {
+    if (!canCollect(field)) continue
     const candidates = candidatesFor(field, path)
-    if (canCollect(field) && candidates.length === 1) collectValue(field, candidates[0])
+    if (candidates.length === 1) {
+      collectValue(field, candidates[0])
+      chosen.push(field)
+    } else if (candidates.length > 1) ambiguous.push(field)
   }
+  const text = [
+    chosen.length && `Collected: ${fieldNames(chosen)}`,
+    ambiguous.length && `Choose a value for: ${fieldNames(ambiguous)}`,
+  ].filter(Boolean).join(' · ')
+  selectionFeedback.value = { result, path, text }
+}
+function focusMissingField() {
+  const key = missingFields.value[0]?.key
+  const row = [...dialog.value.querySelectorAll('[data-value-field]')]
+    .find(element => element.dataset.valueField === key)
+  row?.scrollIntoView({ block: 'nearest' })
+  row?.querySelector('input')?.focus({ preventScroll: true })
 }
 
 function activate(item) {
   const key = item.operation.key
-  activePosition.value = Math.max(0, sourceChoices.value.findIndex(option => option.operation.key === key))
+  activePosition.value = Math.max(0, orderedSources.value.findIndex(option => option.operation.key === key))
   if (!sourceSessions.has(key)) sourceSessions.set(key, props.createSession(item.operation))
   activeSourceKey.value = key
 }
@@ -142,7 +179,7 @@ watch([() => props.session, () => props.operation?.key, () => props.workspace], 
   if (origin.value) dialog.value?.close()
 })
 
-async function open(element) {
+async function open(element, location, name) {
   if (!props.session || props.session.pending || !props.fields.length || dialog.value.open) return
   trigger = element
   origin.value = props.session
@@ -152,7 +189,10 @@ async function open(element) {
   activePosition.value = 0
   moreOpen.value = false
   selected.clear()
-  for (const field of props.fields) if (field.missing) selected.add(field.key)
+  sourceQuery.value = ''
+  selectionFeedback.value = null
+  const requested = props.fields.find(field => field.location === location && field.name === name)
+  for (const field of props.fields) if (requested ? field === requested : field.missing) selected.add(field.key)
   await nextTick()
   if (origin.value === props.session) dialog.value.showModal()
 }
@@ -162,6 +202,7 @@ function close() {
   sourceSessions.clear()
   activeSourceKey.value = ''
   collected.clear()
+  selectionFeedback.value = null
   selected.clear()
   origin.value = null
   trigger?.focus()
@@ -209,7 +250,7 @@ defineExpose({ open })
         <aside>
           <fieldset>
             <legend>Fields to fill</legend>
-            <div v-for="field in fields" :key="field.key" class="field-row">
+            <div v-for="field in fields" :key="field.key" class="field-row" :data-value-field="field.key">
               <label class="field-choice">
                 <input type="checkbox" :checked="selected.has(field.key)" @change="toggle(field, $event.target.checked)">
                 <span><code>{{ field.name }}</code> <small>{{ field.location }}</small>
@@ -233,6 +274,9 @@ defineExpose({ open })
             <button v-if="filteredField" type="button" class="secondary source-reset"
               @click="focusedField = ''; moreOpen = false">Show sources for all fields</button>
             <p v-if="!sourceOptions.length" class="muted">Select the fields you want to fill.</p>
+            <input v-if="moreOpen && hiddenSourceCount" v-model="sourceQuery" class="source-search" type="search"
+              aria-label="Filter source endpoints" placeholder="Filter by name, method or path">
+            <p v-if="moreOpen && sourceQuery.trim() && !sourceChoices.length" class="muted" role="status">No matching sources.</p>
             <button v-for="item in sourceChoices" :key="item.operation.key" type="button" class="secondary source-option"
               :aria-pressed="activeSourceKey === item.operation.key" @click="activate(item)">
               <strong>{{ item.operation.name }}</strong>
@@ -273,12 +317,17 @@ defineExpose({ open })
               </select>
             </label>
           </div>
-          <slot :operation="source.operation" :session="sourceSession" :selectors="selectors" :select-object="selectObject" />
+          <slot :operation="source.operation" :session="sourceSession" :selectors="selectors" :select-object="selectObject" :can-select="canSelect" :selection-note="selectionNote" />
         </section>
       </div>
       <footer class="collect-footer">
         <p v-if="issue" role="alert" class="error">{{ issue }}</p>
-        <span role="status">{{ count }} of {{ selectedFields.length }} selected fields collected</span>
+        <div class="collection-progress">
+          <span role="status">{{ count }} of {{ selectedFields.length }} selected fields collected</span>
+          <button v-if="missingFields.length" type="button" class="secondary" @click="focusMissingField">
+            {{ missingFields.length === 1 ? 'Missing: ' + missingFields[0].name : missingFields.length + ' missing' }}
+          </button>
+        </div>
         <button class="secondary" type="button" @click="dialog.close()">Cancel</button>
         <button class="primary" type="button" :disabled="!count || session.pending" @click="apply">
           Apply {{ count }} {{ count === 1 ? 'value' : 'values' }}
@@ -295,7 +344,9 @@ defineExpose({ open })
 .collect-header, .collect-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .6rem; padding: .7rem 1rem; background: var(--surface); }
 .collect-header { border-bottom: 1px solid var(--line); }
 .collect-footer { justify-content: flex-end; border-top: 1px solid var(--line); }
-.collect-footer span { margin-right: auto; color: var(--muted); font-size: .8rem; }
+.collection-progress { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; margin-right: auto; }
+.collection-progress button { padding: .2rem .4rem; }
+.collect-footer span { color: var(--muted); font-size: .8rem; }
 .collect-footer p { flex-basis: 100%; margin: 0; }
 .collect-workspace { display: grid; min-height: 0; overflow: auto; grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr); gap: .8rem; padding: .8rem; }
 aside, .source-workbench { min-width: 0; overflow-wrap: anywhere; }
@@ -307,6 +358,7 @@ fieldset { border: 1px solid var(--line); border-radius: .45rem; margin: 0 0 .75
 .field-filter[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
 .field-choice { display: flex; align-items: flex-start; gap: .35rem; margin: .25rem 0; font-size: .82rem; }
 .collected-value { display: block; color: var(--accent); }
+.source-search { width: 100%; margin-bottom: .35rem; }
 .source-option { display: grid; gap: .2rem; width: 100%; text-align: left; margin-bottom: .35rem; }
 .source-option[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
 .active-source { position: sticky; top: 0; z-index: 2; display: grid; gap: .2rem; padding: .5rem .65rem; margin-bottom: .6rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--surface); }

@@ -1,8 +1,8 @@
 <script setup>
 import { ref, useId } from 'vue'
 
-const props = defineProps({ label: String, sources: { type: Array, required: true }, showTargets: Boolean })
-const emit = defineEmits(['open-source'])
+const props = defineProps({ label: String, sources: { type: Array, required: true }, showTargets: Boolean, canCollect: Boolean })
+const emit = defineEmits(['open-source', 'collect'])
 const dialog = ref(null)
 const trigger = ref(null)
 const titleId = useId()
@@ -18,6 +18,12 @@ function open() {
 function closed() {
   opened.value = false
   if (!navigating) trigger.value?.focus()
+}
+
+function collectHere() {
+  navigating = true
+  dialog.value.close()
+  emit('collect', trigger.value)
 }
 
 function openSource(operation) {
@@ -38,6 +44,7 @@ function openSource(operation) {
             <button type="button" class="secondary" @click="dialog.close()">Close</button>
           </header>
           <p>Look for the value in the response from one of these endpoints. Opening an endpoint leaves sending up to you.</p>
+          <button v-if="canCollect" type="button" class="primary" @click="collectHere">Find value here</button>
           <ul>
             <li v-for="source in sources" :key="source.id">
               <strong>{{ source.operation.name }}</strong>

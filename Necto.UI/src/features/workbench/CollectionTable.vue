@@ -10,6 +10,7 @@ const props = defineProps({
   presentation: Object,
   path: Array,
   selectors: Array,
+  canSelect: Function,
   selected: Array,
   operation: Object,
   status: [String, Number],
@@ -89,7 +90,7 @@ watch(
 );
 watch(selectedColumns, names => rememberColumns(props.presentation, preferenceKey.value, names), { deep: true })
 const selectable = (path) =>
-  props.selectors.some((template) => matchesPath(template, path));
+  props.selectors.some((template) => matchesPath(template, path)) && (props.canSelect?.(path) ?? true);
 const active = (path) =>
   JSON.stringify(path) === JSON.stringify(props.selected);
 </script>

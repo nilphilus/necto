@@ -30,6 +30,9 @@ const props = defineProps({
   pinNextByDefault: { type: Boolean, default: true },
   nextRequestWidth: { type: Number, default: 272 },
   defaultResponseView: { type: String, default: 'auto' },
+  canSelect: Function,
+  selectionNote: String,
+  collectableFields: Array,
   cancel: Function,
   prepare: Function,
   configuration: Object,
@@ -38,7 +41,7 @@ const props = defineProps({
   valueSources: { type: Function, default: () => [] },
 })
 
-const emit = defineEmits(['edit-preset', 'choose-parameter', 'capture-requests', 'open-source', 'inspect-openapi', 'select-response-object'])
+const emit = defineEmits(['edit-preset', 'choose-parameter', 'capture-requests', 'open-source', 'inspect-openapi', 'select-response-object', 'collect-values'])
 const target = computed(() => { try { return effectiveTarget(props.operation, props.configuration, props.session, props.values) } catch { return null } })
 const responseStale = computed(() => {
   if (!props.session.result) return false
@@ -266,7 +269,9 @@ function sendShortcut(event) {
               <small>{{ parameter.in }}<template v-if="parameter.required || parameter.in === 'path'"> · required</template></small>
             </component>
             <ValueSourceHelp v-if="!values.has(key)" :label="'Where to get ' + parameter.name"
-              :sources="valueSources(parameter.in, parameter.name)" @open-source="emit('open-source', $event)" />
+              :sources="valueSources(parameter.in, parameter.name)"
+              :can-collect="collectableFields?.some(field => field.location === parameter.in && field.name === parameter.name)"
+              @collect="trigger => emit('collect-values', trigger, parameter.in, parameter.name)" @open-source="emit('open-source', $event)" />
             <DescriptionHelp :label="'About parameter ' + parameter.name" :description="parameter.description" />
           </div>
           <div v-if="values.has(key)" class="preset-field"
@@ -380,7 +385,7 @@ function sendShortcut(event) {
           <p v-if="responseStale" class="muted response-stale" :class="{ 'response-stale-info': !session.error }" role="status">{{ session.error ? (session.result?.incomplete ? 'Response reception did not complete. No complete preview is available.' : 'The latest request did not complete. Showing the previous response.') : 'Inputs changed. This response belongs to the previous request.' }}</p>
           <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }" :style="{ '--next-request-width': nextRequestWidth + 'px' }">
           <div class="response-body">
-            <ResponsePreview ref="responsePreview" :result="session.result" :presentation="previewPreferences" :default-view="defaultResponseView" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="responseStale"
+            <ResponsePreview ref="responsePreview" :result="session.result" :presentation="previewPreferences" :default-view="defaultResponseView" :selectors="selectors" :can-select="canSelect" :selection-note="selectionNote" :operation="operation" :pending="session.pending" :stale="responseStale"
               @select-object="emit('select-response-object', $event)">
               <template #actions><NextRequestsPanel ref="nextRequests" v-if="hasRelated" v-model:pinned="relatedPinned" :operation-key="operation.key" :pin-target="pinnedToolsHost"><slot name="related" :search-response="searchResponse" /></NextRequestsPanel></template>
             </ResponsePreview>
