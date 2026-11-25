@@ -1,12 +1,15 @@
 const { run } = require('./qa-fixture.cjs')
 
-run(async ({ p, assert, calls }) => {
+run(async ({ p, assert, calls, builder, add }) => {
   const button = (name) => p.getByRole('button', { name, exact: true })
   const inspector = p.getByRole('dialog', { name: 'OpenAPI Inspector' })
   await p.route('**/openapi.json', async route => {
     const response = await route.fetch()
     const document = await response.json()
     document.paths['/customer'].get['x-reference'] = { $ref: '#/components/schemas/Recursive' }
+    const invoice = document.paths['/invoices'].post.requestBody.content['application/json']
+    document.components.schemas.InvoiceInput = invoice.schema
+    invoice.schema = { $ref: '#/components/schemas/InvoiceInput' }
     document.components.schemas.Recursive = { type: 'object', properties: {
       same: { $ref: '#/components/schemas/Recursive' },
       missing: { $ref: '#/components/schemas/Missing' },
@@ -58,11 +61,28 @@ run(async ({ p, assert, calls }) => {
   await button('Whole document').click()
   await button('Expand components').click()
   await button('Expand schemas').click()
-  await inspector.getByText('1–40 of 81', { exact: true }).waitFor()
+  await inspector.getByText('1–40 of 82', { exact: true }).waitFor()
   await inspector.getByRole('button', { name: 'Next', exact: true }).click()
-  await inspector.getByText('41–80 of 81', { exact: true }).waitFor()
+  await inspector.getByText('41–80 of 82', { exact: true }).waitFor()
   await p.keyboard.press('Escape')
   await inspector.waitFor({ state: 'hidden' })
   assert.ok(await button('Tools').evaluate(el => el === document.activeElement))
+  await button('Tools').click()
+  await button('Contract').click()
+  await button('Inspect in OpenAPI').click()
+  await inspector.getByText('/paths/~1customer/get', { exact: true }).waitFor()
+  await p.keyboard.press('Escape')
+  await button('Inspect in OpenAPI').waitFor()
+  await button('Close request tools').click()
+
+  await builder()
+  await add('Create invoice')
+  const editor = p.getByRole('dialog', { name: 'Edit step', exact: true })
+  await editor.getByLabel('Source for customerId').selectOption('expression')
+  await button('Inspect field in OpenAPI').click()
+  await inspector.getByText('/components/schemas/InvoiceInput/properties/customerId', { exact: true }).waitFor()
+  await p.keyboard.press('Escape')
+  assert.ok(await button('Inspect field in OpenAPI').evaluate(el => el === document.activeElement))
+  await editor.getByLabel('Expression code').fill('return 42;')
   assert.equal(calls.length, 0)
 })

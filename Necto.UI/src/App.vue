@@ -1111,6 +1111,7 @@ function removeScenario(id) {
         :mapping-links="mappingLinks"
         :folder="scenarioFolder"
         @folder-settings="configureScenarioFolder"
+        @inspect-openapi="inspectOpenApi"
         v-if="builderVisited"
         v-show="graphView === 'builder'"
         :inert="settingsOpen"

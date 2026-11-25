@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import InspectorNode from './InspectorNode.vue'
+import { requestSchemaPath } from './requestSchemaPath.js'
 import { findOperationPath, referenceTarget } from './references.js'
 import { pointerFor } from './pointers.js'
 import { MAX_QUERY_LENGTH, SEARCH_PAGE_SIZE, searchPayload, valueAtPath } from '../payload-search/search.js'
@@ -83,7 +84,8 @@ const results = ref(null)
 const activeMatch = ref(-1)
 const searching = ref(false)
 const searchError = ref('')
-const searchBase = computed(() => searchScope.value === 'document' ? [] : scopePath.value)
+const searchBase = ref(null)
+const searchSource = ref(null)
 let searchRevision = 0
 async function find(page = 1, knownTotal, destination) {
   const revision = ++searchRevision
@@ -91,7 +93,7 @@ async function find(page = 1, knownTotal, destination) {
   searching.value = true
   const base = searchBase.value
   try {
-    const result = await searchPayload(valueAtPath(context.value.document, base), {
+    const result = await searchPayload(valueAtPath(searchSource.value.document, base), {
       query: query.value.trim(), page, knownTotal, shouldCancel: () => revision !== searchRevision,
     })
     if (revision !== searchRevision) return
@@ -109,7 +111,9 @@ watch([query, searchScope, scope, context], (_, __, onCleanup) => {
   results.value = null
   activeMatch.value = -1
   searchError.value = ''
-  searching.value = Boolean(query.value.trim() && searchBase.value)
+  searchSource.value = visibleSource.value
+  searchBase.value = searchScope.value === 'document' ? [] : viewPath.value
+  searching.value = Boolean(query.value.trim() && searchBase.value && searchSource.value?.document)
   if (!searching.value) return
   const timer = setTimeout(() => find(), 160)
   onCleanup(() => { clearTimeout(timer); searchRevision++ })
@@ -119,8 +123,7 @@ function reveal(index) {
   if (!match) return
   activeMatch.value = index
   const path = [...searchBase.value, ...match.path]
-  referenceSource.value = null
-  referenceHistory.value = []
+  referenceSource.value = searchSource.value === context.value ? null : searchSource.value
   referenceError.value = ''
   location.value = path
   select(path)
@@ -143,6 +146,10 @@ async function open(documentContext, trigger) {
   query.value = ''
   searchScope.value = 'fragment'
   setScope('operation')
+  if (documentContext.fragment?.kind === 'request-body' && documentContext.document) {
+    location.value = requestSchemaPath(documentContext.document, operationPath.value, documentContext.fragment)
+    select(location.value ?? [])
+  }
   returnFocus = trigger
   await nextTick()
   if (!dialog.value.open) dialog.value.showModal()
