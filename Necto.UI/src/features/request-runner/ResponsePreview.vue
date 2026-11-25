@@ -18,6 +18,8 @@ import { selectionLabel } from './selection.js'
 const props = defineProps({
   result: { type: Object, required: true },
   selectors: { type: Array, default: () => [] },
+  canSelect: Function,
+  selectionNote: String,
   operation: Object,
   presentation: Object,
   defaultView: { type: String, default: 'auto' },
@@ -177,6 +179,7 @@ async function reveal(match, scroll = true) {
   element?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' })
 }
 function selectPath(path) {
+  if (path && props.canSelect && !props.canSelect(path)) return
   props.result.selectedPath = path
   if (props.result.stream?.view) props.result.stream.view.selectedPath = path
   if (path) emit('select-object', path)
@@ -348,7 +351,7 @@ function closeDetails(event) {
       </details>
     </div>
     <div v-if="result.selectedPath" class="selection-toolbar">
-      <span role="status" class="selection-label">{{ selectionLabel(operation, result) }}</span>
+      <span role="status" class="selection-label">{{ selectionNote || selectionLabel(operation, result) }}</span>
       <details class="selection-path">
         <summary>JSON path</summary>
         <code>{{ pathLabel(result.selectedPath) }}</code>
@@ -366,6 +369,7 @@ function closeDetails(event) {
         v-if="result.json !== undefined"
         :result="result"
         :selectors="selectors"
+        :can-select="canSelect"
         @reveal="reveal"
         @select="selectPath($event)"
       />
@@ -392,6 +396,7 @@ function closeDetails(event) {
       :status="result.status"
       :content-type="result.contentType"
       :selectors="selectors"
+        :can-select="canSelect"
       :selected="result.selectedPath"
       @select="selectPath($event)"
       @inspect="inspectRow"
@@ -404,7 +409,7 @@ function closeDetails(event) {
       tabindex="0"
       aria-label="JSON response preview"
     >
-      <JsonNode
+      <JsonNode :selection-note="selectionNote"
         :expansion="expansion"
         @toggle-children="toggleChildren"
         @page="previewPage"
@@ -414,6 +419,7 @@ function closeDetails(event) {
         :root="true"
         :navigation="navigation"
         :selectors="selectors"
+        :can-select="canSelect"
         :selected="result.selectedPath"
         @select="selectPath($event)"
       />

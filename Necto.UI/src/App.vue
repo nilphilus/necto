@@ -1278,6 +1278,8 @@ function removeScenario(id) {
               :next-request-width="appearance.nextRequestWidth" :default-response-view="appearance.responseView" @capture-requests="captureRequests" :prepare="prepareRequest" :cancel="cancelRequest" :history="requestHistory" :configuration="configuration" :operation="current.operation" :session="current.session" :run="runInContext" :values="requestValues" :preset-colors="presetColors" :default-preset-color="defaultPresetColor" :selectors="selectablePaths(current.operation)" :has-related="relatedTargets.length > 0" :parameter-choices="parameter => choicesFor(current.operation, parameter.in, parameter.name, relatedResults)"
               @choose-parameter="(location, choice) => choose(current.session, location, choice)" @edit-preset="editActivePreset"
               :value-sources="(location, name) => sourcesFor(current.operation, location, name)"
+              :collectable-fields="collectableFields"
+              @collect-values="(trigger, location, name) => valueCollector.open(trigger, location, name)"
               @open-source="operation => selectCatalogOperation(operation, operation.tags[0])">
               <template #request-actions>
                 <button v-if="collectableFields.length" class="secondary" type="button" aria-haspopup="dialog"
@@ -1318,10 +1320,10 @@ function removeScenario(id) {
     <CollectValuesDialog ref="valueCollector" :operation="current?.operation" :session="current?.session"
       :workspace="workspaceIdentity(configuration)" :fields="collectableFields" :choices-for="choicesFor"
       :create-session="createDraft" :cancel-request="cancelRequest" :apply="applyRequestValues">
-      <template #default="{ operation, session, selectors, selectObject }">
+      <template #default="{ operation, session, selectors, selectObject, canSelect, selectionNote }">
         <OperationRunner :key="operation.key" :operation="operation" :session="session"
           :configuration="configuration" :values="valuesFor(operation)" :preset-colors="presetColors"
-          :default-preset-color="defaultPresetColor" default-response-view="preview" :selectors="selectors"
+          :default-preset-color="defaultPresetColor" default-response-view="preview" :selectors="selectors" :can-select="canSelect" :selection-note="selectionNote"
           @select-response-object="selectObject" :run="runInContext" :prepare="prepareRequest" :cancel="cancelRequest"
           @inspect-openapi="trigger => inspectOpenApi(operation, trigger)" />
       </template>

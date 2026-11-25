@@ -4,7 +4,7 @@ import { usePayloadSearch } from './usePayloadSearch.js'
 import { pathLabel, selectableOwner, SEARCH_PAGE_SIZE, MAX_QUERY_LENGTH } from './search.js'
 import { pageRange } from '../request-runner/preview.js'
 import PreviewPager from '../request-runner/PreviewPager.vue'
-const props = defineProps({ result: Object, selectors: Array })
+const props = defineProps({ result: Object, selectors: Array, canSelect: Function })
 const emit = defineEmits(['reveal', 'select'])
 const finder = usePayloadSearch(toRef(props, 'result'))
 const { query, scope, caseSensitive, exact, field, state } = finder
@@ -29,7 +29,10 @@ finder.onResults(() => {
 })
 const range = computed(() => pageRange(state.total, state.page, SEARCH_PAGE_SIZE))
 const current = computed(() => (state.page - 1) * SEARCH_PAGE_SIZE + active.value + 1)
-const rows = computed(() => state.matches.map(match => ({ ...match, owner: selectableOwner(props.result.json, match.path, props.selectors) })))
+const rows = computed(() => state.matches.map(match => {
+  const owner = selectableOwner(props.result.json, match.path, props.selectors)
+  return { ...match, owner: owner && (props.canSelect?.(owner) ?? true) ? owner : null }
+}))
 function reveal(index) { active.value = index; emit('reveal', state.matches[index]) }
 function next(direction) {
   const index = active.value + direction
