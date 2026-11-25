@@ -12,7 +12,7 @@ const props = defineProps({
   history: Object,
   prepare: Function
 });
-const emit = defineEmits(['edit-request', 'capture-requests']);
+const emit = defineEmits(['edit-request', 'capture-requests', 'inspect-openapi']);
 const trigger = ref(null),
   menu = ref(null),
   advanced = ref(null),
@@ -69,6 +69,10 @@ function outside(event) {
     !trigger.value?.contains(event.target)
   )
     open.value = false;
+}
+function openInspector() {
+  close()
+  emit('inspect-openapi', trigger.value)
 }
 function inspect(section) {
   open.value = false;
@@ -130,6 +134,7 @@ onUnmounted(() => {
       <p v-if="feedback" role="status">{{ feedback }}</p>
       <strong>Inspect</strong
       ><button type="button" @click="inspect('Contract')">Contract</button
+      ><button type="button" @click="openInspector">OpenAPI Inspector</button
       ><button type="button" @click="inspect('Code')">
         Code · more languages</button
       ><button type="button" @click="inspect('History')">
@@ -145,6 +150,7 @@ onUnmounted(() => {
     ref="advanced"
     v-bind="props"
     hide-trigger
+    @inspect-openapi="emit('inspect-openapi', $event)"
     @closed="target => (target ?? trigger)?.focus()" @edit-request="emit('edit-request')" @capture-requests="emit('capture-requests', $event)"
   />
 </template>

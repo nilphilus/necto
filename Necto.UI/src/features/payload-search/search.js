@@ -53,6 +53,7 @@ export async function searchPayload(document, { query, scope = 'all', caseSensit
   const start = (page - 1) * size, end = start + size
   const matches = []
   const stack = [{ value: document, part: undefined, key: null, entered: false, index: 0 }]
+  const ancestors = new WeakSet()
   let total = 0, scanned = 0, batch = 0
   let lastProgress = performance.now(), batchStarted = lastProgress
   while (stack.length) {
@@ -77,10 +78,17 @@ export async function searchPayload(document, { query, scope = 'all', caseSensit
         if (knownTotal !== undefined && total >= end) break
       }
       if (scalar) stack.pop()
-      else frame.keys = Array.isArray(frame.value) ? null : Object.keys(frame.value)
+      else if (ancestors.has(frame.value)) stack.pop()
+      else {
+        ancestors.add(frame.value)
+        frame.keys = Array.isArray(frame.value) ? null : Object.keys(frame.value)
+      }
     } else {
       const count = frame.keys ? frame.keys.length : frame.value.length
-      if (frame.index >= count) stack.pop()
+      if (frame.index >= count) {
+        ancestors.delete(frame.value)
+        stack.pop()
+      }
       else {
         const part = frame.keys ? frame.keys[frame.index] : frame.index
         frame.index++

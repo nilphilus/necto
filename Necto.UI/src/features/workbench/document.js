@@ -1,12 +1,15 @@
 import { parse } from 'yaml'
 export const DOCUMENT_LIMIT = 5 * 1024 * 1024
-export function parseDocument(text) {
+export function parseDocument(text, { onConversion } = {}) {
   if (text.length > DOCUMENT_LIMIT)
     throw new Error('API document exceeds 5 MB.')
   const document = parse(text, { maxAliasCount: 100, uniqueKeys: true })
   if (!document || typeof document !== 'object' || Array.isArray(document))
     throw new Error('Expected an API document.')
-  if (document.swagger === '2.0') return convertSwagger(document)
+  if (document.swagger === '2.0') {
+    onConversion?.('Swagger 2.0')
+    return convertSwagger(document)
+  }
   if (!/^3\.[012]\.\d+$/.test(document.openapi ?? ''))
     throw new Error(
       'Supported documents: Swagger 2.0 and OpenAPI 3.0–3.2. OpenAPI 3.2 support is partial.'
@@ -127,6 +130,13 @@ function convertSwagger(source) {
     'Converted Swagger 2.0. OAuth flow conversion and collectionFormat semantics require review.'
   return document
 }
+export async function readDocumentSource(text, url, fetcher) {
+  let convertedFrom
+  const parsed = parseDocument(text, { onConversion: version => { convertedFrom = version } })
+  const document = await bundleReferences(parsed, url, fetcher)
+  return { document, sourceText: text, convertedFrom }
+}
+
 export async function bundleReferences(document, baseUrl, fetcher = fetch) {
   const documents = new Map([[baseUrl, document]]),
     pending = [document],
