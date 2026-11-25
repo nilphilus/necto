@@ -1,6 +1,6 @@
 import { workspaceIdentity } from '../workbench/workspaceIdentity.js'
 import { onWorkspaceImport } from '../workbench/workspaceUpdates.js'
-import { parseDocument, bundleReferences } from '../workbench/document.js'
+import { readDocumentSource } from '../workbench/document.js'
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 
 export function httpUrl(value, label, base) {
@@ -30,14 +30,16 @@ export async function loadConnection(entry, signal, authentication) {
     const options = { signal, headers: { Accept: apiDocument ? 'application/json, application/yaml, text/yaml' : 'application/json' }, credentials: 'omit' }
     const response = await (authentication?.metadataFetch(url, entry.id, options) ?? fetch(url, options))
     if (!response.ok) throw new Error(`HTTP ${response.status} loading ${url}`)
-    return apiDocument && response.text ? bundleReferences(parseDocument(await response.text()), url, (url, options) => fetch(url, { ...options, signal })) : response.json()
+    if (!apiDocument) return response.json()
+    if (typeof response.text !== 'function') return { document: await response.json() }
+    return readDocumentSource(await response.text(), url, (url, options) => fetch(url, { ...options, signal }))
   }
-  const [document, mappings] = await Promise.all([read(entry.openApiUrl, true), read(entry.endpointMappingsUrl)])
+  const [{ document, ...source }, mappings] = await Promise.all([read(entry.openApiUrl, true), read(entry.endpointMappingsUrl)])
   if (!document?.openapi || typeof document.paths !== 'object' || !document.paths) throw new Error('Expected an OpenAPI document with paths.')
   if (!Array.isArray(mappings) || mappings.some(mapping => !mapping?.source?.operationId || !mapping?.target?.operationId)) {
     throw new Error('Expected a list of Necto endpoint mappings.')
   }
-  return { document, mappings, signature: signature(entry) }
+  return { document, ...source, mappings, signature: signature(entry) }
 }
 
 export function useExternalApis(configuration, authentication) {

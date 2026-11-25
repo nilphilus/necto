@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { pageRange, TEXT_PAGE_SIZE } from '../request-runner/preview.js'
 import InspectorNode from './InspectorNode.vue'
 import { requestSchemaPath } from './requestSchemaPath.js'
 import { findOperationPath, referenceTarget } from './references.js'
@@ -139,10 +140,35 @@ function nextMatch(direction) {
     if (page >= 1 && page <= results.value.pages) void find(page, results.value.total, direction)
   }
 }
+const representation = ref('used')
+const sourcePage = ref(1)
+const sourceText = computed(() => visibleSource.value?.sourceText)
+const sourceRange = computed(() => pageRange(sourceText.value?.length ?? 0, sourcePage.value, TEXT_PAGE_SIZE))
+const rawExcerpt = computed(() => sourceText.value?.slice(sourceRange.value.start, sourceRange.value.end))
+function changeRepresentation(value) {
+  representation.value = value
+  sourcePage.value = 1
+  feedback.value = ''
+}
+async function copySource() {
+  try {
+    await navigator.clipboard.writeText(sourceText.value)
+    feedback.value = 'Original source copied.'
+  } catch { feedback.value = 'Clipboard unavailable. Download the source instead.' }
+}
+function downloadSource() {
+  const url = URL.createObjectURL(new Blob([sourceText.value], { type: 'text/plain' }))
+  const link = window.document.createElement('a')
+  link.href = url
+  link.download = 'openapi-source.txt'
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
 let returnFocus
 async function open(documentContext, trigger) {
   treeStates.clear()
   context.value = documentContext
+  changeRepresentation('used')
   query.value = ''
   searchScope.value = 'fragment'
   setScope('operation')
@@ -157,6 +183,8 @@ async function open(documentContext, trigger) {
 function restoreFocus() {
   returnFocus?.focus()
   context.value = null
+  referenceSource.value = null
+  referenceHistory.value = []
   treeStates.clear()
 }
 defineExpose({ open })
@@ -176,43 +204,66 @@ defineExpose({ open })
         <span v-if="visibleSource.document?.openapi">OpenAPI {{ visibleSource.document.openapi }}</span>
         <span>{{ visibleSource.source }}</span>
       </div>
-      <div class="scope-controls">
-        <button type="button" class="secondary" :aria-pressed="scope === 'operation'"
-          @click="setScope('operation')">{{ context.method.toUpperCase() }} {{ context.path }}</button>
-        <button type="button" class="secondary" :aria-pressed="scope === 'document'"
-          @click="setScope('document')">Whole document</button>
+      <div class="scope-controls" aria-label="Document representation">
+        <button class="secondary" type="button" :aria-pressed="representation === 'used'"
+          @click="changeRepresentation('used')">Used by Necto</button>
+        <button v-if="sourceText" class="secondary" type="button" :aria-pressed="representation === 'source'"
+          @click="changeRepresentation('source')">Original source</button>
+        <small v-else>Original source unavailable.</small>
+        <small v-if="visibleSource.convertedFrom">Converted from {{ visibleSource.convertedFrom }}</small>
       </div>
-      <form class="inspector-search" @submit.prevent="nextMatch(1)">
-        <input v-model="query" type="search" aria-label="Search OpenAPI" placeholder="Find keys or values"
-          :maxlength="MAX_QUERY_LENGTH" @keydown.shift.enter.prevent="nextMatch(-1)">
-        <select v-model="searchScope" aria-label="Inspector search scope">
-          <option value="fragment">Current fragment</option>
-          <option value="document">Whole document</option>
-        </select>
-        <button type="button" class="secondary" aria-label="Previous OpenAPI match"
-          :disabled="searching || matchNumber <= 1" @click="nextMatch(-1)">↑</button>
-        <button type="submit" class="secondary" aria-label="Next OpenAPI match"
-          :disabled="searching || !results?.total || matchNumber >= results.total">↓</button>
-        <small v-if="query.trim()" role="status">{{ searching ? 'Searching…' : searchError ||
-          (results?.total ? (matchNumber ? matchNumber + ' of ' : '') + results.total + ' matches' : 'No matches') }}</small>
-      </form>
-      <button v-if="referenceHistory.length" type="button" class="secondary back-to-scope" @click="backReference">Back from reference</button>
-      <p v-if="referenceError" class="error" role="status">{{ referenceError }}</p>
-      <button v-if="location && !referenceHistory.length" type="button" class="secondary back-to-scope"
-        @click="setScope(scope)">Back to {{ scope }}</button>
-      <template v-if="preview !== undefined && viewPath">
+      <template v-if="representation === 'source'">
         <div class="fragment-actions">
-          <code>{{ selectedPointer || 'Document root' }}</code>
-          <button class="secondary" type="button" @click="copy()">Copy fragment</button>
-          <button class="secondary" type="button" @click="copy(true)">Copy JSON Pointer</button>
+          <button type="button" class="secondary" @click="copySource">Copy source</button>
+          <button type="button" class="secondary" @click="downloadSource">Download source</button>
           <small role="status">{{ feedback }}</small>
         </div>
-        <ul ref="tree" class="inspector-tree">
-          <InspectorNode :key="(visibleSource.url ?? '') + pointerFor(viewPath)" :value="preview" :path="viewPath"
-            :label="viewPath.at(-1) ?? 'Document'" :selected="selectedPointer" :tree-state="treeState" initially-open @select="select" @follow="followReference" />
-        </ul>
+        <pre class="inspector-tree raw-source">{{ rawExcerpt }}</pre>
+        <div v-if="sourceRange.pages > 1" class="fragment-actions" aria-label="Source pages">
+          <button type="button" class="secondary" :disabled="sourceRange.page === 1" @click="sourcePage--">Previous source page</button>
+          <small>{{ sourceRange.page }} of {{ sourceRange.pages }}</small>
+          <button type="button" class="secondary" :disabled="sourceRange.page === sourceRange.pages" @click="sourcePage++">Next source page</button>
+        </div>
       </template>
-      <p v-else role="status">This operation is unavailable in the selected OpenAPI document.</p>
+      <template v-else>
+        <div class="scope-controls">
+          <button type="button" class="secondary" :aria-pressed="scope === 'operation'"
+            @click="setScope('operation')">{{ context.method.toUpperCase() }} {{ context.path }}</button>
+          <button type="button" class="secondary" :aria-pressed="scope === 'document'"
+            @click="setScope('document')">Whole document</button>
+        </div>
+        <form class="inspector-search" @submit.prevent="nextMatch(1)">
+          <input v-model="query" type="search" aria-label="Search OpenAPI" placeholder="Find keys or values"
+            :maxlength="MAX_QUERY_LENGTH" @keydown.shift.enter.prevent="nextMatch(-1)">
+          <select v-model="searchScope" aria-label="Inspector search scope">
+            <option value="fragment">Current fragment</option>
+            <option value="document">Whole document</option>
+          </select>
+          <button type="button" class="secondary" aria-label="Previous OpenAPI match"
+            :disabled="searching || matchNumber <= 1" @click="nextMatch(-1)">↑</button>
+          <button type="submit" class="secondary" aria-label="Next OpenAPI match"
+            :disabled="searching || !results?.total || matchNumber >= results.total">↓</button>
+          <small v-if="query.trim()" role="status">{{ searching ? 'Searching…' : searchError ||
+            (results?.total ? (matchNumber ? matchNumber + ' of ' : '') + results.total + ' matches' : 'No matches') }}</small>
+        </form>
+        <button v-if="referenceHistory.length" type="button" class="secondary back-to-scope" @click="backReference">Back from reference</button>
+        <p v-if="referenceError" class="error" role="status">{{ referenceError }}</p>
+        <button v-if="location && !referenceHistory.length" type="button" class="secondary back-to-scope"
+          @click="setScope(scope)">Back to {{ scope }}</button>
+        <template v-if="preview !== undefined && viewPath">
+          <div class="fragment-actions">
+            <code>{{ selectedPointer || 'Document root' }}</code>
+            <button class="secondary" type="button" @click="copy()">Copy fragment</button>
+            <button class="secondary" type="button" @click="copy(true)">Copy JSON Pointer</button>
+            <small role="status">{{ feedback }}</small>
+          </div>
+          <ul ref="tree" class="inspector-tree">
+            <InspectorNode :key="(visibleSource.url ?? '') + pointerFor(viewPath)" :value="preview" :path="viewPath"
+              :label="viewPath.at(-1) ?? 'Document'" :selected="selectedPointer" :tree-state="treeState" initially-open @select="select" @follow="followReference" />
+          </ul>
+        </template>
+        <p v-else role="status">This operation is unavailable in the selected OpenAPI document.</p>
+      </template>
     </template>
   </dialog>
 </template>
@@ -231,5 +282,6 @@ h2 { margin: 0; font-size: 1.1rem; }
 .back-to-scope { margin-bottom: .5rem; }
 .fragment-actions { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-bottom: .55rem; }
 .fragment-actions code { overflow-wrap: anywhere; }
+.raw-source { white-space: pre-wrap; overflow-wrap: anywhere; }
 .inspector-tree { overflow: auto; max-height: 58dvh; margin: 0; padding: .6rem; background: var(--subtle); border-radius: .45rem; }
 </style>
