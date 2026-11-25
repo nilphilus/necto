@@ -39,6 +39,12 @@ run(async ({ p, assert, builder, add, closeEditor, calls }) => {
   await p.locator('.builder-run-status').filter({ hasText: '1 / 1 completed' }).waitFor()
   assert.deepEqual(calls.map((call) => call.path), ['/customer'])
 
+  await p.getByRole('button', { name: '← Scenarios', exact: true }).click()
+  await card.getByRole('button', { name: 'Run Builder scenario Check customer', exact: true }).click()
+  await p.locator('.builder-run-status').filter({ hasText: '1 / 1 completed' }).waitFor()
+  assert.equal(await review.isVisible(), false)
+  assert.deepEqual(calls.map((call) => call.path), ['/customer', '/customer'])
+
   await p.setViewportSize({ width: 390, height: 844 })
   await p.getByRole('button', { name: '← Scenarios', exact: true }).click()
   await card.waitFor()
@@ -46,7 +52,7 @@ run(async ({ p, assert, builder, add, closeEditor, calls }) => {
   await quick.getByRole('button', { name: 'Run quick scenario Quick customer check' }).click()
   assert.equal(await quick.getByRole('button', { name: 'Run scenario', exact: true }).count(), 0)
   await quick.getByRole('status').getByText('completed', { exact: true }).waitFor()
-  assert.deepEqual(calls.map((call) => call.path), ['/customer', '/customer'])
+  assert.deepEqual(calls.map((call) => call.path), ['/customer', '/customer', '/customer'])
   const [definition] = await Promise.all([
     p.waitForEvent('download'),
     card.getByRole('button', { name: 'Export', exact: true }).click(),
