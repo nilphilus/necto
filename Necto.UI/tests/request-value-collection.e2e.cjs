@@ -16,6 +16,10 @@ run(async ({ p, assert, calls }) => {
       target: { operationId: 'Create', location: 'query', name: 'assetId' } },
     { source: { operationId: 'Customer', property: 'id' },
       target: { operationId: 'Create', location: 'body', name: 'customerId' } },
+    ...Array.from({ length: 12 }, (_, index) => ({
+      source: { operationId: 'Entity' + index, property: 'id' },
+      target: { operationId: 'Create', location: 'query', name: 'assetId' },
+    })),
     { source: { operationId: 'Rows', eachItem: true, property: 'id' },
       target: { operationId: 'Create', location: 'header', name: 'tenant' } },
   ] }))
@@ -32,6 +36,14 @@ run(async ({ p, assert, calls }) => {
   const wizard = p.getByRole('dialog', { name: 'Find request values' })
   const send = wizard.getByRole('button', { name: 'Send request', exact: true })
   assert.equal(calls.length, 0)
+  const sources = wizard.getByRole('region', { name: 'Suggested source endpoints' })
+  assert.equal(await sources.getByRole('button', { name: /Entity endpoint/ }).count(), 0)
+  await sources.getByRole('button', { name: /More sources/ }).click()
+  assert.equal(await sources.getByRole('button', { name: /Entity endpoint/ }).count(), 12)
+  await wizard.getByRole('button', { name: 'Sources for query assetId' }).click()
+  assert.equal(await sources.getByRole('button', { name: /Invoice rows/ }).count(), 0)
+  await sources.getByRole('button', { name: 'Show sources for all fields' }).click()
+  await sources.getByRole('button', { name: /Invoice rows.*Can fill: tenant/ }).waitFor()
   await wizard.getByRole('checkbox', { name: /customerId body/ }).check()
   await send.click()
   await wizard.getByRole('button', { name: 'Select object at []', exact: true }).click()
