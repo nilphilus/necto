@@ -24,6 +24,8 @@ import OperationRunner from './features/request-runner/OperationRunner.vue'
 import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
 import RequestSamples from './features/request-runner/RequestSamples.vue'
 import { createSampleDrafts } from './features/request-runner/samples.js'
+import CollectValuesDialog from './features/related-endpoints/CollectValuesDialog.vue'
+import { applyCollectedValues, collectionFields } from './features/related-endpoints/collectionFields.js'
 import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
 import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
 import { useRelatedTargets } from './features/related-endpoints/useRelatedTargets.js'
@@ -189,6 +191,15 @@ onUnmounted(authentication.onChange(ids => {
 }))
 
 const requestValues = computed(() => current.value ? valuesFor(current.value.operation) : new Map())
+const valueCollector = ref(null)
+const collectableFields = computed(() => current.value
+  ? collectionFields(current.value.operation, current.value.session, requestValues.value, sourcesFor)
+  : [])
+function applyRequestValues(session, selections) {
+  if (current.value?.session !== session || session.pending) return
+  applyCollectedValues(session, selections)
+}
+
 const visiblePresetNames = computed(() => {
   if (!current.value) return []
   const { operation, session } = current.value
@@ -1269,6 +1280,9 @@ function removeScenario(id) {
               :value-sources="(location, name) => sourcesFor(current.operation, location, name)"
               @open-source="operation => selectCatalogOperation(operation, operation.tags[0])">
               <template #request-actions>
+                <button v-if="collectableFields.length" class="secondary" type="button" aria-haspopup="dialog"
+                  :disabled="current.session.pending"
+                  @click="valueCollector.open($event.currentTarget)">Find request values</button>
                 <button class="secondary" type="button" aria-haspopup="dialog" @click="requestSamples.openStoreDialog()">
                   Save request
                 </button>
@@ -1301,6 +1315,17 @@ function removeScenario(id) {
         </div>
       </div>
     </template>
+    <CollectValuesDialog ref="valueCollector" :operation="current?.operation" :session="current?.session"
+      :workspace="workspaceIdentity(configuration)" :fields="collectableFields" :choices-for="choicesFor"
+      :create-session="createDraft" :cancel-request="cancelRequest" :apply="applyRequestValues">
+      <template #default="{ operation, session }">
+        <OperationRunner :key="operation.key" :operation="operation" :session="session"
+          :configuration="configuration" :values="valuesFor(operation)" :preset-colors="presetColors"
+          :default-preset-color="defaultPresetColor" :default-response-view="appearance.responseView"
+          :run="runInContext" :prepare="prepareRequest" :cancel="cancelRequest"
+          @inspect-openapi="trigger => inspectOpenApi(operation, trigger)" />
+      </template>
+    </CollectValuesDialog>
     <OpenApiInspector ref="openApiInspector" />
   </main>
 </template>
