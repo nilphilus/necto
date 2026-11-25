@@ -178,11 +178,11 @@ async function reveal(match, scroll = true) {
     preview.value?.querySelector('[data-search-target="true"]')
   element?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' })
 }
-function selectPath(path) {
+function selectPath(path, event) {
   if (path && props.canSelect && !props.canSelect(path)) return
   props.result.selectedPath = path
   if (props.result.stream?.view) props.result.stream.view.selectedPath = path
-  if (path) emit('select-object', path)
+  if (path) emit('select-object', path, event)
 }
 function inspectEvent(event) {
   expansionModes.clear()
@@ -371,7 +371,7 @@ function closeDetails(event) {
         :selectors="selectors"
         :can-select="canSelect"
         @reveal="reveal"
-        @select="selectPath($event)"
+        @select="selectPath"
       />
     </div>
     <div v-if="focusPath.length && !raw" class="preview-toolbar">
@@ -398,7 +398,7 @@ function closeDetails(event) {
       :selectors="selectors"
         :can-select="canSelect"
       :selected="result.selectedPath"
-      @select="selectPath($event)"
+      @select="selectPath"
       @inspect="inspectRow"
     />
     <div
@@ -421,7 +421,7 @@ function closeDetails(event) {
         :selectors="selectors"
         :can-select="canSelect"
         :selected="result.selectedPath"
-        @select="selectPath($event)"
+        @select="selectPath"
       />
     </div>
     <div v-if="result.stream?.view?.selectedIndex !== undefined" class="preview-toolbar">

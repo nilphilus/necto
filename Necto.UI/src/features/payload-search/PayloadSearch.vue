@@ -39,7 +39,7 @@ function next(direction) {
   if (index >= 0 && index < state.matches.length) reveal(index)
   else { desired = direction < 0 ? 'last' : 'first'; scrollOnResults = true; finder.search(state.page + direction) }
 }
-function select(row, index) { emit('select', row.owner); reveal(index) }
+function select(row, index, event) { emit('select', row.owner, event); reveal(index) }
 </script>
 <template>
   <section class="payload-search" aria-label="Find in response">
@@ -67,14 +67,14 @@ function select(row, index) { emit('select', row.owner); reveal(index) }
     <p v-if="state.error" class="error" role="alert">{{ state.error }}</p>
     <div v-if="state.matches.length && !state.pending" class="current-match">
       <code :title="pathLabel(state.matches[active].path)">{{ pathLabel(state.matches[active].path) }}</code>
-      <button v-if="!resultsOpen && rows[active]?.owner !== null" type="button" class="secondary" :aria-label="'Select mapped object for match ' + current" @click="select(rows[active], active)">Select object</button>
+      <button v-if="!resultsOpen && rows[active]?.owner !== null" type="button" class="secondary" :aria-label="'Select mapped object for match ' + current" @click="select(rows[active], active, $event)">Select object</button>
       <button type="button" class="secondary" :aria-expanded="resultsOpen" @click="resultsOpen = !resultsOpen">{{ resultsOpen ? 'Hide results' : 'Show results' }}</button>
     </div>
     <template v-if="resultsOpen && state.matches.length && !state.pending">
       <ol class="search-results" :start="range.start + 1" aria-label="Response search results">
         <li v-for="(row, index) in rows" :key="JSON.stringify(row.path)" :class="{ active: active === index }">
           <button type="button" class="match" :aria-current="active === index ? 'true' : undefined" :aria-label="'Show match ' + (range.start + index + 1)" @click="reveal(index)"><code>{{ pathLabel(row.path) }}</code><span>{{ row.snippet }}</span><small>{{ row.kind }}</small></button>
-          <button v-if="row.owner !== null" type="button" class="secondary" :aria-label="'Select mapped object for match ' + (range.start + index + 1)" @click="select(row, index)">Select object</button>
+          <button v-if="row.owner !== null" type="button" class="secondary" :aria-label="'Select mapped object for match ' + (range.start + index + 1)" @click="select(row, index, $event)">Select object</button>
         </li>
       </ol>
       <div v-if="state.pages > 1" class="search-pager"><PreviewPager :range="range" label="Search matches" @change="desired = 'first'; finder.search($event)" /></div>

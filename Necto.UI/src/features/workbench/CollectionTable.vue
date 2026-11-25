@@ -26,10 +26,10 @@ async function openRowMenu(row, event) {
   await nextTick(); rowMenuElement.value?.querySelector('button')?.focus()
 }
 function closeRowMenu(focus = true) { rowMenu.value = null; if (focus && menuTrigger?.isConnected) menuTrigger.focus() }
-function chooseRow(action) {
+function chooseRow(action, event) {
   const row = rowMenu.value.row
   closeRowMenu(action === 'select')
-  emit(action, row.path)
+  emit(action, row.path, event)
 }
 function outsideMenu(event) { if (rowMenu.value && !rowMenuElement.value?.contains(event.target) && event.target !== menuTrigger) closeRowMenu(false) }
 function resizeMenu() { closeRowMenu(false) }
@@ -137,7 +137,7 @@ const active = (path) =>
                 type="button"
                 :aria-pressed="active(row.path)"
                 :aria-label="`Select row ${row.index + 1}`"
-                @click="$emit('select', row.path)"
+                @click="$emit('select', row.path, $event)"
               >
                 {{ active(row.path) ? 'Selected' : 'Select' }}</button
               ><button
@@ -153,7 +153,7 @@ const active = (path) =>
       </table>
     </div>
     <Teleport to="body"><div v-if="rowMenu" ref="rowMenuElement" class="row-action-menu" role="menu" :aria-label="`Actions for row ${rowMenu.row.index + 1}`" :style="{top:rowMenu.top+'px',left:rowMenu.left+'px'}" @keydown.esc.stop.prevent="closeRowMenu()" @keydown="menuKeys" @keydown.tab="closeRowMenu(false)">
-      <button v-if="selectable(rowMenu.row.path)" type="button" role="menuitem" :aria-label="`Select row ${rowMenu.row.index + 1}`" @click="chooseRow('select')">{{ active(rowMenu.row.path) ? 'Selected object' : 'Select object' }}</button>
+      <button v-if="selectable(rowMenu.row.path)" type="button" role="menuitem" :aria-label="`Select row ${rowMenu.row.index + 1}`" @click="chooseRow('select', $event)">{{ active(rowMenu.row.path) ? 'Selected object' : 'Select object' }}</button>
       <button type="button" role="menuitem" :aria-label="`Inspect row ${rowMenu.row.index + 1}`" @click="chooseRow('inspect')">Inspect row</button>
     </div></Teleport>
   </div>
