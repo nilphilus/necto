@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, reactive, ref, shallowRef, watch } from 'vue'
-import { pathLabel } from '../payload-search/search.js'
+import { pathLabel, selectableOwner } from '../payload-search/search.js'
 
 const props = defineProps({
   operation: Object, session: Object, workspace: String, fields: Array,
@@ -31,16 +31,41 @@ const sourceOptions = computed(() => {
 const source = computed(() => sourceOptions.value.find(item => item.operation.key === activeSourceKey.value))
 const sourceSession = computed(() => sourceSessions.get(activeSourceKey.value))
 const count = computed(() => selectedFields.value.filter(field => collected.has(field.key)).length)
-const choices = computed(() => {
+const response = computed(() => {
   const session = sourceSession.value
-  if (!source.value || !session?.result || session.pending || session.resultStale) return []
-  const results = new Map([[activeSourceKey.value, [session.result]]])
-  return source.value.fields.map(field => ({
-    ...field,
-    candidates: props.choicesFor(props.operation, field.location, field.name, results)
-      .filter(choice => choice.name === field.name),
-  }))
+  return session && !session.pending && !session.resultStale ? session.result : null
 })
+function selectorsFor(field) {
+  return field.sources.filter(item => item.operation.key === activeSourceKey.value).map(item => item.selector)
+}
+const selectors = computed(() => response.value && source.value
+  ? source.value.fields.flatMap(selectorsFor) : [])
+function candidatesFor(field, path) {
+  const results = new Map([[activeSourceKey.value, [{ ...response.value, selectedPath: path }]]])
+  return props.choicesFor(props.operation, field.location, field.name, results)
+    .filter(choice => choice.name === field.name && choice.binding)
+}
+const choices = computed(() => {
+  if (!source.value || !response.value) return []
+  return source.value.fields.map(field => {
+    const selectedPath = response.value.selectedPath
+    const matchesAtSelection = selectedPath ? candidatesFor(field, selectedPath) : []
+    const objectPaths = selectorsFor(field)
+    const direct = candidatesFor(field).filter(choice =>
+      selectableOwner(response.value.json, choice.binding.path, objectPaths) === null)
+    return { ...field, candidates: matchesAtSelection.length > 1 ? matchesAtSelection : direct }
+  })
+})
+function collectValue(field, candidate) {
+  collected.set(field.key, { location: field.location, name: field.name, value: candidate.value })
+}
+function selectObject(path) {
+  if (!source.value || !response.value) return
+  for (const field of source.value.fields) {
+    const candidates = candidatesFor(field, path)
+    if (!collected.has(field.key) && candidates.length === 1) collectValue(field, candidates[0])
+  }
+}
 
 function activate(item) {
   const key = item.operation.key
@@ -89,7 +114,7 @@ function toggle(field, enabled) {
 
 function collect(field, event) {
   const candidate = field.candidates[Number(event.target.value)]
-  if (event.target.value && candidate) collected.set(field.key, { location: field.location, name: field.name, value: candidate.value })
+  if (event.target.value && candidate) collectValue(field, candidate)
   event.target.value = ''
 }
 function apply() {
@@ -137,21 +162,20 @@ defineExpose({ open })
           </section>
         </aside>
         <section v-if="source && sourceSession" class="source-workbench" aria-label="Source request">
-          <div v-if="choices.length" class="response-values" aria-label="Mapped response values">
+          <div v-if="choices.some(field => field.candidates.length)" class="response-values" aria-label="Mapped response values">
             <h3>Choose values from the response</h3>
-            <label v-for="field in choices" :key="field.key">
+            <label v-for="field in choices.filter(item => item.candidates.length)" :key="field.key">
               <code>{{ field.name }}</code>
-              <select v-if="field.candidates.length" :aria-label="'Use response value for ' + field.location + ' ' + field.name"
+              <select :aria-label="'Use response value for ' + field.location + ' ' + field.name"
                 @change="collect(field, $event)">
                 <option value="">Choose a value…</option>
                 <option v-for="(choice, index) in field.candidates" :key="choice.key" :value="String(index)">
                   {{ label(choice) }}{{ choice.binding ? ' · ' + pathLabel(choice.binding.path) : '' }}
                 </option>
               </select>
-              <small v-else class="muted">No mapped value in this response.</small>
             </label>
           </div>
-          <slot :operation="source.operation" :session="sourceSession" />
+          <slot :operation="source.operation" :session="sourceSession" :selectors="selectors" :select-object="selectObject" />
         </section>
       </div>
       <footer class="collect-footer">

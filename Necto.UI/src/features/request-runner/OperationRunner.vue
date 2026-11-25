@@ -38,7 +38,7 @@ const props = defineProps({
   valueSources: { type: Function, default: () => [] },
 })
 
-const emit = defineEmits(['edit-preset', 'choose-parameter', 'capture-requests', 'open-source', 'inspect-openapi'])
+const emit = defineEmits(['edit-preset', 'choose-parameter', 'capture-requests', 'open-source', 'inspect-openapi', 'select-response-object'])
 const target = computed(() => { try { return effectiveTarget(props.operation, props.configuration, props.session, props.values) } catch { return null } })
 const responseStale = computed(() => {
   if (!props.session.result) return false
@@ -380,7 +380,8 @@ function sendShortcut(event) {
           <p v-if="responseStale" class="muted response-stale" :class="{ 'response-stale-info': !session.error }" role="status">{{ session.error ? (session.result?.incomplete ? 'Response reception did not complete. No complete preview is available.' : 'The latest request did not complete. Showing the previous response.') : 'Inputs changed. This response belongs to the previous request.' }}</p>
           <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }" :style="{ '--next-request-width': nextRequestWidth + 'px' }">
           <div class="response-body">
-            <ResponsePreview ref="responsePreview" :result="session.result" :presentation="previewPreferences" :default-view="defaultResponseView" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="responseStale">
+            <ResponsePreview ref="responsePreview" :result="session.result" :presentation="previewPreferences" :default-view="defaultResponseView" :selectors="selectors" :operation="operation" :pending="session.pending" :stale="responseStale"
+              @select-object="emit('select-response-object', $event)">
               <template #actions><NextRequestsPanel ref="nextRequests" v-if="hasRelated" v-model:pinned="relatedPinned" :operation-key="operation.key" :pin-target="pinnedToolsHost"><slot name="related" :search-response="searchResponse" /></NextRequestsPanel></template>
             </ResponsePreview>
 

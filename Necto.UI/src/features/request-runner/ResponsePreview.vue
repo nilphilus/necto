@@ -24,6 +24,7 @@ const props = defineProps({
   pending: Boolean,
   stale: Boolean,
 })
+const emit = defineEmits(['select-object'])
 const responseTarget = computed(() => {
   try {
     const url = new URL(props.result.sentRequest.url)
@@ -178,6 +179,7 @@ async function reveal(match, scroll = true) {
 function selectPath(path) {
   props.result.selectedPath = path
   if (props.result.stream?.view) props.result.stream.view.selectedPath = path
+  if (path) emit('select-object', path)
 }
 function inspectEvent(event) {
   expansionModes.clear()

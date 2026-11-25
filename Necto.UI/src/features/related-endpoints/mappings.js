@@ -86,7 +86,7 @@ export function indexValueSources(links) {
       /^[a-zA-Z_$][\w$]*$/.test(part) ? '.' + part : `[${JSON.stringify(part)}]`), '$')
     const id = JSON.stringify([link.from.key, link.location, link.name, path, link.source.responseStatus])
     if (!entries.has(id)) entries.set(id, {
-      id, operation: link.from, name: link.name, path, status: link.source.responseStatus, origin: link.origin, match: link.match,
+      id, operation: link.from, name: link.name, path, selector: sourcePath(link.source), status: link.source.responseStatus, origin: link.origin, match: link.match,
     })
     index.set(key, entries)
   }
