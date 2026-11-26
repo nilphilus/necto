@@ -116,9 +116,13 @@ const mappedFields = computed(() => source.value && response.value
   ? source.value.fields.map(field => ({ ...field, mapped: candidatesFor(field) }))
   : [])
 const foundFields = computed(() => mappedFields.value.filter(field => field.mapped.length))
-const unavailableFields = computed(() => response.value?.ok && !response.value.incomplete
-  ? mappedFields.value.filter(field => canCollect(field) && !field.mapped.length)
-  : [])
+const sourceHttpError = computed(() => response.value && !response.value.ok && !response.value.incomplete)
+const sourceRequestFailed = computed(() => !sourceSession.value?.pending && Boolean(sourceSession.value?.error))
+const unavailableFields = computed(() => {
+  if (sourceRequestFailed.value) return source.value?.fields.filter(canCollect) ?? []
+  if (!response.value || response.value.incomplete) return []
+  return mappedFields.value.filter(field => canCollect(field) && !field.mapped.length)
+})
 function alternatives(field, key = activeSourceKey.value) {
   return field.sources.filter(item => item.operation.key !== key)
 }
@@ -380,6 +384,8 @@ defineExpose({ open })
             </div>
             <small role="status">
               <template v-if="sourceSession.pending">Checking response…</template>
+              <template v-else-if="sourceRequestFailed">Source request failed.</template>
+              <template v-else-if="sourceHttpError">Source returned HTTP {{ response.status }}.<template v-if="foundFields.length"> Values found: {{ fieldNames(foundFields) }}.</template></template>
               <template v-else-if="staleSourceResponse">Send the updated request to collect values.</template>
               <template v-else-if="response?.incomplete">Response incomplete.</template>
               <template v-else-if="!response && checkedFields(source).length">Checked · no values found for {{ fieldNames(checkedFields(source)) }}</template>
@@ -388,7 +394,7 @@ defineExpose({ open })
               <template v-else>No mapped values found in this response.</template>
             </small>
             <div v-for="field in unavailableFields" :key="field.key" class="unavailable-field">
-              <small><code>{{ field.name }}</code> · expected <code>{{ mappedPaths(field) }}</code></small>
+              <small><code>{{ field.name }}</code><template v-if="!sourceHttpError && !sourceRequestFailed"> · expected <code>{{ mappedPaths(field) }}</code></template></small>
               <button v-if="alternatives(field).length" type="button" class="secondary"
                 @click="focusSources(field, activeSourceKey)">Other sources for {{ field.name }}</button>
             </div>
