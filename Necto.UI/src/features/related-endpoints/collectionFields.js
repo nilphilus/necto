@@ -76,16 +76,18 @@ function appendArrayFields(fields, operation, body, schema, sources, presetPaths
 }
 
 export function collectionFields(operation, session, values, sourcesFor) {
+  const usableSources = (location, name) => sourcesFor(operation, location, name).filter(source =>
+    !requiresCollectedValue(source.operation, name ?? source.name))
   const fields = supportedParameters(operation).flatMap(parameter => {
     const key = contextKey(parameter)
-    const sources = values.has(key) ? [] : sourcesFor(operation, parameter.in, parameter.name)
+    const sources = values.has(key) ? [] : usableSources(parameter.in, parameter.name)
     const value = session.fields[`${parameter.in}:${parameter.name}`]
     return sources.length ? [field(parameter.in, parameter.name, sources, value === undefined || value === '',
       parameter.required === true || parameter.in === 'path', [operation.resolve(parameter.schema)].filter(Boolean))] : []
   })
   const media = bodyContent(operation, session)
   if (!isJson(media?.[0] ?? '')) return fields
-  const bodySources = sourcesFor(operation, 'body').filter(source => typeof source.name === 'string')
+  const bodySources = usableSources('body').filter(source => typeof source.name === 'string')
   if (!bodySources.length) return fields
   let body
   try { body = JSON.parse(session.body.trim() || '{}') }
@@ -106,6 +108,20 @@ export function collectionFields(operation, session, values, sourcesFor) {
     fields.push(field('body', name, sources, !Object.hasOwn(body, name) || body[name] === '', bodySelected && required.has(name), properties.get(name) ?? []))
   appendArrayFields(fields, operation, body, media[1].schema, bodySources, presetPaths)
   return fields
+}
+
+function requiresCollectedValue(operation, name) {
+  if (!operation || typeof name !== 'string') return false
+  const matches = input => input.toLowerCase() === name.toLowerCase()
+  if (supportedParameters(operation).some(parameter =>
+    (parameter.required || parameter.in === 'path') && matches(parameter.name))) return true
+  if (!operation.requestBody?.required) return false
+  const media = Object.entries(operation.requestBody.content ?? {})
+    .filter(([type]) => isJson(type))
+  return media.length > 0 && media.every(([, content]) => {
+    const { required } = bodyFieldContract(operation, content.schema)
+    return [...required].some(matches)
+  })
 }
 
 export function applyCollectedValues(session, selections) {

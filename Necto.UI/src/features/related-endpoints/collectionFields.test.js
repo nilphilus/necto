@@ -2,6 +2,33 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { applyCollectedValues, collectionFields } from './collectionFields.js'
 
+test('value discovery excludes sources requiring the requested value, ignoring name casing', () => {
+  const resolve = value => value
+  const operation = { parameters: [{ in: 'query', name: 'InvoiceId' }], resolve }
+  const details = { parameters: [{ in: 'path', name: 'invoiceId' }], resolve }
+  const list = { parameters: [{ in: 'query', name: 'invoiceId' }], resolve }
+  const otherInput = { parameters: [{ in: 'path', name: 'customerId' }], resolve }
+  const bodyInput = { parameters: [], resolve, requestBody: { required: true, content: {
+    'application/json': { schema: { allOf: [{ required: ['invoiceId'] }] } },
+  } } }
+  const sources = [details, list, otherInput, bodyInput].map(operation => ({ operation }))
+  const fields = collectionFields(operation, { fields: {}, body: '' }, new Map(), () => sources)
+  assert.deepEqual(fields[0].sources.map(source => source.operation), [list, otherInput])
+  assert.deepEqual(collectionFields(operation, { fields: {}, body: '' }, new Map(),
+    () => [{ operation: details }]), [])
+})
+
+test('body value discovery excludes circular sources per field', () => {
+  const resolve = value => value
+  const operation = { parameters: [], resolve, requestBody: { content: {
+    'application/json': { schema: { properties: { InvoiceId: {}, customerId: {} } } },
+  } } }
+  const source = { parameters: [{ in: 'query', name: 'invoiceId', required: true }], resolve }
+  const fields = collectionFields(operation, { fields: {}, body: '{}' }, new Map(),
+    () => ['InvoiceId', 'customerId'].map(name => ({ name, operation: source })))
+  assert.deepEqual(fields.map(field => field.name), ['customerId'])
+})
+
 test('collectable fields skip active presets and distinguish missing values from zero and false', () => {
   const operation = {
     parameters: [
