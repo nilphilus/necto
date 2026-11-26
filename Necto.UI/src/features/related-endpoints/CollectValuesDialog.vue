@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, reactive, ref, shallowRef, watch } from 'vue'
 import { isResponseStale } from '../request-runner/responseFreshness.js'
+import { collectedValueIssue } from './collectedValueIssue.js'
 import { pathLabel, selectableOwner } from '../payload-search/search.js'
 
 const props = defineProps({
@@ -107,14 +108,26 @@ function selectorsFor(field) {
 }
 const selectors = computed(() => response.value && source.value
   ? source.value.fields.flatMap(selectorsFor) : [])
-function candidatesFor(field, path, key = activeSourceKey.value, result = response.value) {
+function mappedCandidates(field, path, key, result) {
   const results = new Map([[key, [{ ...result, selectedPath: path }]]])
   return props.choicesFor(props.operation, field.location, field.name, results)
     .filter(choice => choice.name === field.name && choice.binding)
 }
+function candidatesFor(field, path, key = activeSourceKey.value, result = response.value) {
+  return mappedCandidates(field, path, key, result).filter(choice => !collectedValueIssue(field, choice.value))
+}
 const mappedFields = computed(() => source.value && response.value
-  ? source.value.fields.map(field => ({ ...field, mapped: candidatesFor(field) }))
+  ? source.value.fields.map(field => {
+    const mapped = [], rejected = []
+    for (const choice of mappedCandidates(field, undefined, activeSourceKey.value, response.value)) {
+      const issue = collectedValueIssue(field, choice.value)
+      if (issue) rejected.push({ choice, issue })
+      else mapped.push(choice)
+    }
+    return { ...field, mapped, rejected }
+  })
   : [])
+const rejectedFields = computed(() => mappedFields.value.filter(field => canCollect(field) && field.rejected.length))
 const foundFields = computed(() => mappedFields.value.filter(field => field.mapped.length))
 const sourceHttpError = computed(() => response.value && !response.value.ok && !response.value.incomplete)
 const sourceRequestFailed = computed(() => !sourceSession.value?.pending && Boolean(sourceSession.value?.error))
@@ -399,6 +412,12 @@ defineExpose({ open })
                 @click="focusSources(field, activeSourceKey)">Other sources for {{ field.name }}</button>
             </div>
           </header>
+          <div v-if="rejectedFields.length" class="response-values" aria-label="Incompatible mapped values">
+            <h3>Values unavailable for selection</h3>
+            <small v-for="field in rejectedFields" :key="field.key">
+              <code>{{ field.name }}</code> · {{ label(field.rejected[0].choice) }} — {{ field.rejected[0].issue }}<template v-if="field.rejected.length > 1"> · {{ field.rejected.length - 1 }} more</template>
+            </small>
+          </div>
           <div v-if="choices.some(field => field.candidates.length)" class="response-values" aria-label="Mapped response values">
             <h3>Choose values from the response</h3>
             <label v-for="field in choices.filter(item => item.candidates.length)" :key="field.key">

@@ -16,6 +16,8 @@ run(async ({ p, assert, calls }) => {
   await p.route('**/mappings', route => route.fulfill({ json: [
     { source: { operationId: 'Customer', property: 'id' },
       target: { operationId: 'Create', location: 'query', name: 'assetId' } },
+    { source: { operationId: 'Customer', property: 'legacyId' },
+      target: { operationId: 'Create', location: 'query', name: 'assetId' } },
     { source: { operationId: 'Customer', property: 'id' },
       target: { operationId: 'Create', location: 'body', name: 'customerId' } },
     ...Array.from({ length: 12 }, (_, index) => ({
@@ -27,6 +29,10 @@ run(async ({ p, assert, calls }) => {
     { source: { operationId: 'Rows', eachItem: true, property: 'name' },
       target: { operationId: 'Create', location: 'query', name: 'tag' } },
   ] }))
+  await p.route('**/customer', async route => {
+    const response = await route.fetch()
+    await route.fulfill({ response, json: { ...(await response.json()), legacyId: 'cust-A9' } })
+  })
   await p.reload()
   await p.getByRole('button', { name: /POST Create invoice/ }).click()
   const reference = p.getByRole('textbox', { name: /reference query/ })
@@ -69,6 +75,7 @@ run(async ({ p, assert, calls }) => {
   await active.getByRole('status').filter({ hasText: 'Can fill: assetId, customerId' }).waitFor()
   await send.click()
   await active.getByRole('status').filter({ hasText: 'Values found: assetId, customerId' }).waitFor()
+  await wizard.getByText(/cust-A9.*must be a finite integer/).waitFor()
   await wizard.getByRole('button', { name: 'Select object at []', exact: true }).press('Enter')
   await wizard.getByText('Collected: assetId, customerId', { exact: true }).first().waitFor()
   const missingTenant = wizard.getByRole('button', { name: 'Missing: tenant', exact: true })
