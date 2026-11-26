@@ -58,6 +58,9 @@ public sealed partial class EndpointMappingGenerator
                     foreach (var child in JsonProperties(propertyType))
                         yield return new Field(NonNullable(child.Type), JsonName(child), child.Name,
                             ValueKey(child), "body", Owner: propertyType.ToDisplayString());
+                if (!IsScalar(propertyType) && !IsTypedId(propertyType) && key is null)
+                    foreach (var field in ReadArrayRequestFields(propertyType))
+                        yield return field;
                 continue;
             }
             if (binding.Contains("FastEndpoints.FromQueryAttribute") && !IsScalar(propertyType) && !IsTypedId(propertyType))
@@ -70,6 +73,9 @@ public sealed partial class EndpointMappingGenerator
             var bindingName = AttributeString(property, "FastEndpoints.FromHeaderAttribute")
                 ?? AttributeString(property, "FastEndpoints.BindFromAttribute") ?? JsonName(property);
             yield return new Field(propertyType, bindingName, property.Name, key, location, Owner: type.ToDisplayString());
+            if (location == "fast-property" && Attribute(property, "System.Text.Json.Serialization.JsonConverterAttribute") is null)
+                foreach (var field in ReadArrayRequestFields(type, property))
+                    yield return field;
         }
     }
 

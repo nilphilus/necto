@@ -181,8 +181,9 @@ const selectors = computed(() => response.value && source.value
   ? source.value.fields.flatMap(selectorsFor) : [])
 function mappedCandidates(field, path, key, result) {
   const results = new Map([[key, [{ ...result, selectedPath: path }]]])
-  return props.choicesFor(props.operation, field.location, field.name, results)
-    .filter(choice => choice.name === field.name && choice.binding)
+  const name = field.mappingName ?? field.name
+  return props.choicesFor(props.operation, field.location, name, results, field.mappingPath)
+    .filter(choice => choice.name === name && choice.binding)
 }
 function candidatesFor(field, path, key = activeSourceKey.value, result = response.value) {
   return mappedCandidates(field, path, key, result).filter(choice => !collectedValueIssue(field, choice.value))
@@ -254,7 +255,7 @@ function canCollect(field) {
 }
 function collectValue(field, candidate) {
   collected.set(field.key, {
-    location: field.location, name: field.name, value: candidate.value, source: source.value.operation.name,
+    location: field.location, name: field.name, bodyPath: field.bodyPath, value: candidate.value, source: source.value.operation.name,
   })
   if (editingField.value === field.key) {
     editingField.value = ''
@@ -357,7 +358,7 @@ async function open(element, location, name) {
   sourceQuery.value = ''
   selectionFeedback.value = null
   const requested = props.fields.find(field => field.location === location && field.name === name)
-  for (const field of props.fields) if (requested ? field === requested : field.missing && field.required) selected.add(field.key)
+  for (const field of props.fields) if (requested ? field === requested : field.missing && field.required && !field.bodyPath) selected.add(field.key)
   await nextTick()
   if (origin.value === props.session) dialog.value.showModal()
 }

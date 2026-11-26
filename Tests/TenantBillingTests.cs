@@ -47,6 +47,14 @@ public sealed class TenantBillingTests(WebApplicationFactory<TenantRequest> app)
             (string?)mapping["target"]!["operationId"] == "CreateInvoiceLine" &&
             (string?)mapping["target"]!["location"] == "body" &&
             (string?)mapping["target"]!["name"] == "assetId");
+        Assert.Contains(mappings, mapping =>
+            (string?)mapping!["source"]!["operationId"] == "ListAssets" &&
+            (string?)mapping["source"]!["property"] == "id" &&
+            (string?)mapping["target"]!["operationId"] == "CreateInvoice" &&
+            (string?)mapping["target"]!["location"] == "body" &&
+            (string?)mapping["target"]!["name"] == "assetId" &&
+            mapping["target"]!["objectPath"] is JsonArray path && path.Count == 2 &&
+            (string?)path[0] == "lines" && path[1] is null);
         Assert.NotEmpty(mappings);
         foreach (var mapping in mappings)
         {
