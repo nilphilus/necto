@@ -11,7 +11,22 @@ function schemaLabel(name) {
   return characters.length > 28 ? `…${characters.slice(-27).join('')}` : shortName
 }
 
-function readEntityGraph(spec, operations) {
+function catalogModelNames(catalog) {
+  const matches = new Map()
+  for (const { kind, name } of catalog) {
+    if (kind !== 'model') continue
+    for (const key of new Set([name, name.replace(/[.+]/g, '')])) {
+      matches.set(key, matches.has(key) && matches.get(key) !== name ? null : name)
+    }
+  }
+  return matches
+}
+
+function simpleClrName(name) {
+  return name.replace(/<[^<>]*>/g, '').split(/[.+]/).at(-1)?.replace(/`\d+$/, '')
+}
+
+function readEntityGraph(spec, operations, modelNames) {
   const schemas = spec?.components?.schemas ?? {}
   const nodes = new Map()
   const edges = new Map()
@@ -32,8 +47,13 @@ function readEntityGraph(spec, operations) {
     const clrName = typeof schema['x-necto-clr-name'] === 'string' ? schema['x-necto-clr-name'].trim() : ''
     const title = typeof schema.title === 'string' ? schema.title.trim() : ''
     const schemaKey = id.startsWith('schema:') ? name : undefined
+    const explicitType = schema['x-necto-clr-full-name']
+    const catalogType = modelNames?.get(schemaKey)
+    const qualifiedType = typeof explicitType === 'string' && explicitType.trim() ? explicitType.trim() : catalogType
+    const className = clrName ? simpleClrName(clrName) : catalogType ? simpleClrName(catalogType) : ''
     const label = title || schemaKey
-    if (!nodes.has(id)) nodes.set(id, { id, name: clrName || (label ? schemaLabel(label) : name),
+    if (!nodes.has(id)) nodes.set(id, { id, name: className || (label ? schemaLabel(label) : name),
+      qualifiedType: qualifiedType || (clrName !== className ? clrName : undefined),
       schemaKey, schema, endpoints: new Map() })
     return id
   }
@@ -141,13 +161,15 @@ function readEntityGraph(spec, operations) {
   }
 }
 
-export function buildEntityGraph(spec, operations, mappings = [], apis = []) {
+export function buildEntityGraph(spec, operations, mappings = [], apis = [], catalog = []) {
   const contexts = [{ id: 'local', document: spec }, ...apis]
   const registries = new Map()
   const nodes = new Map(), edges = new Map()
   const scoped = (apiId, id) => apiId === 'local' ? id : JSON.stringify([apiId, id])
+  const modelNames = catalogModelNames(catalog)
   for (const api of contexts) {
-    const graph = readEntityGraph(api.document, operations.filter(operation => (operation.apiId ?? 'local') === api.id))
+    const graph = readEntityGraph(api.document, operations.filter(operation => (operation.apiId ?? 'local') === api.id),
+      api.id === 'local' ? modelNames : undefined)
     registries.set(api.id, graph)
     for (const node of graph.nodes) {
       const id = scoped(api.id, node.id)

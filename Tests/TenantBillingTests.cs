@@ -20,6 +20,9 @@ public sealed class TenantBillingTests(WebApplicationFactory<TenantRequest> app)
         var operations = document["paths"]!.AsObject().SelectMany(path => path.Value!.AsObject())
             .ToDictionary(entry => (string?)entry.Value!["operationId"] ?? "", entry => entry.Value!);
         Assert.NotEmpty(operations);
+        Assert.Contains(schemas, schema => (string?)schema.Value?["x-necto-clr-full-name"]
+            == typeof(BillingSample::SampleApi.FastEndpoints.Invoices.Invoice).FullName);
+
         var lineRequest = operations["CreateInvoiceLine"]["requestBody"]!["content"]!["application/json"]!["schema"]!;
         if ((string?)lineRequest["$ref"] is { } requestRef)
             lineRequest = schemas[requestRef.Split('/').Last()]!;
