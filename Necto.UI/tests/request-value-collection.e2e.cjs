@@ -183,7 +183,11 @@ run(async ({ p, assert, calls }) => {
   assert.equal(p.url(), route)
   assert.ok(await trigger.evaluate(el => el === document.activeElement))
   await p.route('**/invoices?*', route => route.fulfill({
-    status: 422, json: { errors: { 'lines[1].quantity': ['Quantity must be positive.'], missing: ['No matching field.'] } },
+    status: 422, json: { errors: {
+      'lines[1].quantity': ['Quantity must be positive.'],
+      'lines[1].assetId': ['Asset is required.'],
+      missing: ['No matching field.'],
+    } },
   }))
   const editor = p.locator('.request-pane textarea').first()
   await editor.fill(JSON.stringify({ customerId: 42, lines: [{ quantity: 1, assetId: 12 }, { quantity: 0 }] }, null, 2))
@@ -205,7 +209,7 @@ run(async ({ p, assert, calls }) => {
   await wizard.waitFor({ state: 'hidden' })
   assert.deepEqual(JSON.parse(await editor.inputValue()).lines, [{ quantity: 1, assetId: 7 }, { quantity: 0, assetId: 3 }])
   await p.getByRole('button', { name: 'Send request', exact: true }).click()
-  await p.getByText('Request fields with validation errors (1)', { exact: true }).click()
+  await p.getByText('Request fields with validation errors (2)', { exact: true }).click()
   await p.getByRole('button', { name: 'Go to field lines[1].quantity', exact: true }).click()
   assert.deepEqual(await editor.evaluate(el => ({
     focused: el === document.activeElement,
@@ -213,5 +217,13 @@ run(async ({ p, assert, calls }) => {
   })), { focused: true, selection: '"quantity": 0' })
   await editor.fill(JSON.stringify({ lines: [{ quantity: 1 }, { quantity: 2 }] }, null, 2))
   await p.getByRole('button', { name: 'Go to field lines[1].quantity' }).waitFor({ state: 'hidden' })
+  await p.getByRole('button', { name: 'Send request', exact: true }).click()
+  await p.getByText('Request fields with validation errors (2)', { exact: true }).click()
+  await p.getByRole('button', { name: 'Go to parent object for lines[1].assetId', exact: true }).click()
+  assert.deepEqual(await editor.evaluate(el => ({
+    focused: el === document.activeElement,
+    offset: el.selectionStart,
+    selection: el.value.slice(el.selectionStart, el.selectionEnd),
+  })), { focused: true, offset: (await editor.inputValue()).lastIndexOf('{'), selection: '{' })
 
 })

@@ -112,7 +112,7 @@ const responsePane = ref(null)
 const responseValidationFields = computed(() => {
   const result = props.session.result
   if (!content.value || props.session.pending || responseStale.value || ![400, 422].includes(result?.status)) return []
-  return validationFields(result.json?.errors, props.session.body)
+  return validationFields(result.json?.errors, props.session.body, content.value[1].schema, props.operation.resolve)
 })
 async function focusValidationField(field) {
   requestCompact.value = false
@@ -406,7 +406,8 @@ function sendShortcut(event) {
             <ul>
               <li v-for="field in responseValidationFields" :key="field.key">
                 <code>{{ field.key }}</code> · {{ field.message }}
-                <button type="button" class="preset-link" :aria-label="'Go to field ' + field.key" @click="focusValidationField(field)">Go to field</button>
+                <button type="button" class="preset-link" :aria-label="(field.parent ? 'Go to parent object for ' : 'Go to field ') + field.key"
+                  @click="focusValidationField(field)">{{ field.parent ? 'Go to parent object' : 'Go to field' }}</button>
               </li>
             </ul>
           </details>
