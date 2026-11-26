@@ -179,4 +179,19 @@ run(async ({ p, assert, calls }) => {
   assert.equal(await field('tenant').inputValue(), '7')
   assert.equal(p.url(), route)
   assert.ok(await trigger.evaluate(el => el === document.activeElement))
+  await p.route('**/invoices?*', route => route.fulfill({
+    status: 422, json: { errors: { 'lines[1].quantity': ['Quantity must be positive.'], missing: ['No matching field.'] } },
+  }))
+  const editor = p.locator('.request-pane textarea').first()
+  await editor.fill(JSON.stringify({ lines: [{ quantity: 1 }, { quantity: 0 }] }, null, 2))
+  await p.getByRole('button', { name: 'Send request', exact: true }).click()
+  await p.getByText('Request fields with validation errors (1)', { exact: true }).click()
+  await p.getByRole('button', { name: 'Go to field lines[1].quantity', exact: true }).click()
+  assert.deepEqual(await editor.evaluate(el => ({
+    focused: el === document.activeElement,
+    selection: el.value.slice(el.selectionStart, el.selectionEnd),
+  })), { focused: true, selection: '"quantity": 0' })
+  await editor.fill(JSON.stringify({ lines: [{ quantity: 1 }, { quantity: 2 }] }, null, 2))
+  await p.getByRole('button', { name: 'Go to field lines[1].quantity' }).waitFor({ state: 'hidden' })
+
 })
