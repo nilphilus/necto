@@ -11,6 +11,7 @@ run(async ({ p, assert }) => {
     await route.fulfill({response,json:document})
   })
   let includeAlternative = false
+  let failRows = false
   await p.route('**/mappings', route => route.fulfill({json:[
     ...['id','externalId'].map(property => ({source:{operationId:'Customer',property},
       target:{operationId:'Create',location:'query',name:'assetId'}})),
@@ -22,7 +23,9 @@ run(async ({ p, assert }) => {
     }] : []),
   ]}))
   await p.route('**/customer', route => route.fulfill({json:{id:42,externalId:84}}))
-  await p.route('**/rows', route => route.fulfill({json:[{name:'Record without a mapped id'}]}))
+  await p.route('**/rows', route => route.fulfill(failRows
+    ? {status:500,json:{message:'Temporary failure'}}
+    : {json:[{name:'Record without a mapped id'}]}))
   await p.reload()
   await p.getByRole('button',{name:/POST Create invoice/}).click()
   await p.setViewportSize({width:390,height:844})
@@ -56,14 +59,19 @@ run(async ({ p, assert }) => {
 
   await w.getByRole('button',{name:'Cancel',exact:true}).click()
   includeAlternative = true
+  failRows = true
   await p.reload()
   await trigger.click()
   await w.getByRole('button',{name:'Sources for header tenant',exact:true}).click()
   await w.getByRole('button',{name:/Invoice rows/}).click()
   await send.click()
+  await w.locator('.active-source').getByText('Source returned HTTP 500.',{exact:true}).waitFor()
   await w.getByRole('button',{name:'Other sources for tenant',exact:true}).click()
   const alternative = w.getByRole('button',{name:/Expected missing/})
   assert.ok(await alternative.evaluate(el => el === document.activeElement))
+  failRows = false
+  await send.click()
+  await w.getByText('No mapped values found in this response.', { exact: true }).waitFor()
   await w.getByRole('button',{name:'Show sources for all fields',exact:true}).click()
   await w.getByRole('button',{name:/Find customer/}).click()
   await send.click()
