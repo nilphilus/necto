@@ -1,9 +1,10 @@
 <script setup>
 import { computed, nextTick, reactive, ref, shallowRef, watch } from 'vue'
+import { isResponseStale } from '../request-runner/responseFreshness.js'
 import { pathLabel, selectableOwner } from '../payload-search/search.js'
 
 const props = defineProps({
-  operation: Object, session: Object, workspace: String, fields: Array,
+  operation: Object, session: Object, workspace: String, fields: Array, configuration: Object, valuesFor: Function,
   choicesFor: Function, createSession: Function, cancelRequest: Function, apply: Function,
 })
 const dialog = ref(null)
@@ -44,7 +45,7 @@ const rankedSources = computed(() => sourceOptions.value.map(item => {
   const declared = missing.filter(field => field.sources.some(source =>
     source.operation.key === item.operation.key && source.origin === 'openapi')).length
   const session = sourceSessions.get(item.operation.key)
-  const result = !session?.pending && !session?.resultStale ? session?.result : null
+  const result = !session?.pending && session && !staleFor(item.operation, session) ? session?.result : null
   const checked = result?.ok && !result.incomplete
   const available = checked ? missing.filter(field => candidatesFor(field, undefined, item.operation.key, result).length) : []
   const useful = checked ? available : missing.filter(field => !priorChecks.value?.has(checkKey(field, item.operation.key)))
@@ -83,9 +84,14 @@ const source = computed(() => sourceOptions.value.find(item => item.operation.ke
 const sourceSession = computed(() => sourceSessions.get(activeSourceKey.value))
 const missingFields = computed(() => selectedFields.value.filter(field => !collected.has(field.key)))
 const count = computed(() => selectedFields.value.filter(field => collected.has(field.key)).length)
+function staleFor(operation, session) {
+  return isResponseStale(operation, props.configuration, session, props.valuesFor(operation))
+}
+const staleSourceResponse = computed(() => source.value && sourceSession.value &&
+  staleFor(source.value.operation, sourceSession.value))
 const response = computed(() => {
   const session = sourceSession.value
-  return session && !session.pending && !session.resultStale ? session.result : null
+  return session && !session.pending && !staleSourceResponse.value ? session.result : null
 })
 const selectionNote = computed(() => {
   const feedback = selectionFeedback.value
@@ -132,9 +138,10 @@ function checkedFields(item) {
 function rememberChecks() {
   const checks = new Set(priorChecks.value)
   for (const [key, session] of sourceSessions) {
-    if (!session.result?.ok || session.result.incomplete || session.pending || session.resultStale) continue
+    if (!session.result?.ok || session.result.incomplete || session.pending) continue
     for (const field of selectedFields.value) {
-      if (!field.sources.some(source => source.operation.key === key)) continue
+      const match = field.sources.find(source => source.operation.key === key)
+      if (!match || staleFor(match.operation, session)) continue
       const signature = checkKey(field, key)
       if (candidatesFor(field, undefined, key, session.result).length) checks.delete(signature)
       else checks.add(signature)
@@ -373,6 +380,7 @@ defineExpose({ open })
             </div>
             <small role="status">
               <template v-if="sourceSession.pending">Checking response…</template>
+              <template v-else-if="staleSourceResponse">Send the updated request to collect values.</template>
               <template v-else-if="response?.incomplete">Response incomplete.</template>
               <template v-else-if="!response && checkedFields(source).length">Checked · no values found for {{ fieldNames(checkedFields(source)) }}</template>
               <template v-else-if="!response">Can fill: {{ fieldNames(source.fields) }}</template>

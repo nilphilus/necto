@@ -5,7 +5,7 @@ import { computed, nextTick, ref, useId, watch, watchPostEffect } from 'vue'
 import { bodyFields, hasBodyExample } from './bodyHelp.js'
 import ImportedInputs from '../workbench/ImportedInputs.vue'
 import { effectiveTarget } from '../workbench/target.js'
-import { requestIdentity } from '../workbench/requestContext.js'
+import { isResponseStale } from './responseFreshness.js'
 
 
 import BodyEditor from '../workbench/BodyEditor.vue'
@@ -16,7 +16,7 @@ import { numericRules } from './numericParameter.js'
 import ParameterInput from './ParameterInput.vue'
 import RequestSendIcon from './RequestSendIcon.vue'
 import NextRequestsPanel from './NextRequestsPanel.vue'
-import { applyBodyPresets, contextKey, fieldKey, jsonContent, presetSource, supportedParameters, requestUrl, buildRequest } from './request.js'
+import { applyBodyPresets, contextKey, fieldKey, jsonContent, presetSource, supportedParameters, requestUrl } from './request.js'
 
 const props = defineProps({
   operation: { type: Object, required: true },
@@ -43,13 +43,9 @@ const props = defineProps({
 
 const emit = defineEmits(['edit-preset', 'choose-parameter', 'capture-requests', 'open-source', 'inspect-openapi', 'select-response-object', 'collect-values'])
 const target = computed(() => { try { return effectiveTarget(props.operation, props.configuration, props.session, props.values) } catch { return null } })
-const responseStale = computed(() => {
-  if (!props.session.result) return false
-  if (props.session.resultStale) return true
-  if (!props.session.result.requestIdentity) return Boolean(props.session.resultStale)
-  try { return requestIdentity(buildRequest(props.operation, props.configuration ?? {}, props.session, props.values), props.session) !== props.session.result.requestIdentity }
-  catch { return true }
-})
+const responseStale = computed(() =>
+  isResponseStale(props.operation, props.configuration, props.session, props.values))
+
 
 const previewPreferences = computed(() => props.session.previewPreferences ??= { tables: {} })
 const parameters = computed(() => supportedParameters(props.operation))
