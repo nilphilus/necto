@@ -14,6 +14,7 @@ run(async ({ p, assert, calls }) => {
       { in: 'query', name: 'cursor', schema: { type: 'string' } },
       { in: 'query', name: 'customerId', required: true, schema: { type: 'integer' } },
     ]
+    document.paths['/invoices'].post.requestBody.content['application/json'].schema.properties.lines.items.properties.assetId = { type: 'integer' }
     await route.fulfill({ response, json: document })
   })
   await p.route('**/mappings', route => route.fulfill({ json: [
@@ -29,6 +30,8 @@ run(async ({ p, assert, calls }) => {
     })),
     { source: { operationId: 'Rows', eachItem: true, property: 'id' },
       target: { operationId: 'Create', location: 'header', name: 'tenant' } },
+    { source: { operationId: 'Rows', eachItem: true, property: 'id' },
+      target: { operationId: 'Create', location: 'body', name: 'assetId', objectPath: ['lines', null] } },
     { source: { operationId: 'Rows', eachItem: true, property: 'name' },
       target: { operationId: 'Create', location: 'query', name: 'tag' } },
   ] }))
@@ -183,7 +186,18 @@ run(async ({ p, assert, calls }) => {
     status: 422, json: { errors: { 'lines[1].quantity': ['Quantity must be positive.'], missing: ['No matching field.'] } },
   }))
   const editor = p.locator('.request-pane textarea').first()
-  await editor.fill(JSON.stringify({ lines: [{ quantity: 1 }, { quantity: 0 }] }, null, 2))
+  await editor.fill(JSON.stringify({ customerId: 42, lines: [{ quantity: 1, assetId: 12 }, { quantity: 0 }] }, null, 2))
+  await trigger.click()
+  const firstLine = wizard.getByRole('checkbox', { name: /lines\[0\]\.assetId/ })
+  const secondLine = wizard.getByRole('checkbox', { name: /lines\[1\]\.assetId/ })
+  assert.equal(await firstLine.isChecked(), false)
+  await secondLine.check()
+  await customerQuery.fill('42')
+  await send.click()
+  await wizard.getByRole('button', { name: 'Select object at [7]', exact: true }).click()
+  await wizard.getByRole('button', { name: 'Apply 1 value', exact: true }).click()
+  await wizard.waitFor({ state: 'hidden' })
+  assert.deepEqual(JSON.parse(await editor.inputValue()).lines, [{ quantity: 1, assetId: 12 }, { quantity: 0, assetId: 7 }])
   await p.getByRole('button', { name: 'Send request', exact: true }).click()
   await p.getByText('Request fields with validation errors (1)', { exact: true }).click()
   await p.getByRole('button', { name: 'Go to field lines[1].quantity', exact: true }).click()

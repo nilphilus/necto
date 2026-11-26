@@ -28,7 +28,7 @@ public static class NectoOpenApiLinks
         var operations = document.Paths?.Values.SelectMany(path => path.Operations?.Values.Select(operation => (Path: path, Operation: operation)) ?? [])
             .Where(item => item.Operation.OperationId is not null).GroupBy(item => item.Operation.OperationId!)
             .Where(group => group.Count() == 1).ToDictionary(group => group.Key, group => group.Single()) ?? [];
-        foreach (var pair in mappings.Where(mapping => mapping.Source.ApiId is null && mapping.Target.ApiId is null)
+        foreach (var pair in mappings.Where(mapping => mapping.Source.ApiId is null && mapping.Target.ApiId is null && mapping.Target.ObjectPath is null)
                      .GroupBy(mapping => (mapping.Source.OperationId, Target: mapping.Target.OperationId)))
         {
             if (!operations.TryGetValue(pair.Key.OperationId, out var producer) || !operations.TryGetValue(pair.Key.Target, out var consumer)) continue;

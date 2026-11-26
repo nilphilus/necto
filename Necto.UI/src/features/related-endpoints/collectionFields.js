@@ -1,6 +1,7 @@
 import { applyChoice } from './mappings.js'
 import { applyBodyPresets, contextKey, supportedParameters } from '../request-runner/request.js'
 import { bodyContent, isJson } from '../workbench/body.js'
+import { isPrefix } from '../payload-search/search.js'
 import { rememberBinding } from '../scenarios/scenario.js'
 
 const field = (location, name, sources, missing, required, schemas) => ({
@@ -26,6 +27,54 @@ function bodyFieldContract(operation, schema) {
   return { required, properties }
 }
 
+function appendArrayFields(fields, operation, body, schema, sources, presetPaths) {
+  const limit = fields.length + 100
+  let remaining = 10000
+  const byTarget = new Map()
+  for (const source of sources) {
+    if (!source.objectPath?.includes(null)) continue
+    const key = JSON.stringify([source.objectPath, source.name])
+    if (!byTarget.has(key)) byTarget.set(key, [])
+    byTarget.get(key).push(source)
+  }
+
+  for (const group of byTarget.values()) {
+    const { objectPath, name } = group[0]
+    function visit(value, schemas, path) {
+      if (--remaining < 0 || fields.length >= limit) return
+      if (path.length === objectPath.length) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return
+        const contracts = schemas.map(schema => bodyFieldContract(operation, schema))
+        const propertySchemas = contracts.flatMap(contract => contract.properties.get(name) ?? [])
+        if (!propertySchemas.length) return
+        const bodyPath = [...path, name]
+        if (presetPaths.some(preset => isPrefix(preset, bodyPath) || isPrefix(bodyPath, preset))) return
+        const label = bodyPath.reduce((text, part) => typeof part === 'number' ? text + '[' + part + ']' :
+          /^[a-zA-Z_$][\w$]*$/.test(part) ? text + (text ? '.' : '') + part : text + '[' + JSON.stringify(part) + ']', '')
+        fields.push({
+          ...field('body', label, group, !Object.hasOwn(value, name) || value[name] === '',
+            contracts.some(contract => contract.required.has(name)), propertySchemas),
+          key: JSON.stringify(['body', bodyPath]), bodyPath, mappingName: name, mappingPath: objectPath,
+        })
+        return
+      }
+      const segment = objectPath[path.length]
+      if (segment === null && Array.isArray(value)) {
+        const items = schemas.map(schema => operation.resolve(operation.resolve(schema)?.items)).filter(Boolean)
+        if (!items.length) return
+        for (let index = 0; index < value.length && remaining > 0 && fields.length < limit; index++) {
+          visit(value[index], items, [...path, index])
+        }
+      } else if (segment !== null && value && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, segment)) {
+        const properties = schemas.flatMap(schema => bodyFieldContract(operation, schema).properties.get(segment) ?? [])
+        if (properties.length) visit(value[segment], properties, [...path, segment])
+      }
+    }
+    visit(body, [schema], [])
+    if (fields.length >= limit || remaining <= 0) break
+  }
+}
+
 export function collectionFields(operation, session, values, sourcesFor) {
   const fields = supportedParameters(operation).flatMap(parameter => {
     const key = contextKey(parameter)
@@ -43,11 +92,11 @@ export function collectionFields(operation, session, values, sourcesFor) {
   catch { return fields }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return fields
 
-  const supplied = new Set(applyBodyPresets(operation, session.body, values).sources
-    .filter(source => source.path.length === 1).map(source => source.path[0]))
+  const presetPaths = applyBodyPresets(operation, session.body, values, session.mediaType).sources.map(source => source.path)
+  const supplied = new Set(presetPaths.filter(path => path.length === 1).map(path => path[0]))
   const byName = new Map()
   for (const source of bodySources) {
-    if (supplied.has(source.name)) continue
+    if (source.objectPath || supplied.has(source.name)) continue
     if (!byName.has(source.name)) byName.set(source.name, [])
     byName.get(source.name).push(source)
   }
@@ -55,6 +104,7 @@ export function collectionFields(operation, session, values, sourcesFor) {
   const bodySelected = operation.requestBody.required || Boolean(session.body.trim())
   for (const [name, sources] of byName)
     fields.push(field('body', name, sources, !Object.hasOwn(body, name) || body[name] === '', bodySelected && required.has(name), properties.get(name) ?? []))
+  appendArrayFields(fields, operation, body, media[1].schema, bodySources, presetPaths)
   return fields
 }
 
@@ -62,7 +112,7 @@ export function applyCollectedValues(session, selections) {
   const draft = { fields: { ...session.fields }, body: session.body, bindings: [...(session.bindings ?? [])] }
   for (const selection of selections) {
     applyChoice(draft, selection.location, selection)
-    rememberBinding(draft, selection)
+    rememberBinding(draft, selection.bodyPath ? { ...selection, name: selection.bodyPath[0] } : selection)
   }
   Object.assign(session, draft, { error: '', resultStale: Boolean(session.result) })
 }

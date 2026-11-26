@@ -42,4 +42,8 @@ public sealed record RequestValue(string OperationId, string Location, string? N
     /// <summary>Optional API connection ID. Omitted means the API serving this mapping; local identifies the host UI API.</summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? ApiId { get; init; }
+    /// <summary>Path to the containing JSON object. Null segments select existing array items.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string?[]? ObjectPath { get; init; }
+
 }

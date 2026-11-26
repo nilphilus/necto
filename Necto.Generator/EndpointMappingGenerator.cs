@@ -102,6 +102,22 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
         ancestors.Remove(type);
     }
 
+    private static IEnumerable<Field> ReadArrayRequestFields(ITypeSymbol type, IPropertySymbol? root = null)
+    {
+        var path = Array.Empty<string?>();
+        if (root is not null)
+        {
+            var rootType = NonNullable(root.Type);
+            var item = rootType is IArrayTypeSymbol { Rank: 1 } array ? array.ElementType : EnumerableItem(rootType);
+            type = NonNullable(item ?? rootType);
+            path = item is null ? new string?[] { JsonName(root) } : new string?[] { JsonName(root), null };
+        }
+
+        foreach (var field in ReadObjectFields(type, path, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default), false))
+            if (field.ObjectPath?.Contains(null) == true && (IsScalar(field.Type) || IsTypedId(field.Type) || field.Key is not null))
+                yield return field with { Location = "body", ConventionName = field.ClrProperty };
+    }
+
     private static IEnumerable<Field> ReadRequest(IParameterSymbol parameter)
     {
         var type = NonNullable(parameter.Type);
@@ -115,6 +131,8 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
             foreach (var property in JsonProperties(type))
                 yield return new Field(NonNullable(property.Type), JsonName(property), property.Name,
                     ValueKey(property), "body", Owner: type.ToDisplayString(), ClrProperty: property.Name, Relation: ReadRelation(property), Opaque: Attribute(property,"System.Text.Json.Serialization.JsonConverterAttribute") is not null);
+            foreach (var field in ReadArrayRequestFields(type))
+                yield return field;
             yield break;
         }
 
@@ -321,8 +339,10 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
                 : null;
             var objectPath = source.ObjectPath is null ? "" : " { ObjectPath = new string?[] { "
                 + string.Join(", ", source.ObjectPath.Select(Literal)) + " } }";
+            var targetPath = target.ObjectPath is null ? "" : " { ObjectPath = new string?[] { "
+                + string.Join(", ", target.ObjectPath.Select(Literal)) + " } }";
             code.AppendLine($"        new(new ResponseValue({Literal(producer.Id)}, {(source.EachItem ? "true" : "false")}, {Literal(source.WireName)}){objectPath}, "
-                + $"new({Literal(consumer.Id)}, {Literal(target.Location)}, {Literal(target.WireName)}), {Literal(match)}, {Literal(suggestion)}) {{ Evidence = new({Literal(source.Type.ToDisplayString())}, {Literal(target.Type.ToDisplayString())}, {Literal(source.ConventionName)}, {Literal(target.ConventionName)}, {Literal(source.Key ?? target.Key)}) }},");
+                + $"new({Literal(consumer.Id)}, {Literal(target.Location)}, {Literal(target.WireName)}){targetPath}, {Literal(match)}, {Literal(suggestion)}) {{ Evidence = new({Literal(source.Type.ToDisplayString())}, {Literal(target.Type.ToDisplayString())}, {Literal(source.ConventionName)}, {Literal(target.ConventionName)}, {Literal(source.Key ?? target.Key)}) }},");
         }
         code.AppendLine("""
                 };

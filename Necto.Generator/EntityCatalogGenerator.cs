@@ -10,7 +10,7 @@ public sealed partial class EndpointMappingGenerator
         foreach (var direction in new[] { "response", "request" })
         foreach (var field in direction == "response" ? endpoint.Response : endpoint.Request)
         {
-            var container = direction == "response" ? field.ObjectPath ?? (field.EachItem ? new string?[] { null } : Array.Empty<string?>()) : Array.Empty<string?>();
+            var container = field.ObjectPath ?? (field.EachItem ? new string?[] { null } : Array.Empty<string?>());
             if (field.Owner is not null)
                 uses.Add(new("model:" + field.Owner, field.Owner, "model", endpoint.Id, direction, direction == "response" ? "body" : field.Location, container));
             var logical = field.Key ?? IdentifierName(field.ConventionName ?? "") ?? IdentifierName(field.WireName ?? "");

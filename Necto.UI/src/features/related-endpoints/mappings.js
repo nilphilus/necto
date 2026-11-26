@@ -67,7 +67,11 @@ export function resolveMappingLinks(operations, catalogs) {
         ['path', 'query', 'header'].includes(parameter.in) && parameter.name === target.name)?.in
       if (location === 'body' ? !to.requestBody : !['path', 'query', 'header'].includes(location) ||
         !to.parameters.some(parameter => parameter.in === location && parameter.name === target.name)) continue
-      links.push({ from, to, location, name: target.name, source, origin: 'mapping', evidence: mapping.evidence, description: mappingExplanation(mapping), match: mapping.match ?? 'explicit' })
+      const objectPath = target.objectPath
+      if (objectPath != null && (location !== 'body' || typeof target.name !== 'string' ||
+        !Array.isArray(objectPath) || !objectPath.length || objectPath.length > 16 ||
+        objectPath.some(part => part !== null && typeof part !== 'string'))) continue
+      links.push({ from, to, location, name: target.name, objectPath: objectPath ?? undefined, source, origin: 'mapping', evidence: mapping.evidence, description: mappingExplanation(mapping), match: mapping.match ?? 'explicit' })
     }
   }
   return links
@@ -84,9 +88,9 @@ export function indexValueSources(links) {
     const path = parts.reduce((text, part) => text + (part === null ? '[*]' :
       typeof part === 'number' ? `[${part}]` :
       /^[a-zA-Z_$][\w$]*$/.test(part) ? '.' + part : `[${JSON.stringify(part)}]`), '$')
-    const id = JSON.stringify([link.from.key, link.location, link.name, path, link.source.responseStatus])
+    const id = JSON.stringify([link.from.key, link.location, link.name, link.objectPath, path, link.source.responseStatus])
     if (!entries.has(id)) entries.set(id, {
-      id, operation: link.from, name: link.name, path, selector: sourcePath(link.source), status: link.source.responseStatus, origin: link.origin, match: link.match,
+      id, operation: link.from, name: link.name, objectPath: link.objectPath, path, selector: sourcePath(link.source), status: link.source.responseStatus, origin: link.origin, match: link.match,
     })
     index.set(key, entries)
   }
@@ -160,7 +164,7 @@ export function useRelatedEndpoints(configuration, operations, externalContexts 
   function targetsFor(operation, result) {
     const byTarget = new Map(), declared = new Map(), descriptions = new Map()
     for (const link of links.value) {
-      if (link.from.key !== operation.key) continue
+      if (link.from.key !== operation.key || link.objectPath) continue
       const values = mappedEntries(link, result)
       if (!values.length) continue
       if (link.description) descriptions.set(link.to, [...(descriptions.get(link.to) ?? []), link.description])
@@ -176,11 +180,12 @@ export function useRelatedEndpoints(configuration, operations, externalContexts 
     return [...byTarget].map(([operation, matches]) => ({ operation, candidates: [...matches.values()], preferred: declared.has(operation), description: [...new Set(descriptions.get(operation) ?? [])].join('\n\n') }))
   }
 
-  function choicesFor(operation, location, name, results) {
+  function choicesFor(operation, location, name, results, objectPath) {
     const choices = new Map()
     for (const link of links.value) {
       if (link.navigationOnly || link.to.key !== operation.key || link.location !== location ||
-        (location !== 'body' && link.name !== name)) continue
+        (location !== 'body' && link.name !== name) ||
+        JSON.stringify(link.objectPath) !== JSON.stringify(objectPath)) continue
       for (const result of results.get(link.from.key) ?? []) {
         for (const entry of mappedEntries(link, result)) {
           const value = entry.value
@@ -220,7 +225,20 @@ export function applyChoice(session, location, choice) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new Error('The request body must be a JSON object to apply this value.')
   }
-  session.body = JSON.stringify({ ...body, [name]: value }, null, 2)
+  if (choice.bodyPath) {
+    let object = body
+    for (const segment of choice.bodyPath.slice(0, -1)) {
+      if (!object || typeof object !== 'object' || !Object.hasOwn(object, segment))
+        throw new Error('The selected request body position no longer exists.')
+      object = object[segment]
+    }
+    if (!object || typeof object !== 'object' || Array.isArray(object))
+      throw new Error('The selected request body position is not a JSON object.')
+    Object.defineProperty(object, choice.bodyPath.at(-1), { value, enumerable: true, writable: true, configurable: true })
+    session.body = JSON.stringify(body, null, 2)
+  } else {
+    session.body = JSON.stringify({ ...body, [name]: value }, null, 2)
+  }
 }
 
 // An explicit user selection wins. Otherwise prefer one unambiguous declared
