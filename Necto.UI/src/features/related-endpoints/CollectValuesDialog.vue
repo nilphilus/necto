@@ -271,7 +271,11 @@ async function focusSources(field, exclude) {
     const item = sourceOptions.value.find(item => item.operation.key === keys[0])
     if (item) activate(item)
     await nextTick()
-    focusElement(dialog.value.querySelector('.source-workbench .request-footer button[type="submit"]'))
+    const request = dialog.value.querySelector('.source-workbench .request-pane')
+    const missingInput = request?.querySelector(
+      '[data-missing-request-input] input, [data-missing-request-input] select, textarea[required]:invalid',
+    )
+    focusElement(missingInput?.offsetParent ? missingInput : request?.querySelector('.request-footer button[type="submit"]'))
     return
   }
   moreOpen.value = Boolean(exclude)

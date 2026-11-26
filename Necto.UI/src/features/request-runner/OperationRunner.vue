@@ -52,12 +52,15 @@ const parameters = computed(() => supportedParameters(props.operation))
 const parameterFields = computed(() => parameters.value.map(parameter => {
   const key = contextKey(parameter)
   const schema = props.operation.resolve(parameter.schema)
+  const value = props.session.fields[fieldKey(parameter)]
   const types = Array.isArray(schema?.type)
     ? schema.type.filter((type) => type !== 'null')
     : [schema?.type]
   return {
     parameter,
     key,
+    missingRequired: (parameter.required || parameter.in === 'path') &&
+      !props.values.has(key) && (value === undefined || value === ''),
     source: presetSource(props.values, key),
     type: types.length === 1 ? types[0] : undefined,
     format: schema?.format,
@@ -254,7 +257,8 @@ function sendShortcut(event) {
         <ImportedInputs :session="session" />
         <p v-if="!parameters.length && !operation.requestBody" class="muted empty">Ready to send. This endpoint has no inputs.</p>
 
-        <div v-for="({ parameter, key, source, type, format, enumValues, numberRules, itemSchema }, index) in parameterFields" :key="fieldKey(parameter)" class="field">
+        <div v-for="({ parameter, key, source, type, format, enumValues, numberRules, itemSchema, missingRequired }, index) in parameterFields" :key="fieldKey(parameter)" class="field"
+          :data-missing-request-input="missingRequired || undefined">
           <div class="parameter-heading">
             <component
               :is="type === 'boolean' && !values.has(key) ? 'span' : 'label'"
