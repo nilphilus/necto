@@ -111,6 +111,12 @@ function reuseValue(location, name, index = 0) {
   if (choice && sourceSession.value && !sourceSession.value.pending) applyCollectedValues(sourceSession.value, [choice])
 }
 const missingFields = computed(() => selectedFields.value.filter(field => !collected.has(field.key)))
+const emptyTitle = computed(() => {
+  const required = props.fields.filter(field => field.required)
+  return required.length && required.every(field => !field.missing)
+    ? 'All mapped required fields are filled'
+    : 'Choose a field to collect'
+})
 const count = computed(() => selectedFields.value.filter(field => collected.has(field.key)).length)
 function staleFor(operation, session) {
   return isResponseStale(operation, props.configuration, session, props.valuesFor(operation))
@@ -394,11 +400,11 @@ defineExpose({ open })
                 @click="focusedField = focusedField === field.key ? '' : field.key; moreOpen = false">Sources</button>
             </div>
           </fieldset>
-          <section aria-label="Suggested source endpoints">
+          <section v-if="selectedFields.length" aria-label="Suggested source endpoints">
             <h3>{{ filteredField ? 'Sources for ' + filteredField.name : 'Source endpoints' }}</h3>
             <button v-if="filteredField" type="button" class="secondary source-reset"
               @click="focusedField = ''; moreOpen = false">Show sources for all fields</button>
-            <p v-if="!sourceOptions.length" class="muted">Select the fields you want to fill.</p>
+            <p v-if="!sourceOptions.length" class="muted">No sources for the selected fields.</p>
             <input v-if="moreOpen && hiddenSourceCount" v-model="sourceQuery" class="source-search" type="search"
               aria-label="Filter source endpoints" placeholder="Filter by name, method or path">
             <p v-if="moreOpen && sourceQuery.trim() && !sourceChoices.length" class="muted" role="status">No matching sources.</p>
@@ -415,7 +421,11 @@ defineExpose({ open })
             </button>
           </section>
         </aside>
-        <section v-if="source && sourceSession" class="source-workbench" aria-label="Source request">
+        <div v-if="!selectedFields.length" class="collection-empty" role="status">
+          <strong>{{ emptyTitle }}</strong>
+          <p>Select an optional field or a value you want to replace.</p>
+        </div>
+        <section v-else-if="source && sourceSession" class="source-workbench" aria-label="Source request">
           <header class="active-source" aria-label="Active source endpoint">
             <div>
               <strong>{{ source.operation.name }}</strong>
@@ -464,14 +474,14 @@ defineExpose({ open })
       </div>
       <footer class="collect-footer">
         <p v-if="issue" role="alert" class="error">{{ issue }}</p>
-        <div class="collection-progress">
+        <div v-if="selectedFields.length" class="collection-progress">
           <span role="status">{{ count }} of {{ selectedFields.length }} selected fields collected</span>
           <button v-if="missingFields.length" type="button" class="secondary" @click="focusMissingField">
             {{ missingFields.length === 1 ? 'Missing: ' + missingFields[0].name : missingFields.length + ' missing' }}
           </button>
         </div>
         <button class="secondary" type="button" @click="dialog.close()">Cancel</button>
-        <button class="primary" type="button" :disabled="!count || session.pending" @click="apply">
+        <button v-if="count" class="primary" type="button" :disabled="session.pending" @click="apply">
           Apply {{ count }} {{ count === 1 ? 'value' : 'values' }}
         </button>
       </footer>
@@ -491,6 +501,8 @@ defineExpose({ open })
 .collect-footer span { color: var(--muted); font-size: .8rem; }
 .collect-footer p { flex-basis: 100%; margin: 0; }
 .collect-workspace { display: grid; min-height: 0; overflow: auto; grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr); gap: .8rem; padding: .8rem; }
+.collection-empty { padding: .75rem; align-self: start; }
+.collection-empty p { margin: .25rem 0 0; color: var(--muted); }
 aside, .source-workbench { min-width: 0; overflow-wrap: anywhere; }
 fieldset { border: 1px solid var(--line); border-radius: .45rem; margin: 0 0 .75rem; padding: .5rem; }
 .field-row { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .25rem; }
