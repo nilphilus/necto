@@ -112,11 +112,9 @@ function reuseValue(location, name, index = 0) {
   if (choice && sourceSession.value && !sourceSession.value.pending) applyCollectedValues(sourceSession.value, [choice])
 }
 const missingFields = computed(() => selectedFields.value.filter(field => !collected.has(field.key)))
-const emptyTitle = computed(() => {
+const mappedRequiredFieldsFilled = computed(() => {
   const required = props.fields.filter(field => field.required)
-  return required.length && required.every(field => !field.missing)
-    ? 'All mapped required fields are filled'
-    : 'Choose a field to collect'
+  return required.length > 0 && required.every(field => !field.missing)
 })
 const count = computed(() => selectedFields.value.filter(field => collected.has(field.key)).length)
 function staleFor(operation, session) {
@@ -427,8 +425,14 @@ defineExpose({ open })
           </section>
         </aside>
         <div v-if="!selectedFields.length" class="collection-empty" role="status">
-          <strong>{{ emptyTitle }}</strong>
-          <p>Select an optional field or a value you want to replace.</p>
+          <template v-if="mappedRequiredFieldsFilled">
+            <strong>All mapped required fields are filled</strong>
+            <p>Select an optional field or a value you want to replace.</p>
+          </template>
+          <template v-else>
+            <strong>Choose a field to collect</strong>
+            <p>Select a field under “Fields to fill” to see its sources.</p>
+          </template>
         </div>
         <section v-else-if="source && sourceSession" class="source-workbench" aria-label="Source request">
           <header class="active-source" aria-label="Active source endpoint">
