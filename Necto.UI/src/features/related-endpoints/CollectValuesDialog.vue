@@ -272,6 +272,22 @@ function removeValue(field) {
   collected.delete(field.key)
   if (editingField.value === field.key) editingField.value = ''
 }
+function arrayTargetKey(field) {
+  return field.bodyPath ? JSON.stringify([field.mappingPath, field.mappingName]) : null
+}
+
+const nextArrayTargets = computed(() => {
+  const groups = new Map()
+  for (const field of source.value?.fields ?? []) {
+    const key = arrayTargetKey(field)
+    if (!key) continue
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(field)
+  }
+  return [...groups.values()].filter(group => group.length > 1)
+    .map(group => group.find(canCollect)).filter(Boolean)
+})
+
 function canSelect(path) {
   return Boolean(response.value && source.value?.fields.some(field =>
     canCollect(field) && candidatesFor(field, path).length))
@@ -281,9 +297,12 @@ async function selectObject(path, event) {
   const useKeyboard = event?.detail === 0
   const result = response.value
   const chosen = [], ambiguous = []
+  const assignedArrayTargets = new Set()
   for (const field of source.value.fields) {
-    if (!canCollect(field)) continue
+    const key = arrayTargetKey(field)
+    if (!canCollect(field) || assignedArrayTargets.has(key)) continue
     const candidates = candidatesFor(field, path)
+    if (key && candidates.length) assignedArrayTargets.add(key)
     if (candidates.length === 1) {
       collectValue(field, candidates[0])
       chosen.push(field)
@@ -292,7 +311,7 @@ async function selectObject(path, event) {
   selectionFeedback.value = { result, path, chosen, ambiguous }
   if (!useKeyboard) return
   await nextTick()
-  if (!dialog.value?.open) return
+  if (!dialog.value?.open || (!ambiguous.length && nextArrayTargets.value.length)) return
   const selector = ambiguous.length ? '.response-values select' :
     missingFields.value.length ? '.collection-progress button' : '.collect-footer .primary'
   focusElement(dialog.value.querySelector(selector))
@@ -506,6 +525,9 @@ defineExpose({ open })
                 @click="focusSources(field, activeSourceKey)">Other sources for {{ field.name }}</button>
             </div>
           </header>
+          <small v-if="nextArrayTargets.length" role="status">
+            Next array position{{ nextArrayTargets.length === 1 ? '' : 's' }} · {{ fieldNames(nextArrayTargets) }}
+          </small>
           <div v-if="rejectedFields.length" class="response-values" aria-label="Incompatible mapped values">
             <h3>Values unavailable for selection</h3>
             <small v-for="field in rejectedFields" :key="field.key">
