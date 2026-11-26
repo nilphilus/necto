@@ -322,7 +322,8 @@ async function focusSources(field, exclude) {
   focusElement(button)
 }
 function focusMissingField() {
-  if (missingFields.value[0]) void focusSources(missingFields.value[0])
+  const field = missingFields.value.find(item => item.required) ?? missingFields.value[0]
+  if (field) void focusSources(field)
 }
 
 function activate(item) {

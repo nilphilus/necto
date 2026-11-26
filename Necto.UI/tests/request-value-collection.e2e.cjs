@@ -6,9 +6,9 @@ run(async ({ p, assert, calls }) => {
     const document = await response.json()
     document.paths['/invoices'].post.parameters = [
       { in: 'query', name: 'assetId', required: true, schema: { type: 'integer' } },
-      { in: 'header', name: 'tenant', required: true, schema: { type: 'string' } },
       { in: 'query', name: 'reference', schema: { type: 'string' } },
       { in: 'query', name: 'tag', schema: { type: 'string' } },
+      { in: 'header', name: 'tenant', required: true, schema: { type: 'string' } },
     ]
     document.paths['/rows'].get.parameters = [
       { in: 'query', name: 'cursor', schema: { type: 'string' } },
@@ -96,13 +96,18 @@ run(async ({ p, assert, calls }) => {
   await wizard.getByText('Excluded · 42 · Find customer', { exact: true }).waitFor()
   await customerId.check()
   assert.equal(await wizard.getByText('Excluded · 42 · Find customer', { exact: true }).count(), 0)
-  await missingTenant.click()
+  const optionalTag = wizard.getByRole('checkbox', { name: /tag query.*optional/ })
+  await optionalTag.check()
+  const missing = wizard.getByRole('button', { name: '2 missing', exact: true })
+  await missing.click()
+  await wizard.getByRole('heading', { name: 'Sources for tenant', exact: true }).waitFor()
   await active.getByText('GET /rows', { exact: true }).waitFor()
   const customerQuery = wizard.getByRole('textbox', { name: /customerId query/ })
   assert.ok(await customerQuery.evaluate(el => el === document.activeElement))
   await customerQuery.press('Tab')
   assert.ok(await wizard.getByRole('button', { name: 'Use collected value · 42', exact: true })
     .evaluate(el => el === document.activeElement))
+  await optionalTag.uncheck()
   await wizard.getByRole('button', { name: /Invoice rows/ }).click()
   await active.getByText('GET /rows', { exact: true }).waitFor()
   await active.getByRole('status').filter({ hasText: 'Can fill: tenant' }).waitFor()
