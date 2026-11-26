@@ -2,7 +2,9 @@
 import { computed, nextTick, reactive, ref, shallowRef, watch } from 'vue'
 import { isResponseStale } from '../request-runner/responseFreshness.js'
 import { applyCollectedValues } from './collectionFields.js'
-import { fieldKey, supportedParameters } from '../request-runner/request.js'
+import { applyBodyPresets, contextKey, fieldKey, supportedParameters } from '../request-runner/request.js'
+import { bodyContent, isJson } from '../workbench/body.js'
+import { redactSchema } from '../workbench/sensitiveSchema.js'
 import { sensitiveName } from '../workbench/privacy.js'
 import { collectedValueIssue } from './collectedValueIssue.js'
 import { pathLabel, selectableOwner } from '../payload-search/search.js'
@@ -86,9 +88,38 @@ const hiddenSourceCount = computed(() => rankedSources.value.length - recommende
 const filteredField = computed(() => selectedFields.value.find(field => field.key === focusedField.value))
 const source = computed(() => sourceOptions.value.find(item => item.operation.key === activeSourceKey.value))
 const sourceSession = computed(() => sourceSessions.get(activeSourceKey.value))
+const requestValuesByName = computed(() => {
+  const values = new Map()
+  if (!origin.value || source.value?.operation.apiId !== props.operation.apiId) return values
+  function add(name, value) {
+    if (sensitiveName(name) || value === '' || !['number', 'boolean', 'string'].includes(typeof value)) return
+    if (!values.has(name)) values.set(name, [])
+    values.get(name).push(value)
+  }
+
+  const presets = props.valuesFor(props.operation)
+  for (const parameter of supportedParameters(props.operation)) {
+    if (!presets.has(contextKey(parameter)) && parameter['x-necto-sensitive'] !== true &&
+        props.operation.resolve(parameter.schema)?.['x-necto-sensitive'] !== true) add(parameter.name, origin.value.fields[fieldKey(parameter)])
+  }
+  const media = bodyContent(props.operation, origin.value)
+  if (isJson(media?.[0] ?? '')) {
+    let body
+    try {
+      body = redactSchema(JSON.parse(origin.value.body), media[1].schema, props.operation.resolve, 'omit')
+    }
+    catch { return values }
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      const presetFields = new Set(applyBodyPresets(props.operation, origin.value.body, presets, origin.value.mediaType)
+        .sources.map(source => source.path[0]))
+      for (const [name, value] of Object.entries(body)) if (!presetFields.has(name)) add(name, value)
+    }
+  }
+  return values
+})
 const reusableValues = computed(() => {
   const result = {}
-  if (!source.value || !sourceSession.value || !collected.size) return result
+  if (!source.value || !sourceSession.value) return result
   const operation = source.value.operation
   for (const parameter of supportedParameters(operation)) {
     const key = fieldKey(parameter)
@@ -102,6 +133,13 @@ const reusableValues = computed(() => {
       if (!selected.has(collectedKey)) continue
       if (pick.name !== parameter.name || collectedValueIssue(field, pick.value)) continue
       candidates.set(JSON.stringify(pick.value), { ...pick, location: parameter.in, name: parameter.name })
+    }
+    if (!candidates.size) {
+      for (const value of requestValuesByName.value.get(parameter.name) ?? []) {
+        if (collectedValueIssue(field, value)) continue
+        candidates.set(JSON.stringify(value), { value, location: parameter.in, name: parameter.name,
+          source: 'Current request', fromRequest: true })
+      }
     }
     if (candidates.size) result[key] = [...candidates.values()]
   }

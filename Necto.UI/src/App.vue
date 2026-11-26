@@ -1330,10 +1330,10 @@ function removeScenario(id) {
             <template v-if="reusableValues[location + ':' + parameterName]?.length">
               <button v-if="reusableValues[location + ':' + parameterName].length === 1" class="secondary use-collected-value"
                 type="button" :disabled="session.pending" @click="reuseValue(location, parameterName)">
-                Use collected value · {{ valueLabel(reusableValues[location + ':' + parameterName][0]) }}
+                {{ reusableValues[location + ':' + parameterName][0].fromRequest ? 'Use request value' : 'Use collected value' }} · {{ valueLabel(reusableValues[location + ':' + parameterName][0]) }}
               </button>
-              <label v-else class="use-collected-value">Use collected value
-                <select :aria-label="'Use collected value for ' + parameterName" :disabled="session.pending"
+              <label v-else class="use-collected-value">Use a value
+                <select :aria-label="'Use a value for ' + parameterName" :disabled="session.pending"
                   @change="$event.target.value !== '' && reuseValue(location, parameterName, Number($event.target.value))">
                   <option value="">Choose a value…</option>
                   <option v-for="(choice, index) in reusableValues[location + ':' + parameterName]"
