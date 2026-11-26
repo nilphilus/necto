@@ -163,7 +163,10 @@ run(async ({ p, assert, calls }) => {
   await wizard.getByRole('button', { name: /Invoice rows/ }).waitFor()
   await optional.uncheck()
   await wizard.getByRole('checkbox', { name: /tenant header/ }).check()
-  await customerQuery.fill('42')
+  const requestsBeforeDraftReuse = calls.length
+  await wizard.getByRole('button', { name: 'Use request value · 42', exact: true }).click()
+  assert.equal(await customerQuery.inputValue(), '42')
+  assert.equal(calls.length, requestsBeforeDraftReuse)
   await send.click()
   await wizard.getByRole('button', { name: 'Select object at [3]', exact: true }).click()
   await wizard.getByRole('button', { name: 'Cancel', exact: true }).click()
