@@ -4,7 +4,7 @@ import { useGraphNavigation, MIN_ZOOM, MAX_ZOOM } from '../graph-navigation.js'
 import IdentifierCatalog from './IdentifierCatalog.vue'
 import { useIdentifierCatalog } from './useIdentifierCatalog.js'
 import { computed, nextTick, ref, watch, useId } from 'vue'
-import { useGraphViewport } from '../graph-viewport.js'
+import { fitGraphScale, useGraphViewport } from '../graph-viewport.js'
 import { buildEntityGraph, connectionPath, entitySize, groupConnections, layoutGraph } from './graph.js'
 const props = defineProps({ configuration: Object, authentication: Object, spec: Object, operations: Array, mappings: Array, mappingError: String, initialOperationKey: String, apis: { type: Array, default: () => [] } })
 defineEmits(['open-operation'])
@@ -12,38 +12,47 @@ const search = ref('')
 const selectedId = ref('')
 const zoom = ref(1)
 const kind = ref('all')
-const focused = ref(false)
+const searchOpen = ref(false)
+const activeResult = ref(0)
+const searchResultsId = useId()
 const markerId = useId()
 const detailsTitle = ref(null)
 const canvas = ref(null)
 const { entries, pending: catalogPending, error: catalogError, reload: reloadCatalog } = useIdentifierCatalog(props)
 const graph = computed(() => buildEntityGraph(props.spec, props.operations, props.mappings, props.apis, entries.value))
-const filtered = computed(() => {
+const matches = computed(() => {
   const query = search.value.trim().toLowerCase()
-  return graph.value.nodes.filter(node => node.name.toLowerCase().includes(query) ||
+  if (!query) return []
+  const entries = graph.value.nodes.filter(node => node.name.toLowerCase().includes(query) ||
     node.schemaKey?.toLowerCase().includes(query) || node.qualifiedType?.toLowerCase().includes(query))
+  const rank = node => {
+    const name = node.name.toLowerCase()
+    return name === query ? 0 : name.startsWith(query) ? 1 : 2
+  }
+  return entries.sort((a, b) => rank(a) - rank(b))
+})
+const results = computed(() => matches.value.slice(0, 20))
+const duplicateNames = computed(() => {
+  const counts = new Map()
+  for (const node of graph.value.nodes) counts.set(node.name, (counts.get(node.name) ?? 0) + 1)
+  return counts
+})
+const showResults = computed(() => searchOpen.value && Boolean(search.value.trim()))
+const resultSummary = computed(() => {
+  const total = matches.value.length
+  if (!total) return 'No matching entities'
+  if (total > results.value.length) return 'Showing ' + results.value.length + ' of ' + total + ' matches. Refine your search for more.'
+  return total === 1 ? '1 match' : total + ' matches'
 })
 const matchingEdges = computed(() => graph.value.edges.filter(edge => kind.value === 'all' || kind.value === edge.kind))
 const selected = computed(() => graph.value.nodes.find(node => node.id === selectedId.value))
-const relationships = computed(() => matchingEdges.value.filter(edge => connected(edge) && selectedId.value))
-const visibleNodes = computed(() => {
-  if (!focused.value || !selected.value) return filtered.value
-  const ids = new Set(relationships.value.flatMap(edge => [edge.from, edge.to]))
-  return [selected.value, ...graph.value.nodes.filter(node => node.id !== selectedId.value && ids.has(node.id))]
-})
-const visibleGraph = computed(() => {
-  const nodes = visibleNodes.value.slice(0, 100)
-  const ids = new Set(nodes.map(node => node.id))
-  const edges = matchingEdges.value.filter(edge => ids.has(edge.from) && ids.has(edge.to) &&
-    (!focused.value || connected(edge)))
-  return { nodes, edges }
-})
-const positions = computed(() => layoutGraph(visibleGraph.value.nodes, visibleGraph.value.edges, focused.value ? selectedId.value : ''))
+const relationships = computed(() => selected.value ? matchingEdges.value.filter(connected) : [])
+const positions = computed(() => layoutGraph(graph.value.nodes, matchingEdges.value))
 const byId = computed(() => new Map(positions.value.map(node => [node.id, node])))
-const connections = computed(() => groupConnections(visibleGraph.value.edges))
+const connections = computed(() => groupConnections(matchingEdges.value))
 const names = computed(() => new Map(graph.value.nodes.map(node => [node.id, node.name])))
-const width = computed(() => Math.max(620, ...positions.value.map(node => node.x + 305)))
-const height = computed(() => Math.max(380, ...positions.value.map(node => node.y + 125)))
+const width = computed(() => positions.value.reduce((max, node) => Math.max(max, node.x + 305), 620))
+const height = computed(() => positions.value.reduce((max, node) => Math.max(max, node.y + 125), 380))
 const { autoFit, fit, center } = useGraphViewport(canvas, width, height, zoom)
 const { view, sync, zoomAt, wheel, navigate, isPanning, startPan, movePan, stopPan } = useGraphNavigation(canvas, width, height, zoom, autoFit)
 const displayEdges = computed(() => selected.value
@@ -51,22 +60,59 @@ const displayEdges = computed(() => selected.value
   : connections.value)
 const miniEdges = computed(() => connections.value.map(edge => ({ ...edge, from:byId.value.get(edge.from), to:byId.value.get(edge.to) })).filter(edge=>edge.from&&edge.to))
 watch(() => props.initialOperationKey, key => { selectedId.value = graph.value.nodes.find(node => node.endpoints.some(entry => entry.operation.key === key))?.id ?? '' }, { immediate: true })
-watch(selected, value => { if (!value) focused.value = false })
-watch(search, () => { focused.value = false; if (!filtered.value.some(node => node.id === selectedId.value)) selectedId.value = '' })
-watch(() => props.spec, () => { selectedId.value = ''; search.value = '' })
-watch([focused, kind, search], () => canvas.value?.scrollTo(0, 0))
+watch(search, () => { activeResult.value = 0 })
+watch(() => props.spec, () => { selectedId.value = ''; search.value = ''; searchOpen.value = false })
+
 async function selectEntity(id, reveal = false) {
   selectedId.value = id
-  if (focused.value || !byId.value.has(id)) {
-    focused.value = true
-    canvas.value?.scrollTo(0, 0)
-  }
   await nextTick()
-  if (reveal) center(byId.value.get(id), entitySize)
-  if (window.matchMedia('(max-width: 800px)').matches) {
+  if (reveal) await zoomToConnections()
+  else if (window.matchMedia('(max-width: 800px)').matches) {
     detailsTitle.value?.scrollIntoView({ block: 'start', behavior: 'instant' })
     detailsTitle.value?.focus({ preventScroll: true })
   }
+}
+
+async function zoomToConnections() {
+  const viewport = canvas.value
+  const node = byId.value.get(selectedId.value)
+  if (!viewport || !node) return
+  let left = node.x, top = node.y, right = node.x + entitySize.width, bottom = node.y + entitySize.height
+  for (const edge of relationships.value) {
+    const neighbor = byId.value.get(edge.from === node.id ? edge.to : edge.from)
+    if (!neighbor) continue
+    left = Math.min(left, neighbor.x)
+    top = Math.min(top, neighbor.y)
+    right = Math.max(right, neighbor.x + entitySize.width)
+    bottom = Math.max(bottom, neighbor.y + entitySize.height)
+  }
+  autoFit.value = false
+  zoom.value = fitGraphScale({ width: viewport.clientWidth, height: viewport.clientHeight },
+    { width: right - left, height: bottom - top })
+  await nextTick()
+  center({ x: left, y: top }, { width: right - left, height: bottom - top })
+}
+
+function chooseResult(node) {
+  search.value = node.name
+  searchOpen.value = false
+  void selectEntity(node.id, true)
+}
+
+async function moveResult(event, direction) {
+  if (!results.value.length) return
+  event.preventDefault()
+  const last = results.value.length - 1
+  activeResult.value = showResults.value ? Math.max(0, Math.min(last, activeResult.value + direction)) : direction > 0 ? 0 : last
+  searchOpen.value = true
+  await nextTick()
+  document.getElementById(searchResultsId + '-' + activeResult.value)?.scrollIntoView({ block: 'nearest' })
+}
+
+function chooseActiveResult(event) {
+  if (event.isComposing || !showResults.value || !results.value[activeResult.value]) return
+  event.preventDefault()
+  chooseResult(results.value[activeResult.value])
 }
 function connected(edge) { return !selectedId.value || edge.from === selectedId.value || edge.to === selectedId.value }
 </script>
@@ -80,9 +126,27 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
     <div class="graph-controls">
       <IdentifierCatalog :available="Boolean(configuration?.entityCatalogUrl)" :entries="entries" :pending="catalogPending"
         :error="catalogError" :reload="reloadCatalog" :operations="operations" @open-operation="$emit('open-operation', $event)" />
-      <label>Find an entity <input v-model="search" type="search" placeholder="Invoice, Customer…"></label>
+      <div class="entity-search" @focusout="event => { if (!event.currentTarget.contains(event.relatedTarget)) searchOpen = false }">
+        <label>Find an entity
+          <input v-model="search" type="search" role="combobox" autocomplete="off" placeholder="Invoice, Customer…"
+            aria-autocomplete="list" :aria-expanded="showResults" :aria-controls="searchResultsId"
+            :aria-activedescendant="showResults && results[activeResult] ? searchResultsId + '-' + activeResult : undefined"
+            @focus="searchOpen = true" @click="searchOpen = true" @input="searchOpen = true" @keydown.down="moveResult($event, 1)"
+            @keydown.up="moveResult($event, -1)" @keydown.enter="chooseActiveResult" @keydown.esc.stop.prevent="searchOpen = false">
+        </label>
+        <div v-show="showResults" class="entity-search-results">
+          <small role="status">{{ resultSummary }}</small>
+          <ul :id="searchResultsId" role="listbox" aria-label="Matching entities">
+            <li v-for="(node, index) in results" :id="searchResultsId + '-' + index" :key="node.id" role="option"
+              :aria-selected="index === activeResult" @mousedown.prevent @click="chooseResult(node)">
+              <strong>{{ node.name }}</strong>
+              <small v-if="duplicateNames.get(node.name) > 1">{{ node.qualifiedType || node.schemaKey }}</small>
+            </li>
+          </ul>
+        </div>
+      </div>
       <label>Connections <select v-model="kind" aria-label="Connections"><option value="all">All connections</option><option value="schema">Schema references</option><option value="mapping">Value flows</option></select></label>
-      <button type="button" class="secondary" :disabled="!selected" :aria-pressed="focused" @click="focused = !focused">Focus on selected entity</button>
+      <button type="button" class="secondary" :disabled="!selected" @click="zoomToConnections">Zoom to connections</button>
       <button type="button" class="secondary" @click="fit">Fit to view</button>
       <button type="button" class="secondary" :disabled="!selected" @click="center(byId.get(selectedId), entitySize)">Center selection</button>
       <div class="zoom" role="group" aria-label="Graph zoom">
@@ -94,7 +158,6 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
     <p class="legend"><span class="schema-key">— Schema reference</span><span class="mapping-key">┄ Value flow</span><span class="muted">Ctrl + scroll to zoom · Left-click and drag the background to pan · Use the overview to navigate. Models come from OpenAPI; value flows come from Necto mappings.</span></p>
     <p v-if="mappingError" class="muted" role="status">{{ mappingError }} Schema references are still available.</p>
     <p v-else-if="!mappings.length" class="muted">No value mappings loaded. Schema references are available independently.</p>
-    <p v-if="visibleNodes.length > 100" class="muted" role="status">Showing 100 of {{ visibleNodes.length }} entities. {{ focused ? 'All direct connections are listed in the details.' : 'Refine the search to see others.' }}</p>
     <div class="graph-workspace">
       <div class="graph-stage">
       <div ref="canvas" class="graph-canvas" :class="{ pannable: positions.length, panning: isPanning }"
@@ -103,7 +166,7 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
         @pointerup="stopPan" @pointercancel="stopPan" @lostpointercapture="stopPan">
         <svg v-if="positions.length" :width="width * zoom" :height="height * zoom" :viewBox="`0 0 ${width} ${height}`" role="group" aria-label="Entity relationships">
           <defs><marker :id="markerId" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" /></marker></defs>
-          <path v-for="edge in displayEdges" :key="edge.id" :d="connectionPath(edge, byId.get(edge.from), byId.get(edge.to))" fill="none" :stroke="edge.kind === 'mapping' ? '#ad7923' : selected && connected(edge) ? 'var(--accent)' : '#57806d'" :stroke-dasharray="edge.kind === 'mapping' ? '6 5' : undefined" :stroke-width="selected && connected(edge) ? 4 : 1.5" :opacity="selected && connected(edge) ? 1 : connected(edge) ? .9 : .15" :marker-start="edge.reverse ? `url(#${markerId})` : undefined" :marker-end="edge.forward ? `url(#${markerId})` : undefined">
+          <path v-for="edge in displayEdges" :key="edge.id" :d="connectionPath(edge, byId.get(edge.from), byId.get(edge.to))" fill="none" :stroke="edge.kind === 'mapping' ? '#ad7923' : selected && connected(edge) ? 'var(--accent)' : '#57806d'" :stroke-dasharray="edge.kind === 'mapping' ? '6 5' : undefined" :stroke-width="selected && connected(edge) ? 4 : 1.5" :opacity="selected && connected(edge) ? 1 : connected(edge) ? .9 : .45" :marker-start="edge.reverse ? `url(#${markerId})` : undefined" :marker-end="edge.forward ? `url(#${markerId})` : undefined">
             <title>{{ edge.edges.map(link => `${names.get(link.from)} → ${names.get(link.to)} · ${link.label}`).join('\n') }}</title>
           </path>
           <foreignObject v-for="node in positions" :key="node.id" :x="node.x" :y="node.y" :width="entitySize.width" :height="entitySize.height + 4">
@@ -113,7 +176,7 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
             </button>
           </foreignObject>
         </svg>
-        <p v-else class="muted empty">{{ search ? 'No entities match your search.' : 'No object schemas found in request bodies or successful responses, or in OpenAPI components.' }}</p>
+        <p v-else class="muted empty">No object schemas found in request bodies or successful responses, or in OpenAPI components.</p>
       </div>
       <GraphMinimap v-if="positions.length" :width="width" :height="height" :nodes="positions" :edges="miniEdges" :view="view" :selected-id="selectedId" @navigate="navigate" />
       </div>
@@ -156,7 +219,13 @@ header p { margin: .4rem 0 1rem; font-size: .9rem; }
 .counts { color: var(--muted); font-size: .85rem; }
 .graph-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
 .graph-controls label { display: grid; gap: .3rem; font-size: .8rem; }
-.graph-controls button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.entity-search { position: relative; min-width: min(16rem, 100%); }
+.entity-search-results { position: absolute; z-index: 2; inset: calc(100% + .25rem) 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: .4rem; box-shadow: 0 5px 15px #0002; }
+.entity-search-results ul { max-height: min(19rem, 45vh); overflow: auto; }
+.entity-search-results li { display: grid; gap: .15rem; padding: .45rem .65rem; cursor: pointer; overflow-wrap: anywhere; font-size: .85rem; }
+.entity-search-results li:hover, .entity-search-results li[aria-selected="true"] { background: var(--accent-soft); }
+.entity-search-results > small { display: block; padding: .4rem .65rem; color: var(--muted); }
+.entity-search-results li small { color: var(--muted); }
 .zoom { display: flex; gap: .25rem; margin-left: auto; }
 .legend { display: flex; flex-wrap: wrap; gap: .65rem; font-size: .78rem; }
 .schema-key { color: #38684f; }.mapping-key { color: #805914; }

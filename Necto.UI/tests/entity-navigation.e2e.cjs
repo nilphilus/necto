@@ -1,11 +1,11 @@
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright'),http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict')
 const root=path.resolve(__dirname,'../dist'),errors=[]
-const schemas=Object.fromEntries(Array.from({length:80},(_,i)=>['Entity'+String(i).padStart(2,'0'),{type:'object',properties:{id:{type:'integer'},...(i<79?{next:{$ref:'#/components/schemas/Entity'+String(i+1).padStart(2,'0')}}:{})}}]))
+const schemas=Object.fromEntries(Array.from({length:140},(_,i)=>['Entity'+String(i).padStart(2,'0'),{type:'object',properties:{id:{type:'integer'},...(i<139?{next:{$ref:'#/components/schemas/Entity'+String(i+1).padStart(2,'0')}}:{})}}]))
 const longSchema = 'CompanyProductBillingContractsInvoiceLine'
 const clrType = 'Company.Product.Billing.Contracts.InvoiceLine'
-schemas[longSchema] = schemas.Entity79
-delete schemas.Entity79
-schemas.Entity78.properties.next.$ref = '#/components/schemas/' + longSchema
+schemas[longSchema] = schemas.Entity139
+delete schemas.Entity139
+schemas.Entity138.properties.next.$ref = '#/components/schemas/' + longSchema
 const spec={openapi:'3.1.0',info:{title:'Large entity navigation demo',version:'1'},components:{schemas},paths:{'/entities':{get:{operationId:'GetEntities',responses:{200:{description:'Entities',content:{'application/json':{schema:{$ref:'#/components/schemas/Entity00'}}}}}}}}}
 let browser,server,page,base
 ;(async()=>{
@@ -13,7 +13,7 @@ let browser,server,page,base
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));base=`http://127.0.0.1:${server.address().port}`
  browser=await chromium.launch({headless:true,args:['--no-sandbox']});page=await browser.newPage({viewport:{width:1540,height:1000}});page.on('pageerror',e=>errors.push(e.message));await page.goto(base);await page.getByRole('button',{name:'Entity graph',exact:true}).click()
  const canvas=page.getByLabel('Scrollable entity graph',{exact:true}),map=page.getByRole('group',{name:'Entity graph minimap',exact:true}),svg=canvas.locator(':scope > svg')
- await map.waitFor();assert.equal(await canvas.locator('.entity-node').count(),80)
+ await map.waitFor();assert.equal(await canvas.locator('.entity-node').count(),140)
  const state=()=>canvas.evaluate(el=>({x:el.scrollLeft,y:el.scrollTop,w:el.clientWidth,h:el.clientHeight,sw:el.scrollWidth,sh:el.scrollHeight,scale:el.querySelector('svg').width.baseVal.value/el.querySelector('svg').viewBox.baseVal.width}))
  const box=await canvas.boundingBox(),x=Math.round(box.width*.55),y=Math.round(box.height*.4)
  await page.mouse.move(box.x+x,box.y+y)
@@ -57,15 +57,35 @@ let browser,server,page,base
  await page.getByRole('button',{name:'Zoom in',exact:true}).click();await page.getByRole('button',{name:'Center selection',exact:true}).click();await page.getByRole('button',{name:'Zoom out',exact:true}).click()
  await page.getByRole('button',{name:'Reset zoom',exact:true}).click();assert.ok(Math.abs((await state()).scale-1)<.001)
  if(process.env.NECTO_ENTITY_SCREENSHOTS){await fs.mkdir(process.env.NECTO_ENTITY_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.NECTO_ENTITY_SCREENSHOTS,'entity-navigation.png')})}
- await page.getByRole('searchbox',{name:'Find an entity',exact:true}).fill(longSchema)
+ const search = page.getByRole('combobox', { name: 'Find an entity', exact: true })
+ await page.getByRole('button', { name: 'Fit to view', exact: true }).click()
+ const overview = await state()
+ const edges = await svg.locator(':scope > path').count()
+ await search.fill(longSchema)
+ await page.getByRole('option', { name: 'InvoiceLine', exact: true }).waitFor()
+ await search.press('Enter')
  const line = canvas.getByRole('button', { name: 'Inspect entity InvoiceLine', exact: true })
- await line.click()
+ await line.and(canvas.locator('.active')).waitFor()
  assert.ok(!(await line.innerText()).includes(longSchema))
  const detail = page.getByRole('complementary', { name: 'Selected entity details' })
  await detail.getByText(clrType, { exact: true }).waitFor()
  await detail.getByText(longSchema, { exact: true }).waitFor()
- assert.equal(await map.locator('.map-node,.map-selected').count(),1)
- await page.getByRole('searchbox',{name:'Find an entity',exact:true}).fill('missing-entity');await map.waitFor({state:'hidden'})
- await page.getByRole('searchbox',{name:'Find an entity',exact:true}).fill('');await page.setViewportSize({width:390,height:844});await map.waitFor();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
- assert.deepEqual(errors,[]);console.log('PASS: 80-entity graph mouse-anchored wheel zoom, minimap click/drag navigation, selected state, fit/reset/button zoom, filters, empty graph and mobile layout.')
+ assert.ok((await state()).scale > overview.scale)
+ const view = await canvas.boundingBox()
+ for (const name of ['InvoiceLine', 'Entity138']) {
+   const box = await canvas.getByRole('button', { name: 'Inspect entity ' + name, exact: true }).boundingBox()
+   assert.ok(box.x >= view.x && box.y >= view.y && box.x + box.width <= view.x + view.width && box.y + box.height <= view.y + view.height)
+ }
+ assert.equal(await svg.locator(':scope > path').count(), edges)
+ assert.equal(await map.locator('.map-node,.map-selected').count(),140)
+ await page.getByRole('button', { name: 'Zoom out', exact: true }).click()
+ assert.equal(await svg.locator(':scope > path').count(), edges)
+ await search.fill('missing-entity')
+ await page.getByText('No matching entities', { exact: true }).waitFor()
+ await search.press('Escape')
+ assert.equal(await search.getAttribute('aria-expanded'), 'false')
+ await page.setViewportSize({width:390,height:844})
+ await map.waitFor()
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
+ assert.deepEqual(errors,[]);console.log('PASS: 140-entity graph mouse-anchored wheel zoom, minimap click/drag navigation, selected state, fit/reset/button zoom, search selection without removing connections and mobile layout.')
 })().catch(async e=>{console.error(e);if(page)await page.screenshot({path:'/tmp/necto-entity-navigation-failure.png'});process.exitCode=1}).finally(async()=>{if(browser)await browser.close();if(server)server.close()})
