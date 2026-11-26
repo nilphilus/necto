@@ -8,4 +8,7 @@ public abstract class NectoMappingsAttribute : Attribute
 {
     /// <summary>Registers the application's generated mappings endpoint.</summary>
     public abstract void Map(IEndpointRouteBuilder endpoints);
+
+    /// <summary>Registers the application's generated entity catalog endpoint.</summary>
+    public virtual void MapEntityCatalog(IEndpointRouteBuilder endpoints) { }
 }

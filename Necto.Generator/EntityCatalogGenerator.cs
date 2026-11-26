@@ -66,7 +66,7 @@ public sealed partial class EndpointMappingGenerator
         code.AppendLine($$"""
                 };
                 internal static RouteHandlerBuilder MapNectoEntityCatalog(this IEndpointRouteBuilder endpoints, string pattern = "/necto/entity-catalog") =>
-                    NectoGeneratedMetadata.Register(endpoints, endpoints.MapGet(pattern, () => Results.Json({{catalog}}, System.Text.Json.JsonSerializerOptions.Web)).ExcludeFromDescription(), "entityCatalogUrl");
+                    NectoGeneratedMetadata.MapEntityCatalog(endpoints, pattern, () => {{catalog}});
             }
             """);
         context.AddSource("EntityCatalog.g.cs", GeneratedScope.Isolate(code.ToString(),scope,false));

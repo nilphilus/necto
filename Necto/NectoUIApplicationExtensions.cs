@@ -16,13 +16,13 @@ public static class NectoUIApplicationExtensions
         .GetCustomAttributes<AssemblyMetadataAttribute>()
         .FirstOrDefault(attribute => attribute.Key == "NectoPackageVersion")?.Value;
 
-    /// <summary>Serves the embedded UI and automatically registers application-generated mappings.</summary>
+    /// <summary>Serves the embedded UI and automatically registers application-generated mappings and entity catalog.</summary>
     /// <param name="app">The application serving Necto UI.</param>
     /// <param name="routePrefix">The UI path, relative to the application's path base.</param>
     /// <param name="openApiPath">The default OpenAPI JSON path, relative to the application's path base.</param>
     /// <param name="agentPath">Optional path registered using MapNectoAgent.</param>
     /// <param name="endpointMappingsPath">Overrides discovery of a single registered Necto mappings route.</param>
-    /// <param name="metadataAttribute">Optional metadata for the UI and registered Necto mappings routes.</param>
+    /// <param name="metadataAttribute">Optional metadata for the UI and registered Necto metadata routes.</param>
     public static WebApplication UseNectoUI(
         this WebApplication app,
         string routePrefix = "/necto",
@@ -52,10 +52,15 @@ public static class NectoUIApplicationExtensions
         Attribute? metadataAttribute,
         IReadOnlyDictionary<string, string>? openApiDocuments)
     {
-        if (endpointMappingsPath is null && !EndpointMappingsMetadata.HasMappings(app.Services))
+        if ((endpointMappingsPath is null && !EndpointMappingsMetadata.HasMappings(app.Services)) ||
+            !NectoGeneratedMetadata.HasEntityCatalog(app.Services))
         {
             var application = Assembly.Load(new AssemblyName(app.Environment.ApplicationName));
-            application.GetCustomAttribute<NectoMappingsAttribute>()?.Map(app);
+            var generated = application.GetCustomAttribute<NectoMappingsAttribute>();
+            if (endpointMappingsPath is null && !EndpointMappingsMetadata.HasMappings(app.Services))
+                generated?.Map(app);
+            if (!NectoGeneratedMetadata.HasEntityCatalog(app.Services))
+                generated?.MapEntityCatalog(app);
         }
         var ui = MapNectoUICore(app, routePrefix, openApiPath, endpointMappingsPath, agentPath, openApiDocuments);
         NectoEntityNames.Register(app, openApiPath);
@@ -68,6 +73,7 @@ public static class NectoUIApplicationExtensions
         {
             ui.WithMetadata(metadataAttribute);
             EndpointMappingsMetadata.ApplyAttribute(app.Services, metadataAttribute);
+            NectoGeneratedMetadata.ApplyAttribute(app.Services, metadataAttribute);
         }
         return app;
     }

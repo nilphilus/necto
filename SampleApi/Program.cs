@@ -27,7 +27,6 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.MapNectoEntityCatalog();
     app.MapNectoAgent();
     app.MapNectoOperationRoles();
     app.UseNectoUI(

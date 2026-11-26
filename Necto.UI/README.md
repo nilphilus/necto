@@ -297,7 +297,7 @@ if (app.Environment.IsDevelopment())
 }
 ```
 
-`UseNectoUI()` also registers the application’s source-generated mappings automatically at `/necto/endpoint-mappings`; it does not register the OpenAPI document. Existing mappings registered beforehand are reused. Passing `endpointMappingsPath` opts out of automatic registration for a manually managed route.
+`UseNectoUI()` also registers the application’s source-generated mappings at `/necto/endpoint-mappings` and entity catalog at `/necto/entity-catalog` automatically; it does not register the OpenAPI document. Existing mappings and catalog registered beforehand are reused. Passing `endpointMappingsPath` opts out of automatic mappings registration for a manually managed route. The `metadataAttribute` is applied to the UI, mappings and generated metadata routes, including routes registered afterwards.
 
 The UI opens at `/necto/` and reads `/openapi/v1.json` by default. Both paths are relative to the ASP.NET Core application's path base. To use a different UI path and an existing OpenAPI endpoint, call `app.UseNectoUI(routePrefix: "/docs/api", openApiPath: "/swagger/v1/swagger.json")`.
 

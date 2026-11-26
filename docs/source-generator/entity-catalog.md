@@ -1,6 +1,8 @@
 # Generated models and identifiers
 
-Register `app.MapNectoEntityCatalog()` alongside the mappings route. Necto UI discovers the route, including PathBase. Apply the same authorization policy to this returned builder as to the UI/mappings; the endpoint is opt-in and does not inherit policy from other routes.
+`app.UseNectoUI()` automatically registers the generated entity catalog and applies its `metadataAttribute` to the catalog as well as the UI and mappings. Existing catalog registrations are reused; registering the default catalog again does not duplicate the endpoint. Necto UI discovers the route, including PathBase.
+
+For manual UI registration with `MapNectoUI()`, also register `app.MapNectoEntityCatalog()` and apply the host authorization policy to its returned builder. To customize the catalog path or authorization when using `UseNectoUI()`, register the catalog before the UI.
 
 Entity graph → **Models and identifiers** opens a searchable, paged catalog. Select an identifier to see **Available from** producers and **Accepted by** request inputs, including nested JSON paths and array items. Opening an operation fills no values and sends nothing. Hidden/unavailable or ambiguous operations are not linked.
 

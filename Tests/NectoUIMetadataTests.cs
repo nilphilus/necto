@@ -96,7 +96,51 @@ public sealed class NectoUIMetadataTests
         using var client = app.GetTestClient();
         var configuration = await client.GetFromJsonAsync<JsonObject>("/necto/configuration");
         Assert.False(configuration!.ContainsKey("endpointMappingsUrl"));
+        Assert.False(configuration.ContainsKey("entityCatalogUrl"));
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/necto/endpoint-mappings")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/necto/entity-catalog")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("automatic")]
+    [InlineData("manual-before")]
+    [InlineData("manual-after")]
+    [InlineData("custom-before")]
+    public async Task ConvenienceRegistrationServesCatalogWithSharedMetadata(string mode)
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            ApplicationName = typeof(Program).Assembly.GetName().Name
+        });
+        builder.WebHost.UseTestServer();
+        await using var app = builder.Build();
+        app.UsePathBase("/tenant");
+        app.UseRouting();
+        app.Use(async (context, next) =>
+        {
+            if (context.GetEndpoint()?.Metadata.GetMetadata<SkipRequiredHeaderAttribute>() is not null)
+                await next(context);
+            else
+                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        });
+        var provider = System.Reflection.CustomAttributeExtensions
+            .GetCustomAttribute<NectoMappingsAttribute>(typeof(Program).Assembly)!;
+        if (mode == "manual-before") provider.MapEntityCatalog(app);
+        if (mode == "custom-before") NectoGeneratedMetadata.MapEntityCatalog(app, "/custom/catalog", () => []);
+        app.UseNectoUI(metadataAttribute: new SkipRequiredHeaderAttribute());
+        if (mode == "manual-after") provider.MapEntityCatalog(app);
+        await app.StartAsync();
+
+        using var client = app.GetTestClient();
+        var expected = mode == "custom-before" ? "/tenant/custom/catalog" : "/tenant/necto/entity-catalog";
+        var configuration = await client.GetFromJsonAsync<JsonObject>("/tenant/necto/configuration");
+        Assert.Equal(expected, configuration!["entityCatalogUrl"]!.GetValue<string>());
+        var catalog = await client.GetFromJsonAsync<EntityCatalogEntry[]>(expected);
+        if (mode != "custom-before") Assert.NotEmpty(catalog!);
+        var route = Assert.Single(((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)app).DataSources
+            .SelectMany(source => source.Endpoints),
+            endpoint => endpoint.Metadata.GetMetadata<NectoGeneratedMetadata>()?.ConfigurationKey == "entityCatalogUrl");
+        Assert.NotNull(route.Metadata.GetMetadata<SkipRequiredHeaderAttribute>());
     }
 
     [Fact]
@@ -150,8 +194,12 @@ public sealed class NectoUIMetadataTests
         });
 
         const string mappingsPath = "/custom/mappings";
-        void MapMappings() => EndpointMappingsMetadata.Register(app,
-            app.MapGet(mappingsPath, () => Results.Json(Array.Empty<EndpointMapping>())));
+        void MapMappings()
+        {
+            EndpointMappingsMetadata.Register(app,
+                app.MapGet(mappingsPath, () => Results.Json(Array.Empty<EndpointMapping>())));
+            NectoGeneratedMetadata.MapEntityCatalog(app, "/custom/catalog", () => []);
+        }
 
         if (!mapUiFirst) MapMappings();
         app.UseNectoUI(routePrefix: "/docs", metadataAttribute: new SkipRequiredHeaderAttribute());
@@ -162,5 +210,7 @@ public sealed class NectoUIMetadataTests
         var configuration = await client.GetFromJsonAsync<JsonObject>("/docs/configuration");
         Assert.Equal(mappingsPath, configuration!["endpointMappingsUrl"]!.GetValue<string>());
         Assert.Empty((await client.GetFromJsonAsync<EndpointMapping[]>(mappingsPath))!);
+        Assert.Equal("/custom/catalog", configuration["entityCatalogUrl"]!.GetValue<string>());
+        Assert.Empty((await client.GetFromJsonAsync<EntityCatalogEntry[]>("/custom/catalog"))!);
     }
 }

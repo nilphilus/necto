@@ -4,4 +4,4 @@ The existing generated entity catalog now includes relation evidence. In Entity 
 
 A relation is inferred only when a dedicated identifier type matches exactly one other model's Id. Primitive `int CustomerId` is not treated as proof. For explicit contracts use `[NectoRelation(typeof(Customer), nameof(Customer.Id))]` on a JSON property; source/target types must match and the target must be JSON-visible. Ignored/converter-backed fields and ambiguous typed-ID destinations are not guessed. The declaration describes an API contract relation, not an enforced database foreign key.
 
-No new endpoint is needed: register `MapNectoEntityCatalog()` with the host's existing authorization policy.
+No new endpoint is needed: `UseNectoUI()` registers the entity catalog automatically and forwards its `metadataAttribute`. For manual UI registration, register `MapNectoEntityCatalog()` with the host's existing authorization policy.

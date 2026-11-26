@@ -319,6 +319,7 @@ public sealed partial class EndpointMappingGenerator : IIncrementalGenerator
             internal sealed class GeneratedNectoMappingsAttribute : NectoMappingsAttribute
             {
                 public override void Map(IEndpointRouteBuilder endpoints) => GeneratedEndpointMappings.MapNectoEndpointMappings(endpoints);
+                public override void MapEntityCatalog(IEndpointRouteBuilder endpoints) => GeneratedEntityCatalog.MapNectoEntityCatalog(endpoints);
             }
 
             internal static class GeneratedEndpointMappings

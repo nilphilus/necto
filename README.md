@@ -126,6 +126,9 @@ Inspect XML responses or open XML stored in a JSON string without leaving the re
 Necto generates suggestions for reusing response values in other API requests. The
 NuGet package includes a Roslyn source generator. `app.UseNectoUI()` automatically
 exposes the application’s generated suggestions at `/necto/endpoint-mappings`.
+It also registers the generated entity catalog at `/necto/entity-catalog` and
+forwards `metadataAttribute` to both endpoints. Existing catalog registrations
+are reused; register a custom catalog before `UseNectoUI()`.
 For manual configuration, use `app.MapNectoEndpointMappings()` alongside
 `app.MapNectoUI()`; both return builders for endpoint metadata. Register custom
 mappings before `UseNectoUI()`, or pass `endpointMappingsPath` to manage the route yourself.

@@ -27,7 +27,6 @@ app.UseFastEndpoints(options =>
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.MapNectoEntityCatalog();
     app.UseNectoUI();
 }
 
