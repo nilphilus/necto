@@ -1,6 +1,7 @@
 const { run } = require('./qa-fixture.cjs')
 
 run(async ({ p, assert, calls }) => {
+  let withPrerequisites = false
   await p.route('**/openapi.json', async route => {
     const response = await route.fetch()
     const document = await response.json()
@@ -15,6 +16,14 @@ run(async ({ p, assert, calls }) => {
       { in: 'query', name: 'customerId', required: true, schema: { type: 'integer' } },
     ]
     document.paths['/invoices'].post.requestBody.content['application/json'].schema.properties.lines.items.properties.assetId = { type: 'integer' }
+    if (withPrerequisites) {
+      document.paths['/customer'].get.parameters = [
+        { in: 'query', name: 'organizationId', required: true, schema: { type: 'integer' } },
+      ]
+      document.paths['/rows'].get.parameters.push(
+        { in: 'query', name: 'accountId', required: true, schema: { type: 'integer' } },
+      )
+    }
     await route.fulfill({ response, json: document })
   })
   await p.route('**/mappings', route => route.fulfill({ json: [
@@ -32,6 +41,16 @@ run(async ({ p, assert, calls }) => {
       target: { operationId: 'Create', location: 'header', name: 'tenant' } },
     { source: { operationId: 'Rows', eachItem: true, property: 'id' },
       target: { operationId: 'Create', location: 'body', name: 'assetId', objectPath: ['lines', null] } },
+    ...(withPrerequisites ? [
+      { source: { operationId: 'Customer', property: 'id' },
+        target: { operationId: 'Rows', location: 'query', name: 'customerId' } },
+      { source: { operationId: 'Customer', property: 'accountId' },
+        target: { operationId: 'Rows', location: 'query', name: 'accountId' } },
+      { source: { operationId: 'Create', property: 'id' },
+        target: { operationId: 'Rows', location: 'query', name: 'customerId' } },
+      { source: { operationId: 'Entity0', property: 'id' },
+        target: { operationId: 'Customer', location: 'query', name: 'organizationId' } },
+    ] : []),
     { source: { operationId: 'Rows', eachItem: true, property: 'name' },
       target: { operationId: 'Create', location: 'query', name: 'tag' } },
   ] }))
@@ -225,5 +244,54 @@ run(async ({ p, assert, calls }) => {
     offset: el.selectionStart,
     selection: el.value.slice(el.selectionStart, el.selectionEnd),
   })), { focused: true, offset: (await editor.inputValue()).lastIndexOf('{'), selection: '{' })
+
+  await p.setViewportSize({ width: 1440, height: 1000 })
+  withPrerequisites = true
+  const requests = []
+  await p.route('**/entity-0', async route => {
+    requests.push('/entity-0')
+    await route.fulfill({ json: { id: 5 } })
+  })
+  await p.route('**/customer?*', async route => {
+    requests.push(route.request().url().split('/customer')[1])
+    await route.fulfill({ json: { id: 42, accountId: 84 } })
+  })
+  await p.reload()
+  await p.getByRole('button', { name: /POST Create invoice/ }).click()
+  await reference.fill('Keep the original draft')
+  await p.getByRole('button', { name: 'Where to get tenant', exact: true }).click()
+  await p.getByRole('button', { name: 'Find value here', exact: true }).click()
+  const cursor = wizard.getByRole('textbox', { name: /cursor query/ })
+  await cursor.fill('Keep the source draft')
+  const findInputs = wizard.getByRole('button', { name: 'Find source inputs', exact: true })
+  await findInputs.click()
+  const prerequisites = p.getByRole('dialog', { name: 'Find source inputs', exact: true }).last()
+  await prerequisites.getByRole('checkbox', { name: /customerId query/ }).waitFor()
+  assert.equal(await prerequisites.getByRole('button', { name: /POST Create invoice/ }).count(), 0)
+  await prerequisites.getByRole('button', { name: 'Back to source request', exact: true }).click()
+  assert.equal(await cursor.inputValue(), 'Keep the source draft')
+  assert.equal(await customerQuery.inputValue(), '')
+  await findInputs.click()
+  await prerequisites.getByRole('button', { name: 'Find source inputs', exact: true }).click()
+  await prerequisites.getByRole('button', { name: 'Send request', exact: true }).click()
+  await prerequisites.getByRole('button', { name: 'Select object at []', exact: true }).click()
+  await prerequisites.getByRole('button', { name: 'Apply 1 value', exact: true }).click()
+  assert.equal(await prerequisites.getByRole('textbox', { name: /organizationId query/ }).inputValue(), '5')
+  assert.deepEqual(requests, ['/entity-0'])
+  await prerequisites.getByRole('button', { name: 'Send request', exact: true }).click()
+  await prerequisites.getByRole('button', { name: 'Select object at []', exact: true }).click()
+  await prerequisites.getByRole('button', { name: 'Apply 2 values', exact: true }).click()
+  assert.equal(await customerQuery.inputValue(), '42')
+  assert.equal(await wizard.getByRole('textbox', { name: /accountId query/ }).inputValue(), '84')
+  assert.equal(await cursor.inputValue(), 'Keep the source draft')
+  assert.deepEqual(requests, ['/entity-0', '?organizationId=5'])
+  const countBeforeSource = calls.length
+  await send.click()
+  await wizard.getByRole('button', { name: 'Select object at [7]', exact: true }).click()
+  assert.equal(calls.length, countBeforeSource + 1)
+  await wizard.getByRole('button', { name: 'Apply 1 value', exact: true }).click()
+  await wizard.waitFor({ state: 'hidden' })
+  assert.equal(await field('tenant').inputValue(), '7')
+  assert.equal(await reference.inputValue(), 'Keep the original draft')
 
 })
