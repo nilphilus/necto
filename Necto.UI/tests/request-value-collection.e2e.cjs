@@ -8,6 +8,7 @@ run(async ({ p, assert, calls }) => {
       { in: 'query', name: 'assetId', required: true, schema: { type: 'integer' } },
       { in: 'header', name: 'tenant', required: true, schema: { type: 'string' } },
       { in: 'query', name: 'reference', schema: { type: 'string' } },
+      { in: 'query', name: 'tag', schema: { type: 'string' } },
     ]
     document.paths['/rows'].get.parameters = [{ in: 'query', name: 'cursor', schema: { type: 'string' } }]
     await route.fulfill({ response, json: document })
@@ -23,6 +24,8 @@ run(async ({ p, assert, calls }) => {
     })),
     { source: { operationId: 'Rows', eachItem: true, property: 'id' },
       target: { operationId: 'Create', location: 'header', name: 'tenant' } },
+    { source: { operationId: 'Rows', eachItem: true, property: 'name' },
+      target: { operationId: 'Create', location: 'query', name: 'tag' } },
   ] }))
   await p.reload()
   await p.getByRole('button', { name: /POST Create invoice/ }).click()
@@ -34,16 +37,19 @@ run(async ({ p, assert, calls }) => {
   }).locator('input')
   const trigger = p.getByRole('button', { name: 'Find request values', exact: true })
   const wizard = p.getByRole('dialog', { name: 'Find request values' })
-  const sourceHelp = p.getByRole('button', { name: 'Where to get tenant', exact: true })
+  const sourceHelp = p.getByRole('button', { name: 'Where to get tag', exact: true })
   await sourceHelp.click()
   await p.getByRole('button', { name: 'Find value here', exact: true }).click()
   await wizard.waitFor()
   assert.equal(await wizard.getByRole('checkbox', { name: /assetId query/ }).isChecked(), false)
-  assert.equal(await wizard.getByRole('checkbox', { name: /tenant header/ }).isChecked(), true)
+  assert.equal(await wizard.getByRole('checkbox', { name: /tenant header/ }).isChecked(), false)
+  assert.equal(await wizard.getByRole('checkbox', { name: /tag query.*optional/ }).isChecked(), true)
   await wizard.getByRole('button', { name: 'Cancel', exact: true }).click()
   await wizard.waitFor({ state: 'hidden' })
   assert.ok(await sourceHelp.evaluate(el => el === document.activeElement))
   await trigger.click()
+  assert.equal(await wizard.getByRole('checkbox', { name: /tag query.*optional/ }).isChecked(), false)
+  assert.equal(await wizard.getByRole('checkbox', { name: /tenant header.*required/ }).isChecked(), true)
   const send = wizard.getByRole('button', { name: 'Send request', exact: true })
   assert.equal(calls.length, 0)
   const sources = wizard.getByRole('region', { name: 'Suggested source endpoints' })

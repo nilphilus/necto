@@ -268,7 +268,7 @@ async function open(element, location, name) {
   sourceQuery.value = ''
   selectionFeedback.value = null
   const requested = props.fields.find(field => field.location === location && field.name === name)
-  for (const field of props.fields) if (requested ? field === requested : field.missing) selected.add(field.key)
+  for (const field of props.fields) if (requested ? field === requested : field.missing && field.required) selected.add(field.key)
   await nextTick()
   if (origin.value === props.session) dialog.value.showModal()
 }
@@ -338,7 +338,7 @@ defineExpose({ open })
             <div v-for="field in fields" :key="field.key" class="field-row">
               <label class="field-choice">
                 <input type="checkbox" :checked="selected.has(field.key)" @change="toggle(field, $event.target.checked)">
-                <span><code>{{ field.name }}</code> <small>{{ field.location }}</small>
+                <span><code>{{ field.name }}</code> <small>{{ field.location }} · {{ field.required ? 'required' : 'optional' }}</small>
                   <small v-if="collected.has(field.key)" class="collected-value">{{ selected.has(field.key) ? 'Collected' : 'Excluded' }} · {{ label(collected.get(field.key)) }} · {{ collected.get(field.key).source }}</small>
                 </span>
               </label>

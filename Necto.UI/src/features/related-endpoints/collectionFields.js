@@ -3,18 +3,32 @@ import { applyBodyPresets, contextKey, supportedParameters } from '../request-ru
 import { bodyContent, isJson } from '../workbench/body.js'
 import { rememberBinding } from '../scenarios/scenario.js'
 
-const field = (location, name, sources, missing) => ({
-  key: JSON.stringify([location, name]), location, name, sources, missing,
+const field = (location, name, sources, missing, required) => ({
+  key: JSON.stringify([location, name]), location, name, sources, missing, required,
 })
+
+function requiredBodyFields(operation, schema) {
+  const required = new Set(), seen = new Set(), pending = [schema]
+  while (pending.length) {
+    const current = operation.resolve(pending.pop())
+    if (!current || seen.has(current)) continue
+    seen.add(current)
+    if (Array.isArray(current.required)) for (const name of current.required) required.add(name)
+    if (Array.isArray(current.allOf)) for (const part of current.allOf) pending.push(part)
+  }
+  return required
+}
 
 export function collectionFields(operation, session, values, sourcesFor) {
   const fields = supportedParameters(operation).flatMap(parameter => {
     const key = contextKey(parameter)
     const sources = values.has(key) ? [] : sourcesFor(operation, parameter.in, parameter.name)
     const value = session.fields[`${parameter.in}:${parameter.name}`]
-    return sources.length ? [field(parameter.in, parameter.name, sources, value === undefined || value === '')] : []
+    return sources.length ? [field(parameter.in, parameter.name, sources, value === undefined || value === '',
+      parameter.required === true || parameter.in === 'path')] : []
   })
-  if (!isJson(bodyContent(operation, session)?.[0] ?? '')) return fields
+  const media = bodyContent(operation, session)
+  if (!isJson(media?.[0] ?? '')) return fields
   const bodySources = sourcesFor(operation, 'body').filter(source => typeof source.name === 'string')
   if (!bodySources.length) return fields
   let body
@@ -30,8 +44,10 @@ export function collectionFields(operation, session, values, sourcesFor) {
     if (!byName.has(source.name)) byName.set(source.name, [])
     byName.get(source.name).push(source)
   }
+  const required = operation.requestBody.required || session.body.trim()
+    ? requiredBodyFields(operation, media[1].schema) : new Set()
   for (const [name, sources] of byName)
-    fields.push(field('body', name, sources, !Object.hasOwn(body, name) || body[name] === ''))
+    fields.push(field('body', name, sources, !Object.hasOwn(body, name) || body[name] === '', required.has(name)))
   return fields
 }
 
