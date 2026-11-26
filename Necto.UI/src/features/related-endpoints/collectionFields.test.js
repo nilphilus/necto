@@ -37,3 +37,21 @@ test('applying picks preserves unrelated inputs and rolls back on invalid JSON',
   assert.deepEqual(JSON.parse(session.body), { name: 'Draft', active: false })
   assert.deepEqual(session.bindings, [{ location: 'query', name: 'existing' }])
 })
+
+test('required source fields follow parameter rules and the active JSON body schema', () => {
+  const operation = {
+    parameters: [{ in: 'path', name: 'id' }, { in: 'query', name: 'tag' }],
+    requestBody: {
+      required: true,
+      content: { 'application/json': { schema: { allOf: [{ $ref: 'required' }], required: ['name'] } } },
+    },
+    resolve: value => value?.$ref === 'required' ? { required: ['customerId'] } : value,
+  }
+  const fields = collectionFields(operation, { fields: {}, body: '{}' }, new Map(),
+    (_, location, name) => location === 'body'
+      ? [{ name: 'name' }, { name: 'customerId' }, { name: 'comment' }]
+      : [{ name }])
+  assert.deepEqual(fields.map(({ name, required }) => [name, required]), [
+    ['id', true], ['tag', false], ['name', true], ['customerId', true], ['comment', false],
+  ])
+})
