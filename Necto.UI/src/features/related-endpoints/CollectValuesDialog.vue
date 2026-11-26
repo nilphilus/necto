@@ -98,7 +98,8 @@ const reusableValues = computed(() => {
     const field = { location: parameter.in, required: parameter.required || parameter.in === 'path',
       schemas: schema ? [schema] : [] }
     const candidates = new Map()
-    for (const pick of collected.values()) {
+    for (const [collectedKey, pick] of collected) {
+      if (!selected.has(collectedKey)) continue
       if (pick.name !== parameter.name || collectedValueIssue(field, pick.value)) continue
       candidates.set(JSON.stringify(pick.value), { ...pick, location: parameter.in, name: parameter.name })
     }
