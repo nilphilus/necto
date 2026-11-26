@@ -1,7 +1,7 @@
 <script setup>
 import { ref, useId } from 'vue'
 
-const props = defineProps({ label: String, sources: { type: Array, required: true }, showTargets: Boolean, canCollect: Boolean })
+const props = defineProps({ label: String, sources: { type: Array, required: true }, showTargets: Boolean, canCollect: Boolean, collectionOnly: Boolean })
 const emit = defineEmits(['open-source', 'collect'])
 const dialog = ref(null)
 const trigger = ref(null)
@@ -43,7 +43,7 @@ function openSource(operation) {
           <header><h3 :id="titleId">{{ props.label }}</h3>
             <button type="button" class="secondary" @click="dialog.close()">Close</button>
           </header>
-          <p>Look for the value in the response from one of these endpoints. Opening an endpoint leaves sending up to you.</p>
+          <p>Look for the value in the response from one of these endpoints. {{ collectionOnly ? 'Collect a value here to keep this request open.' : 'Opening an endpoint leaves sending up to you.' }}</p>
           <button v-if="canCollect" type="button" class="primary" @click="collectHere">Find value here</button>
           <ul>
             <li v-for="source in sources" :key="source.id">
@@ -55,7 +55,7 @@ function openSource(operation) {
                 Response<template v-if="source.status"> {{ source.status }}</template> · <code>{{ source.path }}</code>
                 · {{ source.origin === 'openapi' ? 'OpenAPI Link' : source.match === 'name' ? 'Necto suggestion' : 'Necto mapping' }}
               </small>
-              <button type="button" class="secondary" :aria-label="'Open source ' + source.operation.name"
+              <button v-if="!collectionOnly" type="button" class="secondary" :aria-label="'Open source ' + source.operation.name"
                 @click="openSource(source.operation)">Open request</button>
             </li>
           </ul>

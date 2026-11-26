@@ -24,8 +24,8 @@ import OperationRunner from './features/request-runner/OperationRunner.vue'
 import { useRequestRunner } from './features/request-runner/useRequestRunner.js'
 import RequestSamples from './features/request-runner/RequestSamples.vue'
 import { createSampleDrafts } from './features/request-runner/samples.js'
-import CollectValuesDialog from './features/related-endpoints/CollectValuesDialog.vue'
-import { applyCollectedValues, collectionFields } from './features/related-endpoints/collectionFields.js'
+import ValueFinder from './features/related-endpoints/ValueFinder.vue'
+import { collectionFields } from './features/related-endpoints/collectionFields.js'
 import { applyChoice, useRelatedEndpoints } from './features/related-endpoints/mappings.js'
 import RelatedChoices from './features/related-endpoints/RelatedChoices.vue'
 import { useRelatedTargets } from './features/related-endpoints/useRelatedTargets.js'
@@ -193,11 +193,10 @@ onUnmounted(authentication.onChange(ids => {
 const requestValues = computed(() => current.value ? valuesFor(current.value.operation) : new Map())
 const valueCollector = ref(null)
 const collectableFields = computed(() => current.value
-  ? collectionFields(current.value.operation, current.value.session, requestValues.value, sourcesFor)
+  ? collectionFields(current.value.operation, current.value.session, requestValues.value, finderSourcesFor)
   : [])
-function applyRequestValues(session, selections) {
-  if (current.value?.session !== session || session.pending) return
-  applyCollectedValues(session, selections)
+function finderSourcesFor(operation, location, name) {
+  return sourcesFor(operation, location, name).filter(source => source.operation.key !== operation.key)
 }
 
 const visiblePresetNames = computed(() => {
@@ -1317,40 +1316,15 @@ function removeScenario(id) {
         </div>
       </div>
     </template>
-    <CollectValuesDialog ref="valueCollector" :operation="current?.operation" :session="current?.session"
-      :workspace="workspaceIdentity(configuration)" :configuration="configuration" :values-for="valuesFor" :fields="collectableFields" :choices-for="choicesFor"
-      :create-session="createDraft" :cancel-request="cancelRequest" :apply="applyRequestValues">
-      <template #default="{ operation, session, selectors, selectObject, canSelect, selectionNote, reusableValues, reuseValue, valueLabel }">
-        <OperationRunner :key="operation.key" :operation="operation" :session="session"
-          :configuration="configuration" :values="valuesFor(operation)" :preset-colors="presetColors"
-          :default-preset-color="defaultPresetColor" default-response-view="preview" :selectors="selectors" :can-select="canSelect" :selection-note="selectionNote"
-          @select-response-object="selectObject" :run="runInContext" :prepare="prepareRequest" :cancel="cancelRequest"
-          @inspect-openapi="trigger => inspectOpenApi(operation, trigger)">
-          <template #choices="{ location, parameterName }">
-            <template v-if="reusableValues[location + ':' + parameterName]?.length">
-              <button v-if="reusableValues[location + ':' + parameterName].length === 1" class="secondary use-collected-value"
-                type="button" :disabled="session.pending" @click="reuseValue(location, parameterName)">
-                {{ reusableValues[location + ':' + parameterName][0].fromRequest ? 'Use request value' : 'Use collected value' }} · {{ valueLabel(reusableValues[location + ':' + parameterName][0]) }}
-              </button>
-              <label v-else class="use-collected-value">Use a value
-                <select :aria-label="'Use a value for ' + parameterName" :disabled="session.pending"
-                  @change="$event.target.value !== '' && reuseValue(location, parameterName, Number($event.target.value))">
-                  <option value="">Choose a value…</option>
-                  <option v-for="(choice, index) in reusableValues[location + ':' + parameterName]"
-                    :key="index" :value="String(index)">{{ valueLabel(choice) }} · {{ choice.source }}</option>
-                </select>
-              </label>
-            </template>
-          </template>
-        </OperationRunner>
-      </template>
-    </CollectValuesDialog>
+    <ValueFinder ref="valueCollector" :operation="current?.operation" :session="current?.session"
+      :workspace="workspaceIdentity(configuration)" :configuration="configuration" :fields="collectableFields"
+      :tools="{ valuesFor, choicesFor, sourcesFor: finderSourcesFor, createDraft, cancelRequest, runInContext, prepareRequest, inspectOpenApi }"
+      :preset-colors="presetColors" :default-preset-color="defaultPresetColor" />
     <OpenApiInspector ref="openApiInspector" />
   </main>
 </template>
 
 <style>
-.use-collected-value { width: fit-content; max-width: 100%; font-size: .8rem; overflow-wrap: anywhere; }
 .chain-save-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .chain-save-actions small { color: var(--muted); }
 .saving-guide { margin-block: .5rem .75rem; font-size: .8rem; color: var(--muted); }

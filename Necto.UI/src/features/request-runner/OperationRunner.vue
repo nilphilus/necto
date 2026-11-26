@@ -34,6 +34,7 @@ const props = defineProps({
   canSelect: Function,
   selectionNote: String,
   collectableFields: Array,
+  sourceCollectionOnly: Boolean,
   cancel: Function,
   prepare: Function,
   configuration: Object,
@@ -287,7 +288,7 @@ function sendShortcut(event) {
               <small>{{ parameter.in }}<template v-if="parameter.required || parameter.in === 'path'"> · required</template></small>
             </component>
             <ValueSourceHelp v-if="!values.has(key)" :label="'Where to get ' + parameter.name"
-              :sources="valueSources(parameter.in, parameter.name)"
+              :sources="valueSources(parameter.in, parameter.name)" :collection-only="sourceCollectionOnly"
               :can-collect="collectableFields?.some(field => field.location === parameter.in && field.name === parameter.name)"
               @collect="trigger => emit('collect-values', trigger, parameter.in, parameter.name)" @open-source="emit('open-source', $event)" />
             <DescriptionHelp :label="'About parameter ' + parameter.name" :description="parameter.description" />
@@ -337,7 +338,7 @@ function sendShortcut(event) {
           <div class="body-heading">
             <label :for="`${parameterIdPrefix}-body`" @click="focusFirstBodyValue">Request body <small>{{ content[0] }}</small></label>
             <div class="body-actions">
-              <ValueSourceHelp label="Where to get request body values" :sources="valueSources('body')" show-targets
+              <ValueSourceHelp v-if="!sourceCollectionOnly" label="Where to get request body values" :sources="valueSources('body')" show-targets
                 @open-source="emit('open-source', $event)" />
               <slot name="openapi-examples" />
               <ExpandedBodyEditor :session="session" @tab="tabBodyValue" />

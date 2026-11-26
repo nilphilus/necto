@@ -1,7 +1,7 @@
 <script setup>
-import { computed, nextTick, reactive, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, shallowRef, watch } from 'vue'
 import { isResponseStale } from '../request-runner/responseFreshness.js'
-import { applyCollectedValues } from './collectionFields.js'
+import { applyCollectedValues, collectionFields } from './collectionFields.js'
 import { applyBodyPresets, contextKey, fieldKey, supportedParameters } from '../request-runner/request.js'
 import { bodyContent, isJson } from '../workbench/body.js'
 import { redactSchema } from '../workbench/sensitiveSchema.js'
@@ -11,7 +11,7 @@ import { pathLabel, selectableOwner } from '../payload-search/search.js'
 
 const props = defineProps({
   operation: Object, session: Object, workspace: String, fields: Array, configuration: Object, valuesFor: Function,
-  choicesFor: Function, createSession: Function, cancelRequest: Function, apply: Function,
+  sourcesFor: Function, ancestors: Array, choicesFor: Function, createSession: Function, cancelRequest: Function, apply: Function,
 })
 const dialog = ref(null)
 const origin = shallowRef(null)
@@ -89,6 +89,18 @@ const hiddenSourceCount = computed(() => rankedSources.value.length - recommende
 const filteredField = computed(() => selectedFields.value.find(field => field.key === focusedField.value))
 const source = computed(() => sourceOptions.value.find(item => item.operation.key === activeSourceKey.value))
 const sourceSession = computed(() => sourceSessions.get(activeSourceKey.value))
+function prerequisiteSources(location, name) {
+  const operation = source.value?.operation
+  if (!operation) return []
+  return props.sourcesFor(operation, location, name).filter(item =>
+    item.operation.key !== props.operation.key && !props.ancestors.includes(item.operation.key))
+}
+const prerequisiteFields = computed(() => {
+  const operation = source.value?.operation
+  if (!operation || !sourceSession.value) return []
+  return collectionFields(operation, sourceSession.value, props.valuesFor(operation),
+    (_, location, name) => prerequisiteSources(location, name))
+})
 const requestValuesByName = computed(() => {
   const values = new Map()
   if (!origin.value || source.value?.operation.apiId !== props.operation.apiId) return values
@@ -382,9 +394,14 @@ async function open(element, location, name) {
   if (origin.value === props.session) dialog.value.showModal()
 }
 
-function close() {
+function discardSourceSessions() {
   for (const session of sourceSessions.values()) props.cancelRequest(session)
   sourceSessions.clear()
+}
+onBeforeUnmount(discardSourceSessions)
+
+function close() {
+  discardSourceSessions()
   activeSourceKey.value = ''
   collected.clear()
   selectionFeedback.value = null
@@ -434,10 +451,10 @@ defineExpose({ open })
 </script>
 
 <template>
-  <dialog ref="dialog" class="collect-dialog" aria-label="Find request values" @close="close">
+  <dialog ref="dialog" class="collect-dialog" :aria-label="ancestors.length ? 'Find source inputs' : 'Find request values'" @close="close">
     <template v-if="origin">
       <header class="collect-header">
-        <div><h2>Find request values</h2><code>{{ operation.method }} {{ operation.path }}</code></div>
+        <div><h2>{{ ancestors.length ? 'Find source inputs' : 'Find request values' }}</h2><code>{{ operation.method }} {{ operation.path }}</code></div>
         <button type="button" class="secondary" aria-label="Close value finder" @click="dialog.close()">×</button>
       </header>
       <div class="collect-workspace">
@@ -548,7 +565,7 @@ defineExpose({ open })
             </label>
           </div>
           <slot :operation="source.operation" :session="sourceSession" :selectors="selectors" :select-object="selectObject" :can-select="canSelect" :selection-note="selectionNote"
-            :reusable-values="reusableValues" :reuse-value="reuseValue" :value-label="label" />
+            :reusable-values="reusableValues" :reuse-value="reuseValue" :value-label="label" :prerequisite-fields="prerequisiteFields" :prerequisite-sources="prerequisiteSources" />
         </section>
       </div>
       <footer class="collect-footer">
@@ -559,7 +576,7 @@ defineExpose({ open })
             {{ missingFields.length === 1 ? 'Missing: ' + missingFields[0].name : missingFields.length + ' missing' }}
           </button>
         </div>
-        <button class="secondary" type="button" @click="dialog.close()">Cancel</button>
+        <button class="secondary" type="button" @click="dialog.close()">{{ ancestors.length ? 'Back to source request' : 'Cancel' }}</button>
         <button v-if="count" class="primary" type="button" :disabled="session.pending" @click="apply">
           Apply {{ count }} {{ count === 1 ? 'value' : 'values' }}
         </button>
