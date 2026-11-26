@@ -1318,7 +1318,7 @@ function removeScenario(id) {
       </div>
     </template>
     <CollectValuesDialog ref="valueCollector" :operation="current?.operation" :session="current?.session"
-      :workspace="workspaceIdentity(configuration)" :fields="collectableFields" :choices-for="choicesFor"
+      :workspace="workspaceIdentity(configuration)" :configuration="configuration" :values-for="valuesFor" :fields="collectableFields" :choices-for="choicesFor"
       :create-session="createDraft" :cancel-request="cancelRequest" :apply="applyRequestValues">
       <template #default="{ operation, session, selectors, selectObject, canSelect, selectionNote }">
         <OperationRunner :key="operation.key" :operation="operation" :session="session"

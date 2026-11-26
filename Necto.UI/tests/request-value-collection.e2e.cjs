@@ -9,6 +9,7 @@ run(async ({ p, assert, calls }) => {
       { in: 'header', name: 'tenant', required: true, schema: { type: 'string' } },
       { in: 'query', name: 'reference', schema: { type: 'string' } },
     ]
+    document.paths['/rows'].get.parameters = [{ in: 'query', name: 'cursor', schema: { type: 'string' } }]
     await route.fulfill({ response, json: document })
   })
   await p.route('**/mappings', route => route.fulfill({ json: [
@@ -79,6 +80,12 @@ run(async ({ p, assert, calls }) => {
   await active.getByRole('status').filter({ hasText: 'Can fill: tenant' }).waitFor()
   await send.click()
   await active.getByRole('status').filter({ hasText: 'Values found: tenant' }).waitFor()
+  await wizard.getByRole('button', { name: 'Edit request', exact: true }).click()
+  await wizard.getByRole('textbox', { name: /cursor query/ }).fill('fresh-page')
+  await active.getByRole('status').filter({ hasText: 'Send the updated request to collect values.' }).waitFor()
+  assert.equal(await wizard.getByRole('button', { name: 'Select object at [7]', exact: true }).count(), 0)
+  await send.click()
+  await active.getByRole('status').filter({ hasText: 'Values found: tenant' }).waitFor()
   await wizard.getByRole('button', { name: 'Select object at [7]', exact: true }).press('Enter')
   assert.ok(await wizard.getByRole('button', { name: 'Apply 3 values' }).evaluate(el => el === document.activeElement))
   await wizard.getByRole('status').filter({ hasText: '3 of 3 selected fields collected' }).waitFor()
@@ -101,7 +108,7 @@ run(async ({ p, assert, calls }) => {
   assert.equal(await field('tenant').inputValue(), '7')
   assert.equal(await reference.inputValue(), 'Keep this draft')
   assert.equal(JSON.parse(await p.locator('.request-pane textarea').first().inputValue()).customerId, 42)
-  assert.deepEqual(calls.map(call => call.path), ['/customer', '/rows'])
+  assert.deepEqual(calls.map(call => call.path), ['/customer', '/rows', '/rows'])
 
   await p.setViewportSize({ width: 390, height: 844 })
   await trigger.click()
