@@ -1,32 +1,22 @@
 <script setup>
-import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
-import { readBoundedText } from '../workbench/response.js'
-import { catalogPage, catalogUses, catalogRelations, validateEntityCatalog } from './identifierCatalog.js'
-const props=defineProps({configuration:Object,authentication:Object,operations:Array})
+import { computed, nextTick, ref, watch } from 'vue'
+import { catalogPage, catalogUses, catalogRelations } from './identifierCatalog.js'
+const props=defineProps({available:Boolean,entries:Array,pending:Boolean,error:String,reload:Function,operations:Array})
 const emit=defineEmits(['open-operation'])
-const dialog=ref(null),trigger=ref(null),entries=ref([]),selected=ref(null),query=ref(''),page=ref(1),pending=ref(false),error=ref('')
-let controller
-const result=computed(()=>catalogPage(entries.value,query.value,page.value))
+const dialog=ref(null),trigger=ref(null),selected=ref(null),query=ref(''),page=ref(1)
+const result=computed(()=>catalogPage(props.entries,query.value,page.value))
 const uses=computed(()=>selected.value?catalogUses(selected.value,props.operations):[])
 watch(query,()=>page.value=1)
-watch(()=>[props.configuration?.entityCatalogUrl,props.configuration?.workspaceId,props.authentication?.apiRevision('local')],()=>{controller?.abort();dialog.value?.close();entries.value=[];selected.value=null})
-onScopeDispose(()=>controller?.abort())
-async function open(){
- dialog.value.showModal();pending.value=true;error.value='';controller?.abort();controller=new AbortController()
- const job=controller,signal=job.signal,timeout=setTimeout(()=>job.abort(),20000)
- try{
-  const response=await (props.authentication?.metadataFetch(props.configuration.entityCatalogUrl,'local',{signal})??fetch(props.configuration.entityCatalogUrl,{signal}))
-  if(!response.ok)throw new Error('Could not load entity catalog.')
-  const {text}=await readBoundedText(response,{signal,responseLimitBytes:5*1024*1024}),data=JSON.parse(text)
-  validateEntityCatalog(data)
-  if(!signal.aborted)entries.value=data
- }catch(cause){if(controller===job)error.value=signal.aborted?'Catalog loading stopped.':cause.message}finally{clearTimeout(timeout);if(controller===job)pending.value=false}
+watch(() => props.entries, () => { selected.value = null; page.value = 1 })
+function open(){
+  dialog.value.showModal()
+  if (props.error) props.reload()
 }
-async function closed(){controller?.abort();await nextTick();trigger.value?.focus()}
+async function closed(){await nextTick();trigger.value?.focus()}
 function openOperation(operation){dialog.value.close();emit('open-operation',operation)}
 </script>
 <template>
- <button v-if="configuration?.entityCatalogUrl" ref="trigger" type="button" class="secondary" @click="open">Models and identifiers</button>
+ <button v-if="available" ref="trigger" type="button" class="secondary" @click="open">Models and identifiers</button>
  <Teleport to="body"><dialog ref="dialog" aria-label="Generated models and identifiers" @close="closed">
   <header><h3>Models and identifiers</h3><button class="secondary" type="button" @click="dialog.close()">Close</button></header>
   <p>Find where a value comes from and which requests accept it. No request is executed.</p>

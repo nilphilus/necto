@@ -177,3 +177,19 @@ test('external schemas with identical names stay isolated and cross-API mappings
   assert.equal(remoteNode.endpoints.filter(entry => entry.roles.includes('response 200'))[0].operation.key, external.key)
   assert.ok(result.edges.some(edge => edge.from === localNode.id && edge.to === remoteNode.id && edge.kind === 'mapping'))
 })
+
+test('catalog names resolve flattened OpenAPI keys and preserve qualified CLR names for details', () => {
+  const key = 'CompanyProductBillingContractsInvoiceLine'
+  const qualifiedType = 'Company.Product.Billing.Contracts.InvoiceLine'
+  const spec = { components: { schemas: {
+    [key]: { title: 'Invoice line response', type: 'object' },
+    Alias: { 'x-necto-clr-name': 'Invoice', 'x-necto-clr-full-name': 'Company.Billing.Invoice', type: 'object' },
+  } } }
+  const { nodes } = buildEntityGraph(spec, [], [], [], [{ kind: 'model', name: qualifiedType }])
+  const line = nodes.find(node => node.schemaKey === key)
+  assert.equal(line.name, 'InvoiceLine')
+  assert.equal(line.qualifiedType, qualifiedType)
+  const alias = nodes.find(node => node.schemaKey === 'Alias')
+  assert.equal(alias.name, 'Invoice')
+  assert.equal(alias.qualifiedType, 'Company.Billing.Invoice')
+})

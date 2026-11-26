@@ -11,6 +11,7 @@ namespace Necto;
 internal static class NectoEntityNames
 {
     private const string ClrNameExtension = "x-necto-clr-name";
+    private const string ClrFullNameExtension = "x-necto-clr-full-name";
     private static readonly ConditionalWeakTable<OpenApiOptions, object> Registrations = new();
 
     internal static void Register(WebApplication app, string openApiPath)
@@ -43,6 +44,7 @@ internal static class NectoEntityNames
 
             schema.Metadata ??= new Dictionary<string, object>();
             schema.Metadata[ClrNameExtension] = name;
+            schema.Metadata[ClrFullNameExtension] = context.JsonTypeInfo.Type.ToString();
             return Task.CompletedTask;
         });
         // FastEndpoints may clone schemas while rewriting request bodies.
@@ -66,6 +68,8 @@ internal static class NectoEntityNames
 
             concrete.Extensions ??= new Dictionary<string, IOpenApiExtension>();
             concrete.Extensions.TryAdd(ClrNameExtension, new JsonNodeExtension(JsonValue.Create(name)!));
+            if (concrete.Metadata.TryGetValue(ClrFullNameExtension, out var fullValue) && fullValue is string fullName)
+                concrete.Extensions.TryAdd(ClrFullNameExtension, new JsonNodeExtension(JsonValue.Create(fullName)!));
         }
     }
 }

@@ -2,6 +2,7 @@
 import GraphMinimap from '../GraphMinimap.vue'
 import { useGraphNavigation, MIN_ZOOM, MAX_ZOOM } from '../graph-navigation.js'
 import IdentifierCatalog from './IdentifierCatalog.vue'
+import { useIdentifierCatalog } from './useIdentifierCatalog.js'
 import { computed, nextTick, ref, watch, useId } from 'vue'
 import { useGraphViewport } from '../graph-viewport.js'
 import { buildEntityGraph, connectionPath, entitySize, groupConnections, layoutGraph } from './graph.js'
@@ -15,11 +16,12 @@ const focused = ref(false)
 const markerId = useId()
 const detailsTitle = ref(null)
 const canvas = ref(null)
-const graph = computed(() => buildEntityGraph(props.spec, props.operations, props.mappings, props.apis))
+const { entries, pending: catalogPending, error: catalogError, reload: reloadCatalog } = useIdentifierCatalog(props)
+const graph = computed(() => buildEntityGraph(props.spec, props.operations, props.mappings, props.apis, entries.value))
 const filtered = computed(() => {
   const query = search.value.trim().toLowerCase()
   return graph.value.nodes.filter(node => node.name.toLowerCase().includes(query) ||
-    node.schemaKey?.toLowerCase().includes(query))
+    node.schemaKey?.toLowerCase().includes(query) || node.qualifiedType?.toLowerCase().includes(query))
 })
 const matchingEdges = computed(() => graph.value.edges.filter(edge => kind.value === 'all' || kind.value === edge.kind))
 const selected = computed(() => graph.value.nodes.find(node => node.id === selectedId.value))
@@ -76,7 +78,8 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
       <span class="counts">{{ graph.nodes.length }} entities · {{ graph.edges.length }} connections</span>
     </header>
     <div class="graph-controls">
-      <IdentifierCatalog :configuration="configuration" :authentication="authentication" :operations="operations" @open-operation="$emit('open-operation', $event)" />
+      <IdentifierCatalog :available="Boolean(configuration?.entityCatalogUrl)" :entries="entries" :pending="catalogPending"
+        :error="catalogError" :reload="reloadCatalog" :operations="operations" @open-operation="$emit('open-operation', $event)" />
       <label>Find an entity <input v-model="search" type="search" placeholder="Invoice, Customer…"></label>
       <label>Connections <select v-model="kind" aria-label="Connections"><option value="all">All connections</option><option value="schema">Schema references</option><option value="mapping">Value flows</option></select></label>
       <button type="button" class="secondary" :disabled="!selected" :aria-pressed="focused" @click="focused = !focused">Focus on selected entity</button>
@@ -106,9 +109,7 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
           <foreignObject v-for="node in positions" :key="node.id" :x="node.x" :y="node.y" :width="entitySize.width" :height="entitySize.height + 4">
             <button type="button" class="entity-node" :class="{ active: selectedId === node.id }" :aria-pressed="selectedId === node.id" :aria-label="'Inspect entity ' + node.name" @click="selectEntity(node.id)">
               <strong>{{ node.name }}</strong>
-              <small v-if="selectedId === node.id && node.schemaKey && node.schemaKey !== node.name"
-                class="node-schema" :title="node.schemaKey">{{ node.schemaKey }}</small>
-              <small v-else>{{ node.endpoints.length }} endpoints</small>
+              <small>{{ node.endpoints.length }} endpoints</small>
             </button>
           </foreignObject>
         </svg>
@@ -119,7 +120,8 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
       <aside class="entity-details" aria-label="Selected entity details">
         <template v-if="selected">
           <h3 ref="detailsTitle" tabindex="-1" aria-live="polite">{{ selected.name }}</h3>
-          <p v-if="selected.schemaKey" class="muted schema-key">Schema <code>{{ selected.schemaKey }}</code></p>
+          <p v-if="selected.qualifiedType && selected.qualifiedType !== selected.name" class="muted schema-key">CLR type <code>{{ selected.qualifiedType }}</code></p>
+          <p v-if="selected.schemaKey && selected.schemaKey !== selected.qualifiedType" class="muted schema-key">Schema <code>{{ selected.schemaKey }}</code></p>
           <p v-if="selected.schema.description" class="muted">{{ selected.schema.description }}</p>
           <h4>Connected endpoints ({{ selected.endpoints.length }})</h4>
           <ul class="endpoint-list">
@@ -171,7 +173,6 @@ svg { display: block; }
 .entity-node strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
 .schema-key { overflow-wrap: anywhere; }
 .entity-node small { margin-top: .25rem; color: var(--muted); font-size: .75rem; }
-.node-schema { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .entity-details { min-width: 0; padding: 1rem; border-left: 1px solid var(--line); max-height: 65vh; overflow: auto; }
 h3 { margin: 0 0 .5rem; overflow-wrap: anywhere; }h4 { font-size: .8rem; margin: 1rem 0 .5rem; }
 .entity-details p { font-size: .85rem; }
