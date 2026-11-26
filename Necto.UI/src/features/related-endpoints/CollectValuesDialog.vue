@@ -1,6 +1,9 @@
 <script setup>
 import { computed, nextTick, reactive, ref, shallowRef, watch } from 'vue'
 import { isResponseStale } from '../request-runner/responseFreshness.js'
+import { applyCollectedValues } from './collectionFields.js'
+import { fieldKey, supportedParameters } from '../request-runner/request.js'
+import { sensitiveName } from '../workbench/privacy.js'
 import { collectedValueIssue } from './collectedValueIssue.js'
 import { pathLabel, selectableOwner } from '../payload-search/search.js'
 
@@ -83,6 +86,30 @@ const hiddenSourceCount = computed(() => rankedSources.value.length - recommende
 const filteredField = computed(() => selectedFields.value.find(field => field.key === focusedField.value))
 const source = computed(() => sourceOptions.value.find(item => item.operation.key === activeSourceKey.value))
 const sourceSession = computed(() => sourceSessions.get(activeSourceKey.value))
+const reusableValues = computed(() => {
+  const result = {}
+  if (!source.value || !sourceSession.value || !collected.size) return result
+  const operation = source.value.operation
+  for (const parameter of supportedParameters(operation)) {
+    const key = fieldKey(parameter)
+    const current = sourceSession.value.fields[key]
+    if (sensitiveName(parameter.name) || (current !== undefined && current !== '')) continue
+    const schema = operation.resolve(parameter.schema)
+    const field = { location: parameter.in, required: parameter.required || parameter.in === 'path',
+      schemas: schema ? [schema] : [] }
+    const candidates = new Map()
+    for (const pick of collected.values()) {
+      if (pick.name !== parameter.name || collectedValueIssue(field, pick.value)) continue
+      candidates.set(JSON.stringify(pick.value), { ...pick, location: parameter.in, name: parameter.name })
+    }
+    if (candidates.size) result[key] = [...candidates.values()]
+  }
+  return result
+})
+function reuseValue(location, name, index = 0) {
+  const choice = reusableValues.value[`${location}:${name}`]?.[index]
+  if (choice && sourceSession.value && !sourceSession.value.pending) applyCollectedValues(sourceSession.value, [choice])
+}
 const missingFields = computed(() => selectedFields.value.filter(field => !collected.has(field.key)))
 const count = computed(() => selectedFields.value.filter(field => collected.has(field.key)).length)
 function staleFor(operation, session) {
@@ -431,7 +458,8 @@ defineExpose({ open })
               </select>
             </label>
           </div>
-          <slot :operation="source.operation" :session="sourceSession" :selectors="selectors" :select-object="selectObject" :can-select="canSelect" :selection-note="selectionNote" />
+          <slot :operation="source.operation" :session="sourceSession" :selectors="selectors" :select-object="selectObject" :can-select="canSelect" :selection-note="selectionNote"
+            :reusable-values="reusableValues" :reuse-value="reuseValue" :value-label="label" />
         </section>
       </div>
       <footer class="collect-footer">

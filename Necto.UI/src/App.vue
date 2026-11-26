@@ -1320,12 +1320,29 @@ function removeScenario(id) {
     <CollectValuesDialog ref="valueCollector" :operation="current?.operation" :session="current?.session"
       :workspace="workspaceIdentity(configuration)" :configuration="configuration" :values-for="valuesFor" :fields="collectableFields" :choices-for="choicesFor"
       :create-session="createDraft" :cancel-request="cancelRequest" :apply="applyRequestValues">
-      <template #default="{ operation, session, selectors, selectObject, canSelect, selectionNote }">
+      <template #default="{ operation, session, selectors, selectObject, canSelect, selectionNote, reusableValues, reuseValue, valueLabel }">
         <OperationRunner :key="operation.key" :operation="operation" :session="session"
           :configuration="configuration" :values="valuesFor(operation)" :preset-colors="presetColors"
           :default-preset-color="defaultPresetColor" default-response-view="preview" :selectors="selectors" :can-select="canSelect" :selection-note="selectionNote"
           @select-response-object="selectObject" :run="runInContext" :prepare="prepareRequest" :cancel="cancelRequest"
-          @inspect-openapi="trigger => inspectOpenApi(operation, trigger)" />
+          @inspect-openapi="trigger => inspectOpenApi(operation, trigger)">
+          <template #choices="{ location, parameterName }">
+            <template v-if="reusableValues[location + ':' + parameterName]?.length">
+              <button v-if="reusableValues[location + ':' + parameterName].length === 1" class="secondary use-collected-value"
+                type="button" :disabled="session.pending" @click="reuseValue(location, parameterName)">
+                Use collected value · {{ valueLabel(reusableValues[location + ':' + parameterName][0]) }}
+              </button>
+              <label v-else class="use-collected-value">Use collected value
+                <select :aria-label="'Use collected value for ' + parameterName" :disabled="session.pending"
+                  @change="$event.target.value !== '' && reuseValue(location, parameterName, Number($event.target.value))">
+                  <option value="">Choose a value…</option>
+                  <option v-for="(choice, index) in reusableValues[location + ':' + parameterName]"
+                    :key="index" :value="String(index)">{{ valueLabel(choice) }} · {{ choice.source }}</option>
+                </select>
+              </label>
+            </template>
+          </template>
+        </OperationRunner>
       </template>
     </CollectValuesDialog>
     <OpenApiInspector ref="openApiInspector" />
@@ -1333,6 +1350,7 @@ function removeScenario(id) {
 </template>
 
 <style>
+.use-collected-value { width: fit-content; max-width: 100%; font-size: .8rem; overflow-wrap: anywhere; }
 .chain-save-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .chain-save-actions small { color: var(--muted); }
 .saving-guide { margin-block: .5rem .75rem; font-size: .8rem; color: var(--muted); }

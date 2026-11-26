@@ -10,7 +10,10 @@ run(async ({ p, assert, calls }) => {
       { in: 'query', name: 'reference', schema: { type: 'string' } },
       { in: 'query', name: 'tag', schema: { type: 'string' } },
     ]
-    document.paths['/rows'].get.parameters = [{ in: 'query', name: 'cursor', schema: { type: 'string' } }]
+    document.paths['/rows'].get.parameters = [
+      { in: 'query', name: 'cursor', schema: { type: 'string' } },
+      { in: 'query', name: 'customerId', required: true, schema: { type: 'integer' } },
+    ]
     await route.fulfill({ response, json: document })
   })
   await p.route('**/mappings', route => route.fulfill({ json: [
@@ -91,6 +94,12 @@ run(async ({ p, assert, calls }) => {
   await wizard.getByRole('button', { name: /Invoice rows/ }).click()
   await active.getByText('GET /rows', { exact: true }).waitFor()
   await active.getByRole('status').filter({ hasText: 'Can fill: tenant' }).waitFor()
+  const customerQuery = wizard.getByRole('textbox', { name: /customerId query/ })
+  assert.equal(await customerQuery.inputValue(), '')
+  const requestsBeforeReuse = calls.length
+  await wizard.getByRole('button', { name: 'Use collected value · 42', exact: true }).click()
+  assert.equal(await customerQuery.inputValue(), '42')
+  assert.equal(calls.length, requestsBeforeReuse)
   await send.click()
   await active.getByRole('status').filter({ hasText: 'Values found: tenant' }).waitFor()
   await wizard.getByRole('button', { name: 'Edit request', exact: true }).click()
@@ -128,6 +137,7 @@ run(async ({ p, assert, calls }) => {
   assert.equal(await wizard.evaluate(el => el.scrollWidth > el.clientWidth), false)
   assert.equal(await wizard.locator('.collect-workspace').evaluate(el => el.scrollWidth > el.clientWidth), false)
   await wizard.getByRole('checkbox', { name: /tenant header/ }).check()
+  await customerQuery.fill('42')
   await send.click()
   await wizard.getByRole('button', { name: 'Select object at [3]', exact: true }).click()
   await wizard.getByRole('button', { name: 'Cancel', exact: true }).click()
