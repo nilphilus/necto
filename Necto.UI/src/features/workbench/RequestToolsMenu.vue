@@ -52,6 +52,7 @@ async function toggle() {
       left: `${Math.max(8, Math.min(rect.left, innerWidth - 300))}px`
     };
     await nextTick();
+    menu.value?.showPopover();
     menu.value?.querySelector('button:not([disabled])')?.focus();
   }
 }
@@ -75,7 +76,7 @@ function openInspector() {
   emit('inspect-openapi', trigger.value)
 }
 function inspect(section) {
-  open.value = false;
+  close();
   advanced.value.openSection(section);
 }
 async function copy() {
@@ -113,39 +114,38 @@ onUnmounted(() => {
   >
     Tools
   </button>
-  <Teleport to="body"
-    ><div
-      v-if="open"
-      ref="menu"
-      class="tools-menu"
-      :style="style"
-      aria-label="Request tools menu"
-      @keydown.esc.stop.prevent="close"
-    >
-      <strong>Quick actions</strong
-      ><button type="button" :disabled="!!prepared.error" @click="copy">
-        Copy as cURL · current draft</button
-      ><small v-if="prepared.error"
-        >Complete request inputs to enable copying.</small
-      >
-      <button v-if="canCaptureHistory(latest)" type="button" :disabled="session.pending" @click="captureLatest">
-        Add last request to scenario…
-      </button>
-      <p v-if="feedback" role="status">{{ feedback }}</p>
-      <strong>Inspect</strong
-      ><button type="button" @click="inspect('Contract')">Contract</button
-      ><button type="button" @click="openInspector">OpenAPI Inspector</button
-      ><button type="button" @click="inspect('Code')">
-        Code · more languages</button
-      ><button type="button" @click="inspect('History')">
-        History ({{ history?.forOperation(operation.key).length ?? 0 }})
-      </button>
-      <button type="button" @click="inspect('Configure')">Configure request</button>
-      <button v-if="session.bindings?.length" type="button" @click="inspect('Bindings')">Bindings ({{ session.bindings.length }})</button>
-
-
-    </div></Teleport
+  <div
+    v-if="open"
+    ref="menu"
+    popover="manual"
+    class="tools-menu"
+    :style="style"
+    aria-label="Request tools menu"
+    @keydown.esc.stop.prevent="close"
   >
+    <strong>Quick actions</strong
+    ><button type="button" :disabled="!!prepared.error" @click="copy">
+      Copy as cURL · current draft</button
+    ><small v-if="prepared.error"
+      >Complete request inputs to enable copying.</small
+    >
+    <button v-if="canCaptureHistory(latest)" type="button" :disabled="session.pending" @click="captureLatest">
+      Add last request to scenario…
+    </button>
+    <p v-if="feedback" role="status">{{ feedback }}</p>
+    <strong>Inspect</strong
+    ><button type="button" @click="inspect('Contract')">Contract</button
+    ><button type="button" @click="openInspector">OpenAPI Inspector</button
+    ><button type="button" @click="inspect('Code')">
+      Code · more languages</button
+    ><button type="button" @click="inspect('History')">
+      History ({{ history?.forOperation(operation.key).length ?? 0 }})
+    </button>
+    <button type="button" @click="inspect('Configure')">Configure request</button>
+    <button v-if="session.bindings?.length" type="button" @click="inspect('Bindings')">Bindings ({{ session.bindings.length }})</button>
+
+
+  </div>
   <RequestTools
     ref="advanced"
     v-bind="props"
@@ -157,11 +157,11 @@ onUnmounted(() => {
 <style scoped>
 .tools-menu {
   position: fixed;
-  z-index: 40;
+  inset: auto;
+  margin: 0;
   width: min(18rem, calc(100vw - 1rem));
   max-height: 70dvh;
   overflow: auto;
-  display: grid;
   gap: 0.25rem;
   padding: 0.6rem;
   border: 1px solid var(--line);
@@ -170,6 +170,7 @@ onUnmounted(() => {
   color: var(--text);
   box-shadow: 0 8px 25px #0003;
 }
+.tools-menu:popover-open { display: grid; }
 .tools-menu strong {
   font-size: 0.7rem;
   color: var(--muted);
