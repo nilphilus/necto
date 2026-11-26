@@ -55,7 +55,8 @@ const rankedSources = computed(() => sourceOptions.value.map(item => {
   const checked = result?.ok && !result.incomplete
   const available = checked ? missing.filter(field => candidatesFor(field, undefined, item.operation.key, result).length) : []
   const useful = checked ? available : missing.filter(field => !priorChecks.value?.has(checkKey(field, item.operation.key)))
-  return { ...item, missing, useful, declared, available: available.length,
+  return { ...item, missing, useful, declared, available: available.length, checked,
+    found: available, notFound: checked ? missing.filter(field => !available.includes(field)) : [],
     readOnly: ['GET', 'HEAD'].includes(item.operation.method) }
 }).sort((a, b) => b.useful.length - a.useful.length || b.available - a.available ||
   b.declared - a.declared || Number(b.readOnly) - Number(a.readOnly)))
@@ -454,8 +455,15 @@ defineExpose({ open })
               <strong>{{ item.operation.name }}</strong>
               <code>{{ item.operation.method }} {{ item.operation.path }}</code>
               <small>{{ item.operation.apiName }}</small>
-              <small v-if="checkedFields(item).length">Checked · no values found for {{ fieldNames(checkedFields(item)) }}</small>
-              <small>Can fill: {{ fieldNames(item.missing.length ? item.missing : item.fields) }}</small>
+              <template v-if="item.checked">
+                <small v-if="item.found.length">Values found: {{ fieldNames(item.found) }}</small>
+                <small v-if="item.notFound.length">No values found for {{ fieldNames(item.notFound) }}</small>
+              </template>
+              <template v-else-if="checkedFields(item).length">
+                <small>Checked · no values found for {{ fieldNames(checkedFields(item)) }}</small>
+                <small v-if="item.useful.length">Can fill: {{ fieldNames(item.useful) }}</small>
+              </template>
+              <small v-else>Can fill: {{ fieldNames(item.missing.length ? item.missing : item.fields) }}</small>
             </button>
             <button v-if="hiddenSourceCount" class="secondary" type="button" :aria-expanded="moreOpen" @click="moreOpen = !moreOpen">
               {{ moreOpen ? 'Fewer sources' : 'More sources (' + hiddenSourceCount + ')' }}
