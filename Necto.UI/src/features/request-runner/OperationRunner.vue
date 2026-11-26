@@ -12,6 +12,7 @@ import BodyEditor from '../workbench/BodyEditor.vue'
 import ExpandedBodyEditor from '../workbench/ExpandedBodyEditor.vue'
 import RequestTools from '../workbench/RequestToolsMenu.vue'
 import ResponsePreview from './ResponsePreview.vue'
+import { validationFields } from './validationFields.js'
 import { numericRules } from './numericParameter.js'
 import ParameterInput from './ParameterInput.vue'
 import RequestSendIcon from './RequestSendIcon.vue'
@@ -108,6 +109,23 @@ async function searchResponse(query) {
 }
 const bodyEditor = ref(null)
 const responsePane = ref(null)
+const responseValidationFields = computed(() => {
+  const result = props.session.result
+  if (!content.value || props.session.pending || responseStale.value || ![400, 422].includes(result?.status)) return []
+  return validationFields(result.json?.errors, props.session.body)
+})
+async function focusValidationField(field) {
+  requestCompact.value = false
+  await nextTick()
+  const editor = bodyEditor.value
+  if (!editor) return
+  editor.focus()
+  await nextTick()
+  editor.setSelectionRange(field.start, field.end)
+  const style = getComputedStyle(editor)
+  const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2
+  editor.scrollTop = editor.value.slice(0, field.start).split('\n').length * lineHeight - editor.clientHeight / 2
+}
 
 function selectBodyValue(editor, direction, fromStart = false) {
   const body = editor.value
@@ -383,6 +401,15 @@ function sendShortcut(event) {
         </p>
         <template v-if="session.result">
           <p v-if="responseStale" class="muted response-stale" :class="{ 'response-stale-info': !session.error }" role="status">{{ session.error ? (session.result?.incomplete ? 'Response reception did not complete. No complete preview is available.' : 'The latest request did not complete. Showing the previous response.') : 'Inputs changed. This response belongs to the previous request.' }}</p>
+          <details v-if="responseValidationFields.length" class="body-schema">
+            <summary>Request fields with validation errors ({{ responseValidationFields.length }})</summary>
+            <ul>
+              <li v-for="field in responseValidationFields" :key="field.key">
+                <code>{{ field.key }}</code> · {{ field.message }}
+                <button type="button" class="preset-link" :aria-label="'Go to field ' + field.key" @click="focusValidationField(field)">Go to field</button>
+              </li>
+            </ul>
+          </details>
           <div class="response-content" :class="{ 'has-related': hasRelated, 'related-pinned': relatedPinned }" :style="{ '--next-request-width': nextRequestWidth + 'px' }">
           <div class="response-body">
             <ResponsePreview ref="responsePreview" :result="session.result" :presentation="previewPreferences" :default-view="defaultResponseView" :selectors="selectors" :can-select="canSelect" :selection-note="selectionNote" :operation="operation" :pending="session.pending" :stale="responseStale"
