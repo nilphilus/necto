@@ -6,6 +6,7 @@ const clrType = 'Company.Product.Billing.Contracts.InvoiceLine'
 schemas[longSchema] = schemas.Entity139
 delete schemas.Entity139
 schemas.Entity138.properties.next.$ref = '#/components/schemas/' + longSchema
+schemas.DatabaseInvoice = { type: 'object', properties: { entity: { $ref: '#/components/schemas/Entity00' } } }
 const spec={openapi:'3.1.0',info:{title:'Large entity navigation demo',version:'1'},components:{schemas},paths:{'/entities':{get:{operationId:'GetEntities',responses:{200:{description:'Entities',content:{'application/json':{schema:{$ref:'#/components/schemas/Entity00'}}}}}}}}}
 let browser,server,page,base
 ;(async()=>{

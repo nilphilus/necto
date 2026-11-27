@@ -99,7 +99,7 @@ test('qualified and flattened titles are shortened while the original schema key
     [invoiceKey]: { title: 'Company.Product.Billing.Contracts.Invoice', type: 'object' },
     [lineKey]: { title: 'CompanyProductBillingContractsInvoiceLine', type: 'object' },
   } } }
-  const { nodes } = buildEntityGraph(spec, [])
+  const { nodes } = buildEntityGraph(spec, [operation('Invoice', ref(invoiceKey)), operation('InvoiceLine', ref(lineKey))])
   assert.equal(nodes.find(node => node.schemaKey === invoiceKey).name, 'Invoice')
   const line = nodes.find(node => node.schemaKey === lineKey)
   assert.equal(line.name, '…BillingContractsInvoiceLine')
@@ -185,11 +185,30 @@ test('catalog names resolve flattened OpenAPI keys and preserve qualified CLR na
     [key]: { title: 'Invoice line response', type: 'object' },
     Alias: { 'x-necto-clr-name': 'Invoice', 'x-necto-clr-full-name': 'Company.Billing.Invoice', type: 'object' },
   } } }
-  const { nodes } = buildEntityGraph(spec, [], [], [], [{ kind: 'model', name: qualifiedType }])
+  const { nodes } = buildEntityGraph(spec, [operation('InvoiceLine', ref(key)), operation('Invoice', ref('Alias'))], [], [], [{ kind: 'model', name: qualifiedType }])
   const line = nodes.find(node => node.schemaKey === key)
   assert.equal(line.name, 'InvoiceLine')
   assert.equal(line.qualifiedType, qualifiedType)
   const alias = nodes.find(node => node.schemaKey === 'Alias')
   assert.equal(alias.name, 'Invoice')
   assert.equal(alias.qualifiedType, 'Company.Billing.Invoice')
+})
+
+test('only schemas reachable from an operation contract appear in the graph', () => {
+  const spec = { components: { schemas: {
+    InvoiceDto: { properties: { id: { type: 'integer' } } },
+    CreateInvoice: { properties: { lines: { type: 'array', items: ref('CreateInvoiceLine') } } },
+    CreateInvoiceLine: { properties: { amount: { type: 'number' } } },
+    DatabaseInvoice: { properties: { dto: ref('InvoiceDto'), items: ref('DatabaseLine') } },
+    DatabaseLine: { properties: { parent: ref('DatabaseInvoice') } },
+  } } }
+  const create = operation('Create', ref('InvoiceDto'), {
+    requestBody: { content: { 'application/json': { schema: ref('CreateInvoice') } } },
+  })
+  const catalog = [{ kind: 'model', name: 'DatabaseInvoice' }]
+  const { nodes, edges } = buildEntityGraph(spec, [create], [], [], catalog)
+  assert.deepEqual(nodes.map(node => node.name), ['CreateInvoice', 'CreateInvoiceLine', 'InvoiceDto'])
+  assert.ok(nodes.find(node => node.name === 'CreateInvoiceLine').endpoints[0].roles.includes('request'))
+  assert.deepEqual(edges.map(({ from, to }) => [from, to]), [['schema:CreateInvoice', 'schema:CreateInvoiceLine']])
+  assert.deepEqual(buildEntityGraph(spec, [], [], [], catalog), { nodes: [], edges: [] })
 })
