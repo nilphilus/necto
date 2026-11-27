@@ -69,6 +69,9 @@ function readEntityGraph(spec, operations, modelNames) {
       if (deep === true || !nodes.has(id)) references(resolve(schema), deep, found, seen)
     }
     if (schema.items) references(schema.items, deep, found, seen)
+    if (Array.isArray(schema.prefixItems)) {
+      for (const item of schema.prefixItems) references(item, deep, found, seen)
+    }
     for (const key of ['allOf', 'anyOf', 'oneOf']) {
       for (const child of schema[key] ?? []) references(child, deep, found, seen)
     }

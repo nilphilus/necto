@@ -37,11 +37,15 @@ export function validationFields(errors, body, schema, resolve = value => value)
     const message = (Array.isArray(messages) ? messages : [messages]).find(value => typeof value === 'string' && value.trim())
     if (!message) continue
     const path = errorPath(key)
+    const allowCaseFallback = !key.startsWith('/') && !key.startsWith('$.')
     let node = root, start, schemas = schema ? [schema] : []
     for (const [index, segment] of path.entries()) {
       if (node?.type === 'ObjectExpression') {
-        const properties = node.properties.filter(property => property.key?.value === segment)
-        schemas = schemaChildren(schemas, segment, false, resolve)
+        const exact = node.properties.filter(property => property.key?.value === segment)
+        const properties = exact.length || !allowCaseFallback ? exact : node.properties.filter(property =>
+          typeof property.key?.value === 'string' && property.key.value.toLowerCase() === segment.toLowerCase())
+        const name = properties.length === 1 ? properties[0].key.value : segment
+        schemas = schemaChildren(schemas, name, false, resolve)
         if (!properties.length && index === path.length - 1 && schemas.length) {
           fields.push({ key, message, start: node.start, end: node.start + 1, parent: true })
           node = null

@@ -224,3 +224,14 @@ test('successful response ranges and content-based parameters expose contract no
   const { nodes } = buildEntityGraph(spec, [endpoint])
   assert.deepEqual(nodes.map(node => node.name), ['Filter', 'Invoice'])
 })
+
+test('OpenAPI 3.1 tuple items are reachable through the response contract', () => {
+  const spec = { components: { schemas: {
+    Envelope: { properties: { items: { type: 'array', prefixItems: [ref('Item')] } } },
+    Item: { type: 'object' }, DatabaseModel: { type: 'object' },
+  } } }
+  const { nodes, edges } = buildEntityGraph(spec, [operation('Get', ref('Envelope'))])
+  assert.deepEqual(nodes.map(node => node.name), ['Envelope', 'Item'])
+  assert.ok(edges.some(edge => edge.from === 'schema:Envelope' && edge.to === 'schema:Item' && edge.label === 'items'))
+  assert.deepEqual(nodes.find(node => node.name === 'Item').endpoints[0].roles, ['response 200'])
+})

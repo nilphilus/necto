@@ -211,7 +211,7 @@ run(async ({ p, assert, calls }) => {
   assert.ok(await trigger.evaluate(el => el === document.activeElement))
   await p.route('**/invoices?*', route => route.fulfill({
     status: 422, json: { errors: {
-      'lines[1].quantity': ['Quantity must be positive.'],
+      'Lines[1].Quantity': ['Quantity must be positive.'],
       'lines[1].assetId': ['Asset is required.'],
       missing: ['No matching field.'],
     } },
@@ -237,13 +237,13 @@ run(async ({ p, assert, calls }) => {
   assert.deepEqual(JSON.parse(await editor.inputValue()).lines, [{ quantity: 1, assetId: 7 }, { quantity: 0, assetId: 3 }])
   await p.getByRole('button', { name: 'Send request', exact: true }).click()
   await p.getByText('Request fields with validation errors (2)', { exact: true }).click()
-  await p.getByRole('button', { name: 'Go to field lines[1].quantity', exact: true }).click()
+  await p.getByRole('button', { name: 'Go to field Lines[1].Quantity', exact: true }).click()
   assert.deepEqual(await editor.evaluate(el => ({
     focused: el === document.activeElement,
     selection: el.value.slice(el.selectionStart, el.selectionEnd),
   })), { focused: true, selection: '"quantity": 0' })
   await editor.fill(JSON.stringify({ lines: [{ quantity: 1 }, { quantity: 2 }] }, null, 2))
-  await p.getByRole('button', { name: 'Go to field lines[1].quantity' }).waitFor({ state: 'hidden' })
+  await p.getByRole('button', { name: 'Go to field Lines[1].Quantity' }).waitFor({ state: 'hidden' })
   await p.getByRole('button', { name: 'Send request', exact: true }).click()
   await p.getByText('Request fields with validation errors (2)', { exact: true }).click()
   await p.getByRole('button', { name: 'Go to parent object for lines[1].assetId', exact: true }).click()
