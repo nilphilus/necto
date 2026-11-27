@@ -1,4 +1,5 @@
 <script setup>
+import brandMark from '../../docs/landing-page/assets/mark.svg?inline'
 import AppearanceSettings from './features/appearance/AppearanceSettings.vue'
 import { useAppearance } from './features/appearance/useAppearance.js'
 import { registerWorkspaceApis } from './features/authentication/registerWorkspaceApis.js'
@@ -751,7 +752,7 @@ function removeScenario(id) {
   <div class="brand-track" :inert="settingsOpen">
     <div class="brand-stamp">
       <button type="button" class="brand-button" @click="clickBrandStamp">
-        <span class="brand-mark" aria-hidden="true">N</span>
+        <img class="brand-mark" :src="brandMark" alt="" width="26" height="26">
         <span>Necto</span>
       </button>
       <NectoSkeleton v-if="skeletonWalking" @finish="skeletonWalking = false" />
@@ -1406,7 +1407,7 @@ body { margin: 0; background: light-dark(#eef2ee, #101a16); }
   font-weight: 750;
 }
 .brand-button:hover { background: var(--surface); }
-.brand-mark { display: grid; place-items: center; width: 1.65rem; height: 1.65rem; border-radius: .45rem; background: var(--accent); color: white; }
+.brand-mark { display: block; width: 1.65rem; height: 1.65rem; flex: none; }
 .api-title small { padding: .125rem .375rem; border: 1px solid var(--line); border-radius: .375rem; color: var(--muted); font-size: .72rem; }
 .preset-bar { display: flex; flex: none; align-items: center; gap: .4rem; overflow-x: auto; white-space: nowrap; padding: .35rem 1rem; border-bottom: 1px solid var(--line); background: var(--surface); font-size: .78rem; }
 .preset-bar small { color: var(--muted); }
