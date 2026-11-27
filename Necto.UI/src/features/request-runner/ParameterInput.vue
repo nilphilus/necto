@@ -115,6 +115,10 @@ function closePicker() {
   pickerButton.value?.focus()
 }
 
+function closePickerOnBlur(event) {
+  if (!event.currentTarget.contains(event.relatedTarget)) pickerOpen.value = false
+}
+
 function dismissPicker(event) {
   if (!pickerOpen.value) return
   event.preventDefault()
@@ -142,7 +146,7 @@ function dismissPicker(event) {
     <option v-if="model && !enumOptions.includes(String(model))" :value="model">{{ model }}</option>
     <option v-for="value in enumOptions" :key="value" :value="value">{{ value }}</option>
   </select>
-  <div v-else class="parameter-input" @keydown.esc="dismissPicker">
+  <div v-else class="parameter-input" @keydown.esc="dismissPicker" @focusout="closePickerOnBlur">
     <div ref="valueControl" class="parameter-value" :class="{ 'temporal-input': hasDate || hasTime }">
       <button v-if="hasDate || hasTime" ref="pickerButton" type="button" class="temporal-trigger"
         :aria-label="hasDate && hasTime ? 'Choose date and time' : hasDate ? 'Choose date' : 'Choose time'"

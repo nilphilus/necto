@@ -97,8 +97,8 @@ function readEntityGraph(spec, operations, modelNames) {
     const sections = [
       ['request', operation.requestBody, requestRoots],
       ...operation.parameters.map(parameter => [`${parameter.in} ${parameter.name}`,
-        { content: { parameter: { schema: parameter.schema } } }, requestRoots]),
-      ...Object.entries(operation.responses ?? {}).filter(([status]) => /^2\d\d$/.test(status))
+        { content: parameter.content ?? { parameter: { schema: parameter.schema } } }, requestRoots]),
+      ...Object.entries(operation.responses ?? {}).filter(([status]) => /^(2\d\d|2XX)$/i.test(status))
         .map(([status, response]) => [`response ${status}`, operation.resolve(response), responseRoots]),
     ]
     for (const [role, section, rootSet] of sections) {
