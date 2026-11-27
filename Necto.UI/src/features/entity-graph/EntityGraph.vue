@@ -176,7 +176,7 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
             </button>
           </foreignObject>
         </svg>
-        <p v-else class="muted empty">No object schemas found in request bodies or successful responses, or in OpenAPI components.</p>
+        <p v-else class="muted empty">No object schemas found in the endpoints’ requests or successful responses.</p>
       </div>
       <GraphMinimap v-if="positions.length" :width="width" :height="height" :nodes="positions" :edges="miniEdges" :view="view" :selected-id="selectedId" @navigate="navigate" />
       </div>
@@ -195,7 +195,6 @@ function connected(edge) { return !selectedId.value || edge.from === selectedId.
               </button>
             </li>
           </ul>
-          <p v-if="!selected.endpoints.length" class="muted">This schema is not used by a request body, successful response, or mapped input.</p>
           <h4>Connections ({{ relationships.length }})</h4>
           <ul class="relationship-list">
             <li v-for="edge in relationships" :key="edge.id">

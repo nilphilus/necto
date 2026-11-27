@@ -122,6 +122,10 @@ function readEntityGraph(spec, operations, modelNames) {
     }
     roots.set(operation.key, { response: responseRoots, request: requestRoots })
   }
+  // Component schemas can include internal models that no operation exposes.
+  for (const [id, node] of nodes) {
+    if (!node.endpoints.size) nodes.delete(id)
+  }
   for (const node of nodes.values()) {
     for (const kind of ['allOf', 'anyOf', 'oneOf']) {
       for (const schema of node.schema[kind] ?? []) {
