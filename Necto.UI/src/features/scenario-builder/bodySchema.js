@@ -51,7 +51,7 @@ export function writeBody(step,operation,path,value) { applyInput(step.request,o
 export function editBodyNumber(step,operation,path,text,integer=false) {
  const value=Number(text)
  if(text.trim()===''||!Number.isFinite(value)||integer&&!Number.isInteger(value)) {
-  (step.request.bodyFieldEdits??={})[pointer(path)]=text
+  step.request.bodyFieldEdits = { ...step.request.bodyFieldEdits, [pointer(path)]: text }
   return
  }
  writeBody(step,operation,path,value)

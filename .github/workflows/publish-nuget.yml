@@ -102,6 +102,13 @@ jobs:
 
       - run: dotnet test Generator.Tests/Generator.Tests.csproj -c Release
       - run: dotnet test Tests/Tests.csproj -c Release
+      - name: Verify protected OpenAPI in Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/necto-auth-browser" --no-save playwright@1.62.1
+          "$RUNNER_TEMP/necto-auth-browser/node_modules/.bin/playwright" install --with-deps chromium
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/necto-auth-browser/node_modules/playwright" \
+            NECTO_SAMPLE_DLL=SampleApi/bin/Release/net10.0/SampleApi.dll \
+            node Necto.UI/tests/authentication.e2e.cjs
       - run: dotnet pack Necto/Necto.csproj -c Release -p:PackageVersion="$PACKAGE_VERSION" -o artifacts
 
       - name: Package the scenario skill

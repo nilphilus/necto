@@ -212,3 +212,15 @@ test('only schemas reachable from an operation contract appear in the graph', ()
   assert.deepEqual(edges.map(({ from, to }) => [from, to]), [['schema:CreateInvoice', 'schema:CreateInvoiceLine']])
   assert.deepEqual(buildEntityGraph(spec, [], [], [], catalog), { nodes: [], edges: [] })
 })
+
+test('successful response ranges and content-based parameters expose contract nodes', () => {
+  const spec = { components: { schemas: {
+    Invoice: { type: 'object' }, Filter: { type: 'object' }, DatabaseEntity: { type: 'object' },
+  } } }
+  const endpoint = operation('Find', null, {
+    responses: { '2XX': { content: { 'application/json': { schema: ref('Invoice') } } } },
+    parameters: [{ in: 'query', name: 'filter', content: { 'application/json': { schema: ref('Filter') } } }],
+  })
+  const { nodes } = buildEntityGraph(spec, [endpoint])
+  assert.deepEqual(nodes.map(node => node.name), ['Filter', 'Invoice'])
+})
