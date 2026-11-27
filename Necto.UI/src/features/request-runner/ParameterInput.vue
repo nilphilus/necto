@@ -107,8 +107,19 @@ function applyPicker() {
   const fullTime = (clock.length === 5 ? clock + ':00' : clock) + offset.value
   if (format.value === 'date-time') model.value = `${date.value}T${fullTime}`
   else model.value = hasDate.value ? date.value : fullTime
+  closePicker()
+}
+
+function closePicker() {
   pickerOpen.value = false
   pickerButton.value?.focus()
+}
+
+function dismissPicker(event) {
+  if (!pickerOpen.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  closePicker()
 }
 </script>
 
@@ -131,8 +142,23 @@ function applyPicker() {
     <option v-if="model && !enumOptions.includes(String(model))" :value="model">{{ model }}</option>
     <option v-for="value in enumOptions" :key="value" :value="value">{{ value }}</option>
   </select>
-  <div v-else class="parameter-input">
-    <div ref="valueControl" class="parameter-value">
+  <div v-else class="parameter-input" @keydown.esc="dismissPicker">
+    <div ref="valueControl" class="parameter-value" :class="{ 'temporal-input': hasDate || hasTime }">
+      <button v-if="hasDate || hasTime" ref="pickerButton" type="button" class="temporal-trigger"
+        :aria-label="hasDate && hasTime ? 'Choose date and time' : hasDate ? 'Choose date' : 'Choose time'"
+        :title="hasDate && hasTime ? 'Choose date and time' : hasDate ? 'Choose date' : 'Choose time'"
+        :aria-expanded="pickerOpen" :aria-controls="pickerOpen ? id + '-picker' : undefined"
+        @click="togglePicker">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+          stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path v-if="hasDate" d="M8 3v4m8-4v4M4 10h16m-10 10H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4" />
+          <g v-if="hasTime" :transform="hasDate ? 'translate(10 10) scale(.58)' : undefined">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5l3 2" />
+          </g>
+          <path v-else d="M10 20h8a2 2 0 0 0 2-2v-7" />
+        </svg>
+      </button>
       <ValueInput
         :id="id"
         :model-value="model"
@@ -147,11 +173,6 @@ function applyPicker() {
       />
       <button v-if="uuid && canGenerateUuid" type="button" class="secondary"
         @click="generateUuid">Generate UUID</button>
-      <button v-if="hasDate || hasTime" ref="pickerButton" type="button" class="secondary"
-        :aria-expanded="pickerOpen" :aria-controls="pickerOpen ? id + '-picker' : undefined"
-        @click="togglePicker">
-        {{ hasDate && hasTime ? 'Date & time' : hasDate ? 'Date' : 'Time' }}
-      </button>
     </div>
     <ArrayParameterEditor
       v-if="type === 'array' && ['string', 'integer', 'number', 'boolean'].includes(itemSchema?.type)"
@@ -163,7 +184,7 @@ function applyPicker() {
       <label v-if="hasTime">Time ({{ offset.toUpperCase() === 'Z' ? 'UTC' : offset }})
         <input v-model="time" type="time" step="0.001">
       </label>
-      <button type="button" class="secondary" :disabled="(hasDate && !date) || (hasTime && !time)"
+      <button type="button" class="primary" :disabled="(hasDate && !date) || (hasTime && !time)"
         @click="applyPicker">Apply</button>
     </div>
   </div>
@@ -213,9 +234,41 @@ function applyPicker() {
   min-width: 0;
 }
 
+.parameter-input { position: relative; }
+.temporal-input {
+  flex-wrap: nowrap;
+  gap: 0;
+  align-items: stretch;
+  border: 1px solid #a2b2a9;
+  border-radius: .5rem;
+  background: var(--surface);
+}
+.temporal-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.temporal-input :deep(input) { border: 0; outline: none; box-shadow: none; background: transparent; }
+.temporal-trigger {
+  display: grid;
+  place-items: center;
+  flex: 0 0 2.25rem;
+  padding: 0;
+  color: var(--accent);
+  border: 0;
+  border-inline-end: 1px solid var(--line);
+  border-radius: .45rem 0 0 .45rem;
+}
+.temporal-trigger:hover, .temporal-trigger[aria-expanded="true"] { background: var(--accent-soft); }
+.temporal-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .picker {
-  margin-top: .35rem;
-  align-items: end;
+  position: absolute;
+  z-index: 3;
+  inset: calc(100% + .25rem) auto auto 0;
+  display: grid;
+  justify-items: start;
+  padding: .65rem;
+  border: 1px solid var(--line);
+  border-radius: .5rem;
+  background: var(--surface);
+  box-shadow: 0 .3rem .8rem #18242022;
+  max-width: 100%;
 }
 
 .picker label {
